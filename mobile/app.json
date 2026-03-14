@@ -3,10 +3,10 @@
     "name": "CueMaster",
     "slug": "cuemaster",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "landscape",
     "icon": "./assets/images/icon.png",
     "scheme": "mobile",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
     "ios": {
       "supportsTablet": true
@@ -47,6 +47,7 @@
     "extra": {
       "apiUrl": "http://localhost:4000",
       "gameUrl": "ws://localhost:2567"
-    }
+    },
+    "backgroundColor": "#0A1A0C"
   }
 }
