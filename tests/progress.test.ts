@@ -1,0 +1,166 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { Progress } from "../mobile/src/game/progress";
+import { Session } from "../mobile/src/game/session";
+test("break pots remain unassigned and retain the turn", () => {
+  const p = new Progress();
+  p.begin();
+  p.pocket(3);
+  p.finish(true);
+  assert.deepEqual(p.groups, [null, null]);
+  assert.equal(p.turn, 0);
+  assert.deepEqual(p.returned, [3]);
+});
+test("first post-break pot assigns opposing groups", () => {
+  const p = new Progress();
+  p.begin();
+  p.pocket(10);
+  p.finish(false);
+  assert.deepEqual(p.groups, ["stripes", "solids"]);
+  assert.equal(p.turn, 0);
+});
+test("opponent-only pot is recorded but passes the turn", () => {
+  const p = new Progress();
+  p.groups = ["solids", "stripes"];
+  p.begin();
+  p.pocket(12);
+  p.finish(false);
+  assert.equal(p.turn, 1);
+  assert.deepEqual(p.returned, [12]);
+});
+test("scratch does not assign groups or put the cue ball in the return tray", () => {
+  const p = new Progress();
+  p.begin();
+  p.pocket(2);
+  p.pocket(0);
+  p.finish(false);
+  assert.deepEqual(p.groups, [null, null]);
+  assert.equal(p.turn, 1);
+  assert.deepEqual(p.returned, [2]);
+  assert.equal(p.scratch, true);
+});
+test("multi-pot feedback keeps every ball and ignores duplicate events", () => {
+  const p = new Progress();
+  [1, 9, 4, 1].forEach((id) => p.pocket(id));
+  assert.deepEqual(p.shotPots, [1, 9, 4]);
+  p.begin();
+  assert.deepEqual(p.shotPots, []);
+  assert.deepEqual(p.returned, [1, 9, 4]);
+});
+test("eight ends the practice rack without declaring a rules-based winner", () => {
+  const p = new Progress();
+  p.pocket(8);
+  p.finish(false);
+  assert.equal(p.finished, true);
+});
+test("replay restores ball ledger, groups and turn without double counting", () => {
+  const s = new Session();
+  s.power = 0.9;
+  s.shoot();
+  while (s.running) s.update(1 / 60);
+  const end = s.progress.copy();
+  s.repeat();
+  while (s.running) s.update(1 / 60);
+  assert.deepEqual(s.progress, end);
+  s.reset();
+  assert.deepEqual(s.progress, new Progress());
+});
+test("real pocket drill updates return tray, groups and replay together", () => {
+  const s = new Session();
+  s.reset("pocket");
+  s.power = 0.22;
+  s.shoot();
+  while (s.running) s.update(1 / 60);
+  assert.deepEqual(s.progress.returned, [1]);
+  assert.deepEqual(s.progress.groups, ["solids", "stripes"]);
+  assert.equal(s.world.balls.find((b) => b.id === 1)?.pocketed, true);
+  s.repeat();
+  while (s.running) s.update(1 / 60);
+  assert.deepEqual(s.progress.returned, [1]);
+  assert.equal(s.potted, 1);
+});
+test("completed 8-ball drill restarts as a playable full rack", () => {
+  const s = new Session();
+  s.reset("finish");
+  s.power = 0.22;
+  s.shoot();
+  while (s.running) s.update(1 / 60);
+  assert.equal(s.progress.finished, true);
+  s.power = 0.3;
+  s.shoot();
+  assert.equal(s.running, false);
+  s.side = 0.8;
+  s.top = -0.7;
+  s.camera = "aim";
+  s.reset("break");
+  assert.equal(s.world.balls.length, 16);
+  assert.equal(s.progress.finished, false);
+  assert.equal(s.placement, false);
+  assert.equal(s.side, 0);
+  assert.equal(s.top, 0);
+  assert.equal(s.camera, "table");
+  assert.deepEqual(s.progress.returned, []);
+  s.power = 0.5;
+  s.shoot();
+  assert.equal(s.running, true);
+});
+test("clearing a drill without an 8 also ends cleanly and can repeat", () => {
+  const s = new Session();
+  s.reset("pocket");
+  s.world.balls = s.world.balls.filter((b) => b.id === 0 || b.id === 1);
+  s.power = 0.22;
+  s.shoot();
+  while (s.running) s.update(1 / 60);
+  assert.equal(s.progress.finished, true);
+  s.repeat();
+  assert.equal(s.running, true);
+  while (s.running) s.update(1 / 60);
+  assert.equal(s.progress.finished, true);
+  assert.equal(s.potted, 1);
+});
+
+test("aim warnings distinguish open table, break, own balls and early eight", () => {
+  const p = new Progress();
+  assert.equal(p.targetWarning(1), null);
+  assert.equal(p.targetWarning(10), null);
+  assert.ok(p.targetWarning(8));
+  assert.equal(p.targetWarning(8, true), null);
+  p.groups = ["solids", "stripes"];
+  assert.equal(p.targetWarning(3), null);
+  assert.ok(p.targetWarning(12));
+  assert.ok(p.targetWarning(8));
+  p.turn = 1;
+  assert.equal(p.targetWarning(12), null);
+  assert.ok(p.targetWarning(3));
+  p.returned = [9, 10, 11, 12, 13, 14, 15];
+  assert.equal(p.targetWarning(8), null);
+  assert.ok(p.targetWarning(1));
+});
+test("open-table eight exception agrees with first-contact enforcement", () => {
+  const p = new Progress();
+  p.strict = true;
+  p.returned = [1, 2, 3, 4, 5, 6, 7];
+  assert.equal(p.targetWarning(8), null);
+  p.begin();
+  p.contact({ type: "ball", a: 0, b: 8 });
+  p.contact({ type: "rail", a: 8 });
+  p.finish(false);
+  assert.equal(p.foul, "");
+});
+test("clearing a group during the stroke cannot legalize an early first contact", () => {
+  const p = new Progress();
+  p.strict = true;
+  p.returned = [1, 2, 3, 4, 5, 6];
+  p.begin();
+  p.contact({ type: "ball", a: 0, b: 8 });
+  p.pocket(7);
+  p.finish(false);
+  assert.equal(p.foul, "Wrong ball contacted first");
+});
+test("short practice racks allow the eight when the available group is cleared", () => {
+  const p = new Progress();
+  p.groups = ["solids", "stripes"];
+  p.returned = [1];
+  assert.equal(p.targetWarning(8, false, [0, 1, 8, 9]), null);
+  assert.ok(p.targetWarning(9, false, [0, 1, 8, 9]));
+});

@@ -1,0 +1,8 @@
+{
+  "cli": { "version": ">= 18.0.0", "appVersionSource": "remote" },
+  "build": {
+    "preview": { "distribution": "internal", "android": { "buildType": "apk" } },
+    "production": { "distribution": "store", "autoIncrement": true, "env": { "CUEMASTER_RELEASE": "1" }, "android": { "buildType": "app-bundle" } }
+  },
+  "submit": { "production": {} }
+}

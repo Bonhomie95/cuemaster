@@ -1,0 +1,142 @@
+:root {
+  color-scheme: dark;
+  font: 15px system-ui;
+  background: #081d2b;
+  color: #e7f1f5;
+}
+* {
+  box-sizing: border-box;
+}
+[hidden] {
+  display: none !important;
+}
+body {
+  margin: 0;
+}
+header {
+  padding: 22px 6%;
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  background: #102d3f;
+  border-bottom: 1px solid #355367;
+}
+header b {
+  color: #ffcf60;
+  letter-spacing: 3px;
+}
+header span {
+  flex: 1;
+  color: #b6cbd7;
+}
+main {
+  max-width: 1140px;
+  margin: 30px auto;
+  padding: 0 24px;
+}
+h1 {
+  font-size: 30px;
+}
+h2 {
+  font-size: 22px;
+}
+p {
+  line-height: 1.6;
+  color: #bcd2df;
+}
+form {
+  display: grid;
+  gap: 16px;
+  margin: 20px 0;
+  padding: 24px;
+  background: #123045;
+  border-radius: 16px;
+}
+label {
+  display: grid;
+  gap: 8px;
+}
+input,
+textarea,
+select,
+button {
+  font: inherit;
+  border-radius: 8px;
+  border: 1px solid #587389;
+  padding: 12px;
+  min-height: 44px;
+}
+input,
+textarea,
+select {
+  background: #081e2f;
+  color: white;
+  width: 100%;
+}
+button {
+  background: #efca72;
+  color: #182a34;
+  font-weight: 700;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.4;
+  cursor: wait;
+}
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #68e0dd;
+  outline-offset: 3px;
+}
+nav,
+.cards,
+.actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.cards > * {
+  flex: 1;
+  min-width: 180px;
+}
+article {
+  background: #123045;
+  border: 1px solid #355367;
+  padding: 20px;
+  border-radius: 12px;
+  margin: 14px 0;
+}
+article h3 {
+  margin-top: 0;
+}
+#message:not(:empty) {
+  padding: 16px;
+  border: 1px solid #ffd05b;
+  border-radius: 8px;
+  color: #fff1c9;
+  white-space: pre-wrap;
+}
+#login,
+#password {
+  max-width: 540px;
+  margin: 40px auto;
+}
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+small {
+  color: #bdd0dc;
+}
+@media (max-width: 650px) {
+  header {
+    flex-wrap: wrap;
+  }
+  main {
+    padding: 0 14px;
+  }
+  form {
+    padding: 16px;
+  }
+}

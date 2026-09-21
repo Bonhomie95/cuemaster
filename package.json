@@ -1,0 +1,16 @@
+{
+  "name": "cuemaster-workspace",
+  "private": true,
+  "scripts": {
+    "start": "npm --prefix mobile start",
+    "ios": "npm --prefix mobile run ios",
+    "android": "npm --prefix mobile run android",
+    "preview": "npm --prefix mobile run web",
+    "test": "npm --prefix mobile test",
+    "typecheck": "npm --prefix mobile run typecheck",
+    "dev": "node tools/dev.mjs",
+    "api": "npm --prefix server run dev",
+    "test:api": "npm --prefix server test",
+    "check": "npm run typecheck && npm --prefix server run typecheck && npm test && npm run test:api"
+  }
+}

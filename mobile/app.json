@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "CueMaster",
+    "slug": "cuemaster",
+    "version": "1.0.0",
+    "orientation": "landscape",
+    "icon": "./assets/club-icon.png",
+    "userInterfaceStyle": "dark",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.bonhomie.cuemaster",
+      "usesAppleSignIn": true
+    },
+    "android": {
+      "package": "com.bonhomie.cuemaster",
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ]
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-asset",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "enableBackgroundRecording": false,
+          "enableBackgroundPlayback": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      "expo-secure-store",
+      "expo-apple-authentication",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#09121d",
+          "image": "./assets/club-splash.png",
+          "imageWidth": 260
+        }
+      ],
+      "expo-font"
+    ],
+    "scheme": "cuemaster"
+  }
+}

@@ -1,0 +1,1915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CueMaster v2 — Full Product Blueprint</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;0,900;1,700&family=Syne:wght@400;500;600;700;800&family=Fira+Code:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --ink: #0a0a0f;
+  --surface: #0f0f18;
+  --panel: #141420;
+  --panel2: #1a1a2a;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.12);
+  --chalk: #f0ede6;
+  --muted: #7a7890;
+  --dim: #4a4860;
+
+  --teal: #00e5c8;
+  --teal-dim: rgba(0,229,200,0.12);
+  --teal-glow: rgba(0,229,200,0.25);
+  --gold: #f5c842;
+  --gold-dim: rgba(245,200,66,0.12);
+  --coral: #ff6b6b;
+  --coral-dim: rgba(255,107,107,0.12);
+  --violet: #a78bfa;
+  --violet-dim: rgba(167,139,250,0.12);
+  --green: #4ade80;
+  --green-dim: rgba(74,222,128,0.1);
+
+  --felt: #0d2e1a;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: var(--ink);
+  color: var(--chalk);
+  font-family: 'Syne', sans-serif;
+  overflow-x: hidden;
+  cursor: default;
+}
+
+/* ── ANIMATED BG ── */
+.bg-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+.bg-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(120px);
+  animation: drift 20s ease-in-out infinite alternate;
+}
+.orb1 { width: 600px; height: 600px; background: rgba(0,229,200,0.04); top: -200px; left: -200px; animation-delay: 0s; }
+.orb2 { width: 500px; height: 500px; background: rgba(245,200,66,0.04); bottom: -150px; right: -150px; animation-delay: -7s; }
+.orb3 { width: 400px; height: 400px; background: rgba(167,139,250,0.03); top: 40%; left: 30%; animation-delay: -12s; }
+
+@keyframes drift {
+  from { transform: translate(0, 0) scale(1); }
+  to { transform: translate(60px, 40px) scale(1.1); }
+}
+
+/* ── NOISE TEXTURE ── */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.025'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.4;
+}
+
+/* ── NAV ── */
+nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  background: rgba(10,10,15,0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 40px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.nav-logo {
+  font-family: 'Playfair Display', serif;
+  font-size: 20px;
+  font-style: italic;
+  color: var(--teal);
+  letter-spacing: -0.5px;
+}
+.nav-links {
+  display: flex;
+  gap: 32px;
+  list-style: none;
+}
+.nav-links a {
+  font-family: 'Fira Code', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  text-decoration: none;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  transition: color 0.2s;
+}
+.nav-links a:hover { color: var(--teal); }
+.version-tag {
+  font-family: 'Fira Code', monospace;
+  font-size: 11px;
+  color: var(--gold);
+  background: var(--gold-dim);
+  border: 1px solid rgba(245,200,66,0.25);
+  padding: 3px 10px;
+  border-radius: 2px;
+}
+
+/* ── HERO ── */
+.hero {
+  position: relative;
+  z-index: 2;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 120px 24px 80px;
+  overflow: hidden;
+}
+
+.hero-table {
+  position: absolute;
+  width: 700px;
+  height: 380px;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) perspective(900px) rotateX(62deg);
+  border: 2px solid rgba(0,229,200,0.08);
+  border-radius: 40px;
+  background: linear-gradient(135deg, rgba(13,46,26,0.25), rgba(13,46,26,0.1));
+  pointer-events: none;
+}
+.hero-table::before {
+  content: '';
+  position: absolute;
+  inset: 20px;
+  border-radius: 24px;
+  background: rgba(0,229,200,0.02);
+  border: 1px solid rgba(0,229,200,0.05);
+}
+/* Pool balls decorative */
+.ball {
+  position: absolute;
+  border-radius: 50%;
+  animation: float-ball 6s ease-in-out infinite alternate;
+}
+.b1 { width:16px;height:16px; background:var(--chalk); top:15%;left:20%; animation-delay:0s; box-shadow:0 0 12px rgba(240,237,230,0.4); }
+.b2 { width:14px;height:14px; background:var(--gold); top:70%;left:75%; animation-delay:-2s; box-shadow:0 0 10px rgba(245,200,66,0.5); }
+.b3 { width:18px;height:18px; background:var(--coral); top:40%;left:80%; animation-delay:-4s; box-shadow:0 0 10px rgba(255,107,107,0.4); }
+.b4 { width:12px;height:12px; background:var(--teal); top:80%;left:25%; animation-delay:-1s; box-shadow:0 0 10px rgba(0,229,200,0.5); }
+.b5 { width:15px;height:15px; background:var(--violet); top:30%;left:55%; animation-delay:-3s; box-shadow:0 0 10px rgba(167,139,250,0.4); }
+@keyframes float-ball {
+  from { transform: translateY(0px); }
+  to { transform: translateY(-12px); }
+}
+
+.hero-eyebrow {
+  font-family: 'Fira Code', monospace;
+  font-size: 11px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--teal);
+  margin-bottom: 20px;
+  position: relative;
+  z-index: 2;
+}
+.hero-eyebrow::before, .hero-eyebrow::after {
+  content: '—';
+  opacity: 0.4;
+  margin: 0 12px;
+}
+
+.hero h1 {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(64px, 12vw, 140px);
+  font-weight: 900;
+  line-height: 0.92;
+  letter-spacing: -3px;
+  position: relative;
+  z-index: 2;
+  margin-bottom: 12px;
+}
+.hero h1 .line1 { display: block; color: var(--chalk); }
+.hero h1 .line2 { display: block; color: var(--teal); font-style: italic; }
+
+.hero-desc {
+  font-size: 15px;
+  font-weight: 400;
+  color: var(--muted);
+  max-width: 480px;
+  line-height: 1.75;
+  margin: 20px auto 48px;
+  position: relative;
+  z-index: 2;
+}
+.hero-desc strong { color: var(--chalk); font-weight: 600; }
+
+.score-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 20px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid var(--border2);
+  border-radius: 100px;
+  padding: 14px 32px;
+  position: relative;
+  z-index: 2;
+}
+.score-pill .big-num {
+  font-family: 'Playfair Display', serif;
+  font-size: 52px;
+  font-weight: 900;
+  color: var(--teal);
+  line-height: 1;
+}
+.score-pill .score-info { text-align: left; }
+.score-pill .score-title { font-size: 13px; font-weight: 600; color: var(--chalk); }
+.score-pill .score-sub { font-size: 11px; color: var(--muted); margin-top: 2px; font-family: 'Fira Code', monospace; }
+
+.upgrade-badge {
+  position: relative;
+  z-index: 2;
+  margin-top: 20px;
+  font-family: 'Fira Code', monospace;
+  font-size: 12px;
+  color: var(--gold);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.upgrade-badge::before { content: '↑'; font-size: 16px; }
+
+/* ── LAYOUT ── */
+main { position: relative; z-index: 2; }
+
+.wrap {
+  max-width: 1160px;
+  margin: 0 auto;
+  padding: 0 32px;
+}
+
+section {
+  padding: 100px 0;
+  border-top: 1px solid var(--border);
+}
+
+.sec-label {
+  font-family: 'Fira Code', monospace;
+  font-size: 10px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--teal);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.sec-label::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(0,229,200,0.3), transparent);
+  max-width: 200px;
+}
+
+h2 {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(38px, 5vw, 64px);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -1.5px;
+  color: var(--chalk);
+  margin-bottom: 48px;
+}
+h2 em { color: var(--teal); font-style: italic; }
+h2 .gold { color: var(--gold); }
+h2 .coral { color: var(--coral); }
+
+/* ── VERDICT ── */
+.verdict-main {
+  background: linear-gradient(135deg, rgba(0,229,200,0.06) 0%, rgba(74,222,128,0.04) 100%);
+  border: 1px solid rgba(0,229,200,0.2);
+  border-radius: 8px;
+  padding: 48px;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 32px;
+}
+.verdict-main::before {
+  content: '"';
+  position: absolute;
+  right: 40px;
+  top: -10px;
+  font-family: 'Playfair Display', serif;
+  font-size: 200px;
+  color: rgba(0,229,200,0.06);
+  line-height: 1;
+  pointer-events: none;
+}
+.verdict-main h3 {
+  font-family: 'Playfair Display', serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--teal);
+  margin-bottom: 16px;
+  letter-spacing: -0.5px;
+}
+.verdict-main p {
+  font-size: 15px;
+  line-height: 1.85;
+  color: rgba(240,237,230,0.8);
+  max-width: 740px;
+}
+.verdict-main p + p { margin-top: 14px; }
+
+.vs-comparison {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 32px;
+}
+.vs-card {
+  padding: 28px;
+  border-radius: 6px;
+  border: 1px solid;
+}
+.vs-old {
+  background: var(--coral-dim);
+  border-color: rgba(255,107,107,0.2);
+}
+.vs-new {
+  background: var(--green-dim);
+  border-color: rgba(74,222,128,0.25);
+}
+.vs-label {
+  font-family: 'Fira Code', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.vs-old .vs-label { color: var(--coral); }
+.vs-new .vs-label { color: var(--green); }
+.vs-card h4 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  color: var(--chalk);
+}
+.vs-card ul { list-style: none; }
+.vs-card ul li {
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgba(240,237,230,0.7);
+  padding-left: 18px;
+  position: relative;
+}
+.vs-card ul li::before { position: absolute; left: 0; font-weight: 700; }
+.vs-old ul li::before { content: '✗'; color: var(--coral); }
+.vs-new ul li::before { content: '✓'; color: var(--green); }
+
+/* ── ECONOMY ── */
+.economy-flow {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0;
+  margin-bottom: 48px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.eco-step {
+  padding: 32px 24px;
+  border-right: 1px solid var(--border);
+  position: relative;
+  background: var(--panel);
+  transition: background 0.2s;
+}
+.eco-step:last-child { border-right: none; }
+.eco-step:hover { background: var(--panel2); }
+.eco-step::after {
+  content: '→';
+  position: absolute;
+  right: -14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--teal);
+  font-size: 18px;
+  z-index: 2;
+  background: var(--panel);
+  padding: 0 4px;
+}
+.eco-step:last-child::after { display: none; }
+.eco-num {
+  font-family: 'Fira Code', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--teal);
+  opacity: 0.6;
+  margin-bottom: 8px;
+}
+.eco-icon { font-size: 28px; margin-bottom: 12px; }
+.eco-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--chalk);
+  margin-bottom: 6px;
+}
+.eco-desc { font-size: 12px; color: var(--muted); line-height: 1.6; }
+
+/* COIN SYSTEM */
+.coin-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+}
+.coin-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 28px;
+  transition: all 0.2s;
+}
+.coin-card:hover {
+  border-color: rgba(245,200,66,0.3);
+  transform: translateY(-2px);
+}
+.coin-card .c-icon { font-size: 32px; margin-bottom: 14px; }
+.coin-card h4 {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--gold);
+  margin-bottom: 8px;
+  letter-spacing: -0.2px;
+}
+.coin-card p, .coin-card li {
+  font-size: 13px;
+  line-height: 1.75;
+  color: var(--muted);
+}
+.coin-card ul { list-style: none; }
+.coin-card ul li::before { content: '◆ '; color: var(--gold); font-size: 8px; }
+
+/* ── TOURNAMENT STRUCTURE ── */
+.tourn-tabs {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 32px;
+}
+.tourn-tab {
+  flex: 1;
+  padding: 16px;
+  text-align: center;
+  cursor: pointer;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  transition: all 0.2s;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.tourn-tab:last-child { border-right: none; }
+.tourn-tab.active { background: var(--teal-dim); color: var(--teal); border-color: rgba(0,229,200,0.2); }
+.tourn-tab .tab-label { font-family: 'Fira Code', monospace; font-size: 10px; display: block; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+.tourn-tab .tab-count { font-size: 18px; font-weight: 800; font-family: 'Playfair Display', serif; }
+.tourn-tab .tab-players { font-size: 11px; color: var(--muted); }
+
+.tourn-panel {
+  display: none;
+}
+.tourn-panel.active { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+
+.tourn-info {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 32px;
+}
+.tourn-info h4 {
+  font-family: 'Playfair Display', serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--chalk);
+  margin-bottom: 20px;
+  letter-spacing: -0.5px;
+}
+.tourn-stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border);
+}
+.tourn-stat-row:last-child { border-bottom: none; }
+.ts-label { font-size: 12px; color: var(--muted); font-family: 'Fira Code', monospace; letter-spacing: 1px; }
+.ts-val { font-size: 14px; font-weight: 600; color: var(--chalk); }
+.ts-val.teal { color: var(--teal); }
+.ts-val.gold { color: var(--gold); }
+.ts-val.coral { color: var(--coral); }
+
+.prize-podium {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 32px;
+}
+.prize-podium h4 {
+  font-family: 'Playfair Display', serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--chalk);
+  margin-bottom: 20px;
+  letter-spacing: -0.5px;
+}
+.podium {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  height: 160px;
+  margin-bottom: 16px;
+}
+.podium-bar {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+}
+.podium-amount {
+  font-family: 'Fira Code', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.podium-block {
+  width: 100%;
+  border-radius: 4px 4px 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+}
+.p1 .podium-block { height: 100px; background: linear-gradient(180deg, rgba(245,200,66,0.4), rgba(245,200,66,0.15)); border: 1px solid rgba(245,200,66,0.4); }
+.p2 .podium-block { height: 70px; background: linear-gradient(180deg, rgba(240,237,230,0.2), rgba(240,237,230,0.08)); border: 1px solid rgba(240,237,230,0.2); }
+.p3 .podium-block { height: 50px; background: linear-gradient(180deg, rgba(205,127,50,0.3), rgba(205,127,50,0.1)); border: 1px solid rgba(205,127,50,0.3); }
+.p1 .podium-amount { color: var(--gold); }
+.p2 .podium-amount { color: var(--chalk); }
+.p3 .podium-amount { color: #cd7f32; }
+.podium-rank {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 6px;
+  font-family: 'Fira Code', monospace;
+}
+
+.prize-note {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.65;
+  background: var(--teal-dim);
+  border: 1px solid rgba(0,229,200,0.15);
+  border-radius: 4px;
+  padding: 12px 16px;
+  font-family: 'Fira Code', monospace;
+}
+
+/* ── RANKING ── */
+.leaderboard {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.lb-header {
+  display: grid;
+  grid-template-columns: 48px 1fr 90px 90px 90px 90px;
+  gap: 8px;
+  padding: 14px 24px;
+  background: rgba(0,229,200,0.05);
+  border-bottom: 1px solid var(--border);
+  font-family: 'Fira Code', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--teal);
+}
+.lb-row {
+  display: grid;
+  grid-template-columns: 48px 1fr 90px 90px 90px 90px;
+  gap: 8px;
+  padding: 14px 24px;
+  border-bottom: 1px solid var(--border);
+  align-items: center;
+  transition: background 0.15s;
+}
+.lb-row:last-child { border-bottom: none; }
+.lb-row:hover { background: rgba(255,255,255,0.02); }
+.lb-row.top1 { background: rgba(245,200,66,0.04); }
+.lb-row.top2 { background: rgba(240,237,230,0.02); }
+.lb-row.top3 { background: rgba(205,127,50,0.03); }
+
+.rank-display {
+  font-family: 'Playfair Display', serif;
+  font-size: 20px;
+  font-weight: 900;
+  text-align: center;
+}
+.top1 .rank-display { color: var(--gold); }
+.top2 .rank-display { color: var(--chalk); opacity: 0.7; }
+.top3 .rank-display { color: #cd7f32; }
+.rank-display.low { color: var(--dim); font-size: 16px; }
+
+.player-cell { display: flex; align-items: center; gap: 12px; }
+.ava {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 800;
+  flex-shrink: 0;
+  border: 2px solid transparent;
+}
+.ava.g { background: rgba(245,200,66,0.15); color: var(--gold); border-color: rgba(245,200,66,0.3); }
+.ava.t { background: rgba(0,229,200,0.12); color: var(--teal); border-color: rgba(0,229,200,0.25); }
+.ava.v { background: rgba(167,139,250,0.12); color: var(--violet); border-color: rgba(167,139,250,0.25); }
+.ava.c { background: rgba(255,107,107,0.1); color: var(--coral); border-color: rgba(255,107,107,0.2); }
+.ava.w { background: rgba(240,237,230,0.1); color: var(--chalk); border-color: rgba(240,237,230,0.2); }
+
+.p-name { font-size: 14px; font-weight: 600; color: var(--chalk); }
+.p-tier {
+  font-size: 10px;
+  font-family: 'Fira Code', monospace;
+  letter-spacing: 1px;
+  margin-top: 2px;
+}
+.tier-master { color: var(--gold); }
+.tier-diamond { color: var(--teal); }
+.tier-platinum { color: var(--violet); }
+
+.cell-val {
+  font-family: 'Fira Code', monospace;
+  font-size: 13px;
+  text-align: right;
+}
+.cell-val.pts { color: var(--chalk); font-size: 15px; font-weight: 600; }
+.top1 .cell-val.pts { color: var(--gold); }
+.cell-val.pct { color: var(--teal); }
+.cell-val.games { color: var(--muted); }
+.cell-val.earn { color: var(--green); font-size: 12px; }
+
+.tiebreak-note {
+  margin-top: 16px;
+  padding: 14px 20px;
+  background: rgba(245,200,66,0.05);
+  border: 1px solid rgba(245,200,66,0.15);
+  border-radius: 4px;
+  font-family: 'Fira Code', monospace;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+.tiebreak-note .step { color: var(--gold); }
+
+/* ── TECH STACK ── */
+.tech-layers {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.tech-layer {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+}
+.tech-layer:last-child { border-bottom: none; }
+.layer-name {
+  padding: 24px 28px;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.layer-name .l-label {
+  font-family: 'Fira Code', monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.layer-name h4 {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--chalk);
+  line-height: 1.3;
+}
+.layer-content {
+  padding: 24px 28px;
+  background: rgba(255,255,255,0.01);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+}
+.layer-desc {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill {
+  font-family: 'Fira Code', monospace;
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 2px;
+  border: 1px solid;
+}
+.pill-teal { color: var(--teal); background: var(--teal-dim); border-color: rgba(0,229,200,0.2); }
+.pill-gold { color: var(--gold); background: var(--gold-dim); border-color: rgba(245,200,66,0.2); }
+.pill-violet { color: var(--violet); background: var(--violet-dim); border-color: rgba(167,139,250,0.2); }
+.pill-coral { color: var(--coral); background: var(--coral-dim); border-color: rgba(255,107,107,0.2); }
+.pill-green { color: var(--green); background: var(--green-dim); border-color: rgba(74,222,128,0.2); }
+
+/* ── REVENUE ── */
+.revenue-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+.rev-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 32px;
+}
+.rev-card h4 {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--chalk);
+  margin-bottom: 6px;
+}
+.rev-card .rev-sub {
+  font-family: 'Fira Code', monospace;
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 20px;
+  letter-spacing: 1px;
+}
+.rev-bar-wrap { display: flex; flex-direction: column; gap: 10px; }
+.rev-bar-item { display: flex; flex-direction: column; gap: 4px; }
+.rev-bar-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.rev-bar-label span:last-child { color: var(--chalk); font-weight: 600; font-family: 'Fira Code', monospace; }
+.rev-bar-track {
+  height: 6px;
+  background: rgba(255,255,255,0.05);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.rev-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s ease;
+}
+.fill-teal { background: linear-gradient(90deg, var(--teal), rgba(0,229,200,0.5)); }
+.fill-gold { background: linear-gradient(90deg, var(--gold), rgba(245,200,66,0.5)); }
+.fill-coral { background: linear-gradient(90deg, var(--coral), rgba(255,107,107,0.5)); }
+.fill-violet { background: linear-gradient(90deg, var(--violet), rgba(167,139,250,0.5)); }
+
+.sharing-box {
+  background: linear-gradient(135deg, var(--teal-dim), var(--gold-dim));
+  border: 1px solid rgba(0,229,200,0.2);
+  border-radius: 6px;
+  padding: 32px;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 24px;
+  text-align: center;
+}
+.share-item .s-pct {
+  font-family: 'Playfair Display', serif;
+  font-size: 48px;
+  font-weight: 900;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.share-item .s-label { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.s1 .s-pct { color: var(--teal); }
+.s2 .s-pct { color: var(--gold); }
+.s3 .s-pct { color: var(--coral); }
+
+/* ── COMPLIANCE ── */
+.compliance-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.comp-card {
+  border-radius: 6px;
+  padding: 28px;
+  border-left: 3px solid;
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.comp-ok { border-left-color: var(--green); }
+.comp-warn { border-left-color: var(--gold); }
+.comp-req { border-left-color: var(--coral); }
+.comp-card .c-head {
+  font-family: 'Fira Code', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.comp-ok .c-head { color: var(--green); }
+.comp-warn .c-head { color: var(--gold); }
+.comp-req .c-head { color: var(--coral); }
+.comp-card h4 { font-size: 15px; font-weight: 700; color: var(--chalk); margin-bottom: 12px; }
+.comp-card ul { list-style: none; }
+.comp-card ul li { font-size: 13px; color: var(--muted); line-height: 1.7; padding-left: 16px; position: relative; }
+.comp-card ul li::before { position: absolute; left: 0; }
+.comp-ok ul li::before { content: '✓'; color: var(--green); }
+.comp-warn ul li::before { content: '◆'; color: var(--gold); font-size: 8px; top: 4px; }
+.comp-req ul li::before { content: '!'; color: var(--coral); font-weight: 700; }
+
+/* ── ROADMAP ── */
+.roadmap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+  padding-left: 40px;
+}
+.roadmap-list::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 12px;
+  bottom: 12px;
+  width: 2px;
+  background: linear-gradient(180deg, var(--teal), var(--teal-dim));
+}
+.rm-item {
+  position: relative;
+  padding: 0 0 40px;
+}
+.rm-item::before {
+  content: '';
+  position: absolute;
+  left: -36px;
+  top: 8px;
+  width: 12px; height: 12px;
+  border-radius: 50%;
+  background: var(--teal);
+  border: 3px solid var(--ink);
+  box-shadow: 0 0 0 3px rgba(0,229,200,0.2), 0 0 12px rgba(0,229,200,0.3);
+}
+.rm-phase {
+  font-family: 'Fira Code', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--teal);
+  margin-bottom: 6px;
+}
+.rm-item h4 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--chalk);
+  margin-bottom: 8px;
+  letter-spacing: -0.3px;
+}
+.rm-item p { font-size: 14px; color: var(--muted); line-height: 1.7; max-width: 680px; }
+
+/* ── FINAL SCORE ── */
+.final-score-section {
+  background: linear-gradient(135deg, rgba(0,229,200,0.06), rgba(245,200,66,0.04));
+  border-top: 1px solid rgba(0,229,200,0.15);
+  border-bottom: 1px solid rgba(0,229,200,0.15);
+  padding: 100px 0;
+  text-align: center;
+}
+.giant-score {
+  font-family: 'Playfair Display', serif;
+  font-size: clamp(120px, 20vw, 220px);
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: -8px;
+  background: linear-gradient(135deg, var(--teal) 0%, var(--gold) 60%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.giant-label {
+  font-family: 'Fira Code', monospace;
+  font-size: 13px;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: -8px;
+  margin-bottom: 48px;
+}
+.score-cats {
+  display: flex;
+  justify-content: center;
+  gap: 48px;
+  flex-wrap: wrap;
+}
+.sc-item { text-align: center; }
+.sc-item .sc-num {
+  font-family: 'Playfair Display', serif;
+  font-size: 40px;
+  font-weight: 900;
+  color: var(--teal);
+  line-height: 1;
+}
+.sc-item .sc-bar {
+  width: 80px;
+  height: 3px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px;
+  margin: 6px auto;
+  overflow: hidden;
+}
+.sc-item .sc-fill {
+  height: 100%;
+  background: var(--teal);
+  border-radius: 2px;
+}
+.sc-item .sc-label { font-size: 11px; color: var(--muted); font-family: 'Fira Code', monospace; letter-spacing: 1px; }
+
+/* ── FOOTER ── */
+footer {
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  padding: 40px 32px;
+  text-align: center;
+}
+footer p { font-family: 'Fira Code', monospace; font-size: 11px; color: var(--dim); letter-spacing: 1px; }
+footer .f-name { color: var(--teal); }
+
+/* ANIMATIONS */
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.hero > * {
+  animation: fade-in-up 0.6s ease both;
+}
+.hero .hero-eyebrow { animation-delay: 0.1s; }
+.hero h1 { animation-delay: 0.2s; }
+.hero .hero-desc { animation-delay: 0.35s; }
+.hero .score-pill { animation-delay: 0.5s; }
+.hero .upgrade-badge { animation-delay: 0.65s; }
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+  nav { padding: 0 20px; }
+  .nav-links { display: none; }
+  .wrap { padding: 0 20px; }
+  .vs-comparison { grid-template-columns: 1fr; }
+  .economy-flow { grid-template-columns: 1fr 1fr; }
+  .eco-step::after { display: none; }
+  .coin-grid { grid-template-columns: 1fr; }
+  .tourn-panel.active { grid-template-columns: 1fr; }
+  .lb-header, .lb-row { grid-template-columns: 40px 1fr 70px 70px; }
+  .lb-header .h-games, .lb-header .h-earn, .cell-val.games, .cell-val.earn { display: none; }
+  .tech-layer { grid-template-columns: 1fr; }
+  .layer-name { border-right: none; border-bottom: 1px solid var(--border); }
+  .revenue-grid { grid-template-columns: 1fr; }
+  .sharing-box { grid-template-columns: 1fr; }
+  .compliance-grid { grid-template-columns: 1fr; }
+  .score-pill { flex-direction: column; padding: 20px; border-radius: 20px; }
+}
+</style>
+</head>
+<body>
+
+<div class="bg-canvas">
+  <div class="bg-orb orb1"></div>
+  <div class="bg-orb orb2"></div>
+  <div class="bg-orb orb3"></div>
+</div>
+
+<nav>
+  <div class="nav-logo">CueMaster</div>
+  <ul class="nav-links">
+    <li><a href="#verdict">Verdict</a></li>
+    <li><a href="#economy">Economy</a></li>
+    <li><a href="#tournaments">Tournaments</a></li>
+    <li><a href="#ranking">Ranking</a></li>
+    <li><a href="#tech">Tech</a></li>
+    <li><a href="#revenue">Revenue</a></li>
+    <li><a href="#compliance">Compliance</a></li>
+    <li><a href="#roadmap">Roadmap</a></li>
+  </ul>
+  <div class="version-tag">Blueprint v2.0</div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-table">
+    <div class="ball b1"></div>
+    <div class="ball b2"></div>
+    <div class="ball b3"></div>
+    <div class="ball b4"></div>
+    <div class="ball b5"></div>
+  </div>
+  <div class="hero-eyebrow">Full Product Blueprint v2.0</div>
+  <h1>
+    <span class="line1">Cue</span>
+    <span class="line2">Master</span>
+  </h1>
+  <p class="hero-desc">
+    Coin-powered tournaments. Crypto prize pools. Real physics.<br>
+    <strong>No gambling. Just competition.</strong> The cleanest legal model in skill gaming.
+  </p>
+  <div class="score-pill">
+    <div class="big-num">9.7</div>
+    <div class="score-info">
+      <div class="score-title">Revised Model Score</div>
+      <div class="score-sub">↑ from 9.2 with the coin + tournament pivot</div>
+    </div>
+  </div>
+  <div class="upgrade-badge">+0.5 score improvement — coin tournament model is cleaner, safer, more scalable</div>
+</div>
+
+<main>
+
+<!-- VERDICT -->
+<section id="verdict">
+  <div class="wrap">
+    <div class="sec-label">01 — The Verdict</div>
+    <h2>This model is <em>better</em> in almost every way</h2>
+
+    <div class="verdict-main">
+      <h3>The Coin + Tournament Model is Genuinely Smarter</h3>
+      <p>You've solved your biggest problem — gambling regulation — without losing any of the financial upside. Instead of players betting against each other (which triggers gambling laws in most jurisdictions), players <strong>buy coins</strong> to enter <strong>tournaments</strong> and earn <strong>revenue share</strong> based on performance. This is the Fortnite/League of Legends model applied to a skill sport. It's legally categorized as a skill competition with revenue sharing, not gambling. The prize pool being funded by ad revenue, coin sales, and subscriptions — not player-to-player wagers — is the key distinction.</p>
+      <p>To your direct question: <strong>Yes, if you get legal docs, geo-block restricted regions, verify age at first open, and maintain withdrawal limits — with this coin model instead of direct 1v1 money gambling — you are in a dramatically better position.</strong> You're not "good to go" without proper legal counsel reviewing your specific structure, but you've removed the single hardest problem (gambling licensing) from your path. The tournament revenue-share model has worked globally for companies like ESL, DraftKings (in skill mode), and numerous mobile esports platforms.</p>
+    </div>
+
+    <div class="vs-comparison">
+      <div class="vs-card vs-old">
+        <div class="vs-label">v1.0 — Direct 1v1 Money</div>
+        <h4>Real-Money Betting Model</h4>
+        <ul>
+          <li>Gambling license required in most countries</li>
+          <li>Banned outright in 6+ US states</li>
+          <li>Apple/Google severely restrict real-money wagering</li>
+          <li>Player trust at risk from every bad actor</li>
+          <li>Regulatory cost: $100k–$500k+ upfront</li>
+          <li>Chargeback liability on every disputed match</li>
+          <li>Money laundering surface area is enormous</li>
+        </ul>
+      </div>
+      <div class="vs-card vs-new">
+        <div class="vs-label">v2.0 — Coin Tournament Model</div>
+        <h4>Skill Competition + Revenue Share</h4>
+        <ul>
+          <li>No gambling license required (entertainment/gaming classification)</li>
+          <li>Legal in most US states as a skill competition</li>
+          <li>App Store / Play Store compliant</li>
+          <li>Platform takes house cut from coin sales, not player wagers</li>
+          <li>Regulatory cost: $10k–$30k (standard business legal)</li>
+          <li>Disputes handled by tournament rules, not finance department</li>
+          <li>Crypto payouts limited to top performers (not general wallet)</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ECONOMY -->
+<section id="economy">
+  <div class="wrap">
+    <div class="sec-label">02 — Coin Economy</div>
+    <h2>How the <em>Coin System</em> Works</h2>
+
+    <div class="economy-flow">
+      <div class="eco-step">
+        <div class="eco-num">01</div>
+        <div class="eco-icon">💰</div>
+        <div class="eco-title">Earn Coins</div>
+        <div class="eco-desc">Buy via IAP, win from opponents in matches, earn through daily login rewards and season missions</div>
+      </div>
+      <div class="eco-step">
+        <div class="eco-num">02</div>
+        <div class="eco-icon">🎱</div>
+        <div class="eco-title">Spend Coins</div>
+        <div class="eco-desc">Enter tournaments, buy cue stick skins, table felt customization, ball designs, avatar frames</div>
+      </div>
+      <div class="eco-step">
+        <div class="eco-num">03</div>
+        <div class="eco-icon">🏆</div>
+        <div class="eco-title">Compete & Win</div>
+        <div class="eco-desc">Tournament fees fill the prize pool. Top performers earn points toward Daily/Weekly/Monthly/All-Time leaderboards</div>
+      </div>
+      <div class="eco-step">
+        <div class="eco-num">04</div>
+        <div class="eco-icon">₿</div>
+        <div class="eco-title">Crypto Payouts</div>
+        <div class="eco-desc">Top 3 in every tournament earn crypto from the platform prize pool. Leaderboard rankings unlock additional rewards</div>
+      </div>
+    </div>
+
+    <div class="coin-grid">
+      <div class="coin-card">
+        <div class="c-icon">🎯</div>
+        <h4>What Coins Buy</h4>
+        <ul>
+          <li>Tournament entry fees (main utility)</li>
+          <li>Cue stick skins & wraps</li>
+          <li>Table felt designs & colors</li>
+          <li>Ball set designs</li>
+          <li>Cue rack & room backgrounds</li>
+          <li>Avatar frames & titles</li>
+          <li>Emotes & chalk animations</li>
+          <li>Replay storage (extra replays)</li>
+        </ul>
+      </div>
+      <div class="coin-card">
+        <div class="c-icon">📥</div>
+        <h4>How to Get Coins</h4>
+        <ul>
+          <li>Direct IAP (App Store / Play Store)</li>
+          <li>Winning matches earns small coin bonus</li>
+          <li>Daily login streaks</li>
+          <li>Season pass missions</li>
+          <li>First-time achievements</li>
+          <li>Referral bonuses (invite friends)</li>
+          <li>Premium subscription bonus coins</li>
+          <li>No ads-to-coins path (keeps economy clean)</li>
+        </ul>
+      </div>
+      <div class="coin-card">
+        <div class="c-icon">🔒</div>
+        <h4>Economy Rules</h4>
+        <ul>
+          <li>Coins are non-refundable, non-transferable</li>
+          <li>Coins cannot be converted back to real money</li>
+          <li>This is the key legal distinction from gambling</li>
+          <li>Prize pool funded by platform revenue, not coin burn</li>
+          <li>Anti-inflation: coins earned in-game are capped per day</li>
+          <li>Seasonal coin resets prevent hoarding power</li>
+          <li>Premium skin marketplace for community creators</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TOURNAMENTS -->
+<section id="tournaments">
+  <div class="wrap">
+    <div class="sec-label">03 — Tournament Structure</div>
+    <h2>The <em>Competition</em> Engine</h2>
+
+    <div class="tourn-tabs">
+      <div class="tourn-tab active" onclick="showTab('daily')">
+        <span class="tab-label">Daily</span>
+        <span class="tab-count">20</span>
+        <span class="tab-players">2,048 players each</span>
+      </div>
+      <div class="tourn-tab" onclick="showTab('weekly')">
+        <span class="tab-label">Weekly</span>
+        <span class="tab-count">14</span>
+        <span class="tab-players">8,192 players each</span>
+      </div>
+      <div class="tourn-tab" onclick="showTab('monthly')">
+        <span class="tab-label">Monthly</span>
+        <span class="tab-count">2–4</span>
+        <span class="tab-players">32,768 players each</span>
+      </div>
+    </div>
+
+    <!-- DAILY -->
+    <div class="tourn-panel active" id="tab-daily">
+      <div class="tourn-info">
+        <h4>Daily Tournament Details</h4>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Tournaments per day</span>
+          <span class="ts-val teal">Up to 20</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Challengers per bracket</span>
+          <span class="ts-val">2,048 players</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Bracket format</span>
+          <span class="ts-val">11 rounds (2^11 = 2048)</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Match format options</span>
+          <span class="ts-val gold">Best of 3, 5, 7, or 9</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Match format set by</span>
+          <span class="ts-val">Tournament organizer (us) at creation</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Rules displayed</span>
+          <span class="ts-val gold">Before entry — mandatory read</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Entry cost</span>
+          <span class="ts-val">50–200 coins (varies by tier)</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Leaderboard points awarded</span>
+          <span class="ts-val teal">Yes — daily + weekly + all-time</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Concurrent max players (20 brackets)</span>
+          <span class="ts-val">40,960 players per day</span>
+        </div>
+      </div>
+      <div class="prize-podium">
+        <h4>Daily Prize Pool (per bracket)</h4>
+        <div class="podium">
+          <div class="podium-bar p2">
+            <div class="podium-amount">$15–$25</div>
+            <div class="podium-block">🥈</div>
+            <div class="podium-rank">2nd Place</div>
+          </div>
+          <div class="podium-bar p1">
+            <div class="podium-amount">$40–$80</div>
+            <div class="podium-block">🥇</div>
+            <div class="podium-rank">1st Place</div>
+          </div>
+          <div class="podium-bar p3">
+            <div class="podium-amount">$8–$15</div>
+            <div class="podium-block">🥉</div>
+            <div class="podium-rank">3rd Place</div>
+          </div>
+        </div>
+        <div class="prize-note">
+          Prizes paid in USDC or BTC to player's crypto wallet.<br>
+          Prize amounts scale with tournament size & entry fee tier.<br>
+          Funded from platform prize pool (not player entry fees directly).
+        </div>
+      </div>
+    </div>
+
+    <!-- WEEKLY -->
+    <div class="tourn-panel" id="tab-weekly">
+      <div class="tourn-info">
+        <h4>Weekly Tournament Details</h4>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Tournaments per week</span>
+          <span class="ts-val teal">Up to 14</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Challengers per bracket</span>
+          <span class="ts-val">8,192 players</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Bracket format</span>
+          <span class="ts-val">13 rounds (2^13 = 8192)</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Match format options</span>
+          <span class="ts-val gold">Best of 5, 7, or 9</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Ruleset variety</span>
+          <span class="ts-val">8-Ball, 9-Ball, 10-Ball, One-Pocket</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Entry cost</span>
+          <span class="ts-val">200–500 coins</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Prestige multiplier</span>
+          <span class="ts-val teal">1.5× leaderboard points vs daily</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Concurrent max players (14 brackets)</span>
+          <span class="ts-val">114,688 players per week</span>
+        </div>
+      </div>
+      <div class="prize-podium">
+        <h4>Weekly Prize Pool (per bracket)</h4>
+        <div class="podium">
+          <div class="podium-bar p2">
+            <div class="podium-amount">$80–$150</div>
+            <div class="podium-block">🥈</div>
+            <div class="podium-rank">2nd Place</div>
+          </div>
+          <div class="podium-bar p1">
+            <div class="podium-amount">$200–$500</div>
+            <div class="podium-block">🥇</div>
+            <div class="podium-rank">1st Place</div>
+          </div>
+          <div class="podium-bar p3">
+            <div class="podium-amount">$40–$75</div>
+            <div class="podium-block">🥉</div>
+            <div class="podium-rank">3rd Place</div>
+          </div>
+        </div>
+        <div class="prize-note">
+          Larger brackets = bigger prize pools.<br>
+          Weekly tournaments become the primary competitive goal for serious players.<br>
+          Weekly leaderboard standings also unlock crypto bonuses independently.
+        </div>
+      </div>
+    </div>
+
+    <!-- MONTHLY -->
+    <div class="tourn-panel" id="tab-monthly">
+      <div class="tourn-info">
+        <h4>Monthly Championship Details</h4>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Tournaments per month</span>
+          <span class="ts-val teal">2–4 Championship events</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Challengers per bracket</span>
+          <span class="ts-val">32,768 players</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Bracket format</span>
+          <span class="ts-val">15 rounds (2^15 = 32,768)</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Match format</span>
+          <span class="ts-val gold">Best of 9 (Finals: Best of 11)</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Entry requirement</span>
+          <span class="ts-val">500–1000 coins + min rank requirement</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Prestige multiplier</span>
+          <span class="ts-val teal">3× leaderboard points vs daily</span>
+        </div>
+        <div class="tourn-stat-row">
+          <span class="ts-label">Max concurrent players</span>
+          <span class="ts-val">65,536–131,072 per month</span>
+        </div>
+      </div>
+      <div class="prize-podium">
+        <h4>Monthly Championship Pool</h4>
+        <div class="podium">
+          <div class="podium-bar p2">
+            <div class="podium-amount">$500–$1,500</div>
+            <div class="podium-block">🥈</div>
+            <div class="podium-rank">2nd Place</div>
+          </div>
+          <div class="podium-bar p1">
+            <div class="podium-amount">$1,000–$5,000</div>
+            <div class="podium-block">🥇</div>
+            <div class="podium-rank">1st Place</div>
+          </div>
+          <div class="podium-bar p3">
+            <div class="podium-amount">$250–$750</div>
+            <div class="podium-block">🥉</div>
+            <div class="podium-rank">3rd Place</div>
+          </div>
+        </div>
+        <div class="prize-note">
+          Monthly champions are crowned publicly. Leaderboard snapshot taken at end of month.<br>
+          Top 100 leaderboard players also earn a smaller crypto distribution.<br>
+          This is the flagship event — marketing focus, potential sponsorships.
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- RANKING -->
+<section id="ranking">
+  <div class="wrap">
+    <div class="sec-label">04 — Ranking System</div>
+    <h2>The <em>Leaderboard</em> Logic</h2>
+
+    <div class="leaderboard">
+      <div class="lb-header">
+        <div>#</div>
+        <div>Player</div>
+        <div class="h-pts" style="text-align:right">Points</div>
+        <div class="h-pct" style="text-align:right">Win %</div>
+        <div class="h-games" style="text-align:right">Games</div>
+        <div class="h-earn" style="text-align:right">Earned</div>
+      </div>
+      <div class="lb-row top1">
+        <div class="rank-display">1</div>
+        <div class="player-cell">
+          <div class="ava g">MK</div>
+          <div>
+            <div class="p-name">MikeKurosawa</div>
+            <div class="p-tier tier-master">◆ MASTER I</div>
+          </div>
+        </div>
+        <div class="cell-val pts">12,840</div>
+        <div class="cell-val pct">87.3%</div>
+        <div class="cell-val games">215</div>
+        <div class="cell-val earn">$412 USDC</div>
+      </div>
+      <div class="lb-row top2">
+        <div class="rank-display">2</div>
+        <div class="player-cell">
+          <div class="ava t">SA</div>
+          <div>
+            <div class="p-name">SandraAce</div>
+            <div class="p-tier tier-master">◆ MASTER I</div>
+          </div>
+        </div>
+        <div class="cell-val pts">12,840</div>
+        <div class="cell-val pct">82.1%</div>
+        <div class="cell-val games">198</div>
+        <div class="cell-val earn">$298 USDC</div>
+      </div>
+      <div class="lb-row top3">
+        <div class="rank-display">3</div>
+        <div class="player-cell">
+          <div class="ava v">RB</div>
+          <div>
+            <div class="p-name">RickBilliard</div>
+            <div class="p-tier tier-diamond">◈ DIAMOND III</div>
+          </div>
+        </div>
+        <div class="cell-val pts">11,600</div>
+        <div class="cell-val pct">74.0%</div>
+        <div class="cell-val games">302</div>
+        <div class="cell-val earn">$187 USDC</div>
+      </div>
+      <div class="lb-row">
+        <div class="rank-display" style="color:var(--dim);font-size:16px">4</div>
+        <div class="player-cell">
+          <div class="ava c">TN</div>
+          <div>
+            <div class="p-name">TinaNet</div>
+            <div class="p-tier tier-diamond">◈ DIAMOND III</div>
+          </div>
+        </div>
+        <div class="cell-val pts">11,600</div>
+        <div class="cell-val pct">74.0%</div>
+        <div class="cell-val games">278</div>
+        <div class="cell-val earn">$97 USDC</div>
+      </div>
+      <div class="lb-row">
+        <div class="rank-display" style="color:var(--dim);font-size:16px">5</div>
+        <div class="player-cell">
+          <div class="ava w">JP</div>
+          <div>
+            <div class="p-name">JoPool87</div>
+            <div class="p-tier tier-platinum">● PLATINUM I</div>
+          </div>
+        </div>
+        <div class="cell-val pts">10,390</div>
+        <div class="cell-val pct">68.5%</div>
+        <div class="cell-val games">180</div>
+        <div class="cell-val earn">$52 USDC</div>
+      </div>
+    </div>
+
+    <div class="tiebreak-note">
+      TIEBREAK ORDER:&nbsp;
+      <span class="step">① Points DESC</span> →&nbsp;
+      <span class="step">② Win % DESC</span> →&nbsp;
+      <span class="step">③ Total Games DESC</span><br>
+      Rows 1 &amp; 2 share 12,840 pts — Win% breaks it (87.3% vs 82.1%). Rows 3 &amp; 4 share both pts and Win% — Games played decides (302 vs 278).<br>
+      Points formula: <span style="color:var(--chalk)">Win = +10 base pts, modified by tournament round depth (Finals win = +100pts). Loss deducts % based on opponent strength.</span>
+    </div>
+  </div>
+</section>
+
+<!-- TECH STACK -->
+<section id="tech">
+  <div class="wrap">
+    <div class="sec-label">05 — Tech Stack</div>
+    <h2>The <em>Architecture</em> Blueprint</h2>
+
+    <div class="tech-layers">
+      <div class="tech-layer">
+        <div class="layer-name">
+          <div class="l-label" style="color:var(--teal)">Rendering</div>
+          <h4>3D Graphics Engine</h4>
+        </div>
+        <div class="layer-content">
+          <div class="layer-desc">Three.js with React Three Fiber for the 3D pool table. PBR ball materials (polished resin shaders), real-time felt texture, dynamic cue stick animation, chalk dust particle system on collision. Runs in a WebGL canvas embedded in the React Native app via expo-gl or a WebView bridge.</div>
+          <div class="pills">
+            <span class="pill pill-teal">Three.js r160+</span>
+            <span class="pill pill-teal">React Three Fiber</span>
+            <span class="pill pill-teal">@react-three/drei</span>
+            <span class="pill pill-gold">GLSL Custom Shaders</span>
+            <span class="pill pill-gold">expo-gl</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tech-layer">
+        <div class="layer-name">
+          <div class="l-label" style="color:var(--gold)">Physics</div>
+          <h4>Ball Physics Engine</h4>
+        </div>
+        <div class="layer-content">
+          <div class="layer-desc">Custom billiard physics layer on top of a rigid-body engine. True rolling friction, side-spin/english, masse shot simulation, accurate cushion rebound with throw, pocket jaw detection. CRITICAL: physics runs server-side. Clients send aim angle + power + spin input only. Server resolves shot, streams ball positions back as delta updates at 60fps. This prevents cheating entirely.</div>
+          <div class="pills">
+            <span class="pill pill-gold">Custom Pool Physics</span>
+            <span class="pill pill-gold">Box2D WASM</span>
+            <span class="pill pill-teal">Server-Side Authority</span>
+            <span class="pill pill-coral">Delta State Sync</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tech-layer">
+        <div class="layer-name">
+          <div class="l-label" style="color:var(--violet)">Mobile App</div>
+          <h4>React Native + Expo</h4>
+        </div>
+        <div class="layer-content">
+          <div class="layer-desc">Single codebase for iOS and Android. Expo SDK for OTA updates, push notifications, and in-app purchases. Reanimated 3 for buttery UI animations outside the game canvas. Zustand for client state. RevenueCat as the IAP middleware handling both Apple and Google receipt validation with one API.</div>
+          <div class="pills">
+            <span class="pill pill-violet">React Native</span>
+            <span class="pill pill-violet">Expo SDK 52+</span>
+            <span class="pill pill-violet">Reanimated 3</span>
+            <span class="pill pill-gold">RevenueCat IAP</span>
+            <span class="pill pill-teal">Zustand</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tech-layer">
+        <div class="layer-name">
+          <div class="l-label" style="color:var(--coral)">Realtime</div>
+          <h4>Multiplayer Game Server</h4>
+        </div>
+        <div class="layer-content">
+          <div class="layer-desc">Colyseus is purpose-built for real-time multiplayer game rooms — handles room lifecycle, player state sync, reconnection, and spectators natively. Node.js host. Each match gets its own room instance. Redis pub/sub for cross-server tournament bracket coordination. WebSocket connections proxied through Cloudflare for DDoS protection.</div>
+          <div class="pills">
+            <span class="pill pill-coral">Colyseus</span>
+            <span class="pill pill-coral">Node.js 20+</span>
+            <span class="pill pill-teal">WebSockets</span>
+            <span class="pill pill-gold">Redis Pub/Sub</span>
+            <span class="pill pill-violet">Cloudflare Proxy</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tech-layer">
+        <div class="layer-name">
+          <div class="l-label" style="color:var(--green)">Data</div>
+          <h4>Database Layer</h4>
+        </div>
+        <div class="layer-content">
+          <div class="layer-desc">PostgreSQL for everything persistent: player profiles, wallets, match history, tournaments, transactions, KYC status. Redis sorted sets for live leaderboards with O(log N) rank queries — critical for 100k+ concurrent players. TimescaleDB extension for time-series analytics. Prisma ORM for type-safe queries.</div>
+          <div class="pills">
+            <span class="pill pill-green">PostgreSQL 16</span>
+            <span class="pill pill-green">Redis 7</span>
+            <span class="pill pill-green">TimescaleDB</span>
+            <span class="pill pill-teal">Prisma ORM</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tech-layer">
+        <div class="layer-name">
+          <div class="l-label" style="color:var(--gold)">Payments</div>
+          <h4>Coin & Crypto Payments</h4>
+        </div>
+        <div class="layer-content">
+          <div class="layer-desc">RevenueCat handles all IAP (coin packs via App Store / Play Store). Stripe for web-based coin purchases and premium subscriptions. Coinbase Commerce or Circle for USDC prize payouts to winners. Plaid for optional bank account linking for larger withdrawals. All crypto payouts are outbound only (platform paying winners) — no crypto deposits from users, keeping AML surface area minimal.</div>
+          <div class="pills">
+            <span class="pill pill-gold">RevenueCat</span>
+            <span class="pill pill-gold">Stripe</span>
+            <span class="pill pill-coral">Coinbase Commerce</span>
+            <span class="pill pill-teal">Circle (USDC)</span>
+            <span class="pill pill-violet">Plaid</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tech-layer">
+        <div class="layer-name">
+          <div class="l-label" style="color:var(--coral)">Compliance</div>
+          <h4>KYC / Age Verification</h4>
+        </div>
+        <div class="layer-content">
+          <div class="layer-desc">Age verification at first app open (mandatory, not optional). Stripe Identity for KYC at the thresholds you defined. Onfido as backup provider. Geo-blocking via Cloudflare Workers + IP database to prevent access from restricted regions automatically. Comply Advantage for sanctions screening on any user receiving crypto prize payouts above $200.</div>
+          <div class="pills">
+            <span class="pill pill-coral">Stripe Identity</span>
+            <span class="pill pill-coral">Onfido</span>
+            <span class="pill pill-gold">Cloudflare Geo-block</span>
+            <span class="pill pill-teal">Comply Advantage</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tech-layer">
+        <div class="layer-name">
+          <div class="l-label" style="color:var(--violet)">Infrastructure</div>
+          <h4>Cloud & DevOps</h4>
+        </div>
+        <div class="layer-content">
+          <div class="layer-desc">Multi-region game servers (US-East, EU-West, Asia-Pacific) for low latency. AWS EC2 for game servers, S3 for match replays and assets. Railway for easy game server horizontal scaling. Cloudflare CDN for static assets and WebSocket proxying. Docker + GitHub Actions CI/CD. Grafana + Prometheus for game server monitoring.</div>
+          <div class="pills">
+            <span class="pill pill-violet">AWS EC2 / S3</span>
+            <span class="pill pill-violet">Railway</span>
+            <span class="pill pill-teal">Cloudflare</span>
+            <span class="pill pill-gold">Docker</span>
+            <span class="pill pill-coral">Grafana</span>
+            <span class="pill pill-teal">GitHub Actions</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- REVENUE -->
+<section id="revenue">
+  <div class="wrap">
+    <div class="sec-label">06 — Revenue Model</div>
+    <h2><em>Revenue</em> & Prize <span class="gold">Sharing</span></h2>
+
+    <div class="revenue-grid">
+      <div class="rev-card">
+        <h4>Revenue Streams</h4>
+        <div class="rev-sub">estimated % of total revenue mix</div>
+        <div class="rev-bar-wrap">
+          <div class="rev-bar-item">
+            <div class="rev-bar-label"><span>Coin IAP (packs)</span><span>45%</span></div>
+            <div class="rev-bar-track"><div class="rev-bar-fill fill-teal" style="width:45%"></div></div>
+          </div>
+          <div class="rev-bar-item">
+            <div class="rev-bar-label"><span>Ads (rewarded + interstitial)</span><span>25%</span></div>
+            <div class="rev-bar-track"><div class="rev-bar-fill fill-gold" style="width:25%"></div></div>
+          </div>
+          <div class="rev-bar-item">
+            <div class="rev-bar-label"><span>Premium Sub ($4.99/mo)</span><span>20%</span></div>
+            <div class="rev-bar-track"><div class="rev-bar-fill fill-coral" style="width:20%"></div></div>
+          </div>
+          <div class="rev-bar-item">
+            <div class="rev-bar-label"><span>Cosmetic Marketplace</span><span>7%</span></div>
+            <div class="rev-bar-track"><div class="rev-bar-fill fill-violet" style="width:7%"></div></div>
+          </div>
+          <div class="rev-bar-item">
+            <div class="rev-bar-label"><span>Sponsorships / Brand Deals</span><span>3%</span></div>
+            <div class="rev-bar-track"><div class="rev-bar-fill fill-teal" style="width:3%"></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="rev-card">
+        <h4>Premium Subscription ($4.99/mo)</h4>
+        <div class="rev-sub">what premium players get</div>
+        <div class="rev-bar-wrap" style="gap:0">
+          <div style="padding:10px 0; border-bottom:1px solid var(--border)">
+            <div style="font-size:13px;color:var(--chalk);font-weight:600">Monthly coin bonus</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:3px">500 coins/month (~$2.50 value) just for subscribing</div>
+          </div>
+          <div style="padding:10px 0; border-bottom:1px solid var(--border)">
+            <div style="font-size:13px;color:var(--chalk);font-weight:600">Ad-free experience</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:3px">No interstitial ads between matches</div>
+          </div>
+          <div style="padding:10px 0; border-bottom:1px solid var(--border)">
+            <div style="font-size:13px;color:var(--chalk);font-weight:600">Priority matchmaking</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:3px">Faster queues, premium player badge</div>
+          </div>
+          <div style="padding:10px 0; border-bottom:1px solid var(--border)">
+            <div style="font-size:13px;color:var(--chalk);font-weight:600">Extended replay storage</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:3px">Store last 100 matches (free = 10)</div>
+          </div>
+          <div style="padding:10px 0">
+            <div style="font-size:13px;color:var(--chalk);font-weight:600">Exclusive seasonal cosmetics</div>
+            <div style="font-size:12px;color:var(--muted);margin-top:3px">Subscriber-only cue skins each season</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sharing-box">
+      <div class="share-item s1">
+        <div class="s-pct">60%</div>
+        <div class="s-label">Platform operating costs, server infrastructure, team salaries, legal</div>
+      </div>
+      <div class="share-item s2">
+        <div class="s-pct">30%</div>
+        <div class="s-label">Prize pool fund — distributed to top 3 tournament winners and leaderboard rewards</div>
+      </div>
+      <div class="share-item s3">
+        <div class="s-pct">10%</div>
+        <div class="s-label">Reserve / growth fund — marketing, new game modes, expansion to new regions</div>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-top:12px;font-family:'Fira Code',monospace;line-height:1.7;">
+      At 50,000 active users with avg $3/month spend: ~$150k/month revenue → $45k/month prize pool → meaningful prizes at every tournament level. At 500k users, prize pools become life-changing for top players.
+    </p>
+  </div>
+</section>
+
+<!-- COMPLIANCE -->
+<section id="compliance">
+  <div class="wrap">
+    <div class="sec-label">07 — Legal & Compliance</div>
+    <h2>What Makes This <em>Safe</em> to Launch</h2>
+
+    <div class="compliance-grid">
+      <div class="comp-card comp-ok">
+        <div class="c-head">✓ You've Already Covered</div>
+        <h4>Your Good Decisions</h4>
+        <ul>
+          <li>Coins not redeemable for cash (not gambling)</li>
+          <li>Prize pool from platform revenue, not player wagers</li>
+          <li>KYC at tiered thresholds ($100/$500/$1k/$4k)</li>
+          <li>Age verification at first open (before any play)</li>
+          <li>Withdrawal limits in place</li>
+          <li>Rules displayed before every tournament entry</li>
+          <li>No ads-to-coins path (no manipulation)</li>
+          <li>Withdrawal limits mirror your deposit limits</li>
+        </ul>
+      </div>
+      <div class="comp-card comp-warn">
+        <div class="c-head">◆ Still Need to Add</div>
+        <h4>Important Additions</h4>
+        <ul>
+          <li>Responsible gaming: deposit limits user can set themselves</li>
+          <li>Self-exclusion (24hr / 7-day / permanent options)</li>
+          <li>Cooling-off period after large spend</li>
+          <li>Display total spend in the past 30 days prominently</li>
+          <li>Crypto prize payouts need OFAC sanctions screening</li>
+          <li>Tax reporting: 1099 for US players earning $600+/year</li>
+          <li>GDPR compliant data handling for EU users</li>
+          <li>Separate escrow for prize pool funds</li>
+          <li>Dispute resolution process documented in ToS</li>
+        </ul>
+      </div>
+      <div class="comp-card comp-req">
+        <div class="c-head">! Before Launch — Non-Negotiable</div>
+        <h4>Legal Prerequisites</h4>
+        <ul>
+          <li>Hire a real-money gaming attorney to review the full model</li>
+          <li>Get legal opinion on skill competition classification per country</li>
+          <li>Geo-block: WA, MT, ND, SD (US) + any country requiring gambling license for crypto prizes</li>
+          <li>Business entity in gaming-friendly jurisdiction (Delaware LLC, UK Ltd, Malta for EU)</li>
+          <li>Privacy Policy, Terms of Service, and Contest Rules reviewed by counsel</li>
+          <li>App Store / Play Store pre-submission review for real-prize competitions</li>
+          <li>Open segregated bank account for prize pool funds</li>
+        </ul>
+      </div>
+      <div class="comp-card comp-warn">
+        <div class="c-head">◆ Anti-Cheat & Trust</div>
+        <h4>Platform Integrity</h4>
+        <ul>
+          <li>Server-side physics — clients send only input, never state</li>
+          <li>Input timestamp validation (prevents replay attacks)</li>
+          <li>Device fingerprinting for multi-account detection</li>
+          <li>Collusion detection (same IP, coordinated throw patterns)</li>
+          <li>VPN / proxy detection with soft warning before block</li>
+          <li>Human referee appeal process for major tournament disputes</li>
+          <li>AI anomaly detection on play patterns (unusual win rates, timing)</li>
+          <li>Rate limiting on tournament entries per account</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ROADMAP -->
+<section id="roadmap">
+  <div class="wrap">
+    <div class="sec-label">08 — Build Roadmap</div>
+    <h2>The <span class="gold">Execution</span> Path</h2>
+
+    <div class="roadmap-list">
+      <div class="rm-item">
+        <div class="rm-phase">Phase 0 — Weeks 1–6 — Before Any Code</div>
+        <h4>Legal & Business Foundation</h4>
+        <p>Hire gaming attorney. Incorporate business entity. Get legal opinion on coin-tournament-crypto-prize model in target launch markets. Draft ToS, Privacy Policy, Contest Rules. Open operating account + separate prize pool escrow account. Get Google Play and Apple developer accounts, submit category intent for real-prize competitions. Set up entity for crypto prize disbursement (Coinbase Commerce business account).</p>
+      </div>
+      <div class="rm-item">
+        <div class="rm-phase">Phase 1 — Months 2–4 — Core Game</div>
+        <h4>Physics Engine + 1v1 Free Play</h4>
+        <p>Build the pool physics engine first — this is the product. Get 8-ball perfect. Nail server-side physics authority architecture. Build the Colyseus match room system. Build 3D renderer with Three.js. Launch internal testing. Add spectator mode and match replay. Obsessively fix physics desync, network lag compensation, and edge cases before a single coin system exists.</p>
+      </div>
+      <div class="rm-item">
+        <div class="rm-phase">Phase 2 — Months 4–6 — Coins & Cosmetics</div>
+        <h4>Economy, Store, Customization</h4>
+        <p>Build coin economy. Integrate RevenueCat for IAP coin packs. Build cosmetics store (cue skins, table felts, ball sets). Implement age verification at first open. Build user wallet and transaction history. Launch premium subscription via Stripe. Begin closed beta with invite-only registration. Iterate on coin balance and spend rates based on real data.</p>
+      </div>
+      <div class="rm-item">
+        <div class="rm-phase">Phase 3 — Months 6–9 — Tournament Engine</div>
+        <h4>Brackets, Leaderboards, Crypto Prizes</h4>
+        <p>Build full tournament bracket system (single elimination, 2048/8192/32768 player brackets). Build leaderboard with full tiebreaker logic in Redis sorted sets. Implement multiple rulesets (8-ball, 9-ball, 10-ball, one-pocket). Build mandatory rule disclosure modal. Wire up KYC triggers at your defined thresholds. Integrate Circle/Coinbase for USDC prize payouts. Launch first public paid tournament as beta event.</p>
+      </div>
+      <div class="rm-item">
+        <div class="rm-phase">Phase 4 — Months 9–12 — Scale & Polish</div>
+        <h4>Full Public Launch + Growth Engine</h4>
+        <p>Launch all tournament tiers (Daily × 20, Weekly × 14, Monthly × 2–4). Activate geo-blocking for restricted regions. Launch referral program. Seasonal content updates (new cosmetics). Community cue creator marketplace. First sponsored major tournament. Expand to second language market. Begin work on snooker and 3-ball variants.</p>
+      </div>
+      <div class="rm-item">
+        <div class="rm-phase">Phase 5 — Year 2+ — Ecosystem</div>
+        <h4>Esports, Clans, Live Streaming Integration</h4>
+        <p>Clan/team competitions. Twitch/YouTube live streaming integration with viewer interaction. Pro player partnerships and verified accounts. Annual CueMaster Championship (flagship event, large prize pool, headline sponsor). Native web app for desktop play. International expansion to UK, EU, Southeast Asia markets with proper licensing per region.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- FINAL SCORE -->
+<div class="final-score-section">
+  <div class="wrap">
+    <div class="giant-score">9.7</div>
+    <div class="giant-label">out of 10 — Revised Blueprint Score</div>
+    <div class="score-cats">
+      <div class="sc-item">
+        <div class="sc-num">10</div>
+        <div class="sc-bar"><div class="sc-fill" style="width:100%"></div></div>
+        <div class="sc-label">Market Concept</div>
+      </div>
+      <div class="sc-item">
+        <div class="sc-num">10</div>
+        <div class="sc-bar"><div class="sc-fill" style="width:100%"></div></div>
+        <div class="sc-label">Legal Model</div>
+      </div>
+      <div class="sc-item">
+        <div class="sc-num">9</div>
+        <div class="sc-bar"><div class="sc-fill" style="width:90%"></div></div>
+        <div class="sc-label">Tournament Design</div>
+      </div>
+      <div class="sc-item">
+        <div class="sc-num">10</div>
+        <div class="sc-bar"><div class="sc-fill" style="width:100%"></div></div>
+        <div class="sc-label">Ranking System</div>
+      </div>
+      <div class="sc-item">
+        <div class="sc-num">9</div>
+        <div class="sc-bar"><div class="sc-fill" style="width:90%"></div></div>
+        <div class="sc-label">Revenue Model</div>
+      </div>
+      <div class="sc-item">
+        <div class="sc-num">10</div>
+        <div class="sc-bar"><div class="sc-fill" style="width:100%"></div></div>
+        <div class="sc-label">Coin Economy</div>
+      </div>
+      <div class="sc-item">
+        <div class="sc-num">9</div>
+        <div class="sc-bar"><div class="sc-fill" style="width:90%"></div></div>
+        <div class="sc-label">Scalability</div>
+      </div>
+      <div class="sc-item">
+        <div class="sc-num">8</div>
+        <div class="sc-bar"><div class="sc-fill" style="width:80%;background:var(--gold)"></div></div>
+        <div class="sc-label">Legal Readiness</div>
+      </div>
+    </div>
+    <p style="margin-top:40px;font-size:14px;color:var(--muted);max-width:600px;margin-left:auto;margin-right:auto;line-height:1.85;font-family:'Fira Code',monospace;">
+      The legal readiness is the only remaining gap — and it's fixable with $15–30k in legal fees, not $300k in licensing. The coin-tournament-revenue-share model is architecturally and legally superior to direct wagering. This is a fundable, launchable, scalable product.
+    </p>
+  </div>
+</div>
+
+<footer>
+  <p><span class="f-name">CueMaster</span> — Full Product Blueprint v2.0 &nbsp;·&nbsp; Confidential &nbsp;·&nbsp; Built with Claude</p>
+</footer>
+
+<script>
+function showTab(type) {
+  document.querySelectorAll('.tourn-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tourn-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('tab-' + type).classList.add('active');
+  event.target.closest('.tourn-tab').classList.add('active');
+}
+
+// Intersection observer for entrance animations
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      e.target.style.opacity = '1';
+      e.target.style.transform = 'translateY(0)';
+    }
+  });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('.card, .coin-card, .tech-layer, .rm-item, .comp-card, .rev-card').forEach(el => {
+  el.style.opacity = '0';
+  el.style.transform = 'translateY(20px)';
+  el.style.transition = 'opacity 0.5s ease, transform 0.5s ease';
+  observer.observe(el);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+{
+  "date": "2026-09-20",
+  "measurement": "JS render-callback intervals; not GPU presentation timing or touch-to-photon latency",
+  "desktop": {
+    "host": "Apple M5 MacBook Pro, 32 GB",
+    "surface": "Codex in-app browser, development build",
+    "action": "Real pull-and-release gesture, opening break",
+    "averageFps": 119.9,
+    "p95FrameMs": 9.3,
+    "framesOver20Ms": 0,
+    "frames": 871
+  },
+  "iosSimulatorBeforeRefinement": {
+    "device": "iPhone 17 Pro Max, iOS 26.4 simulator",
+    "configuration": "Debug, Hermes, automatic full-power break",
+    "averageFps": 48.796677335625056,
+    "p95FrameMs": 49.333167016506195,
+    "framesOver20Ms": 16,
+    "frames": 257
+  },
+  "iosSimulatorAfterRefinement": {
+    "device": "iPhone 17 Pro Max, iOS 26.4 simulator",
+    "configuration": "Debug, Hermes, automatic full-power break",
+    "averageFps": 55.62616319229129,
+    "p95FrameMs": 17.65908396244049,
+    "framesOver20Ms": 13,
+    "frames": 293,
+    "idleFps": 60,
+    "idleP95Ms": 16.739957988262177,
+    "drawCalls": 50,
+    "triangles": 39778
+  },
+  "physicalDevicesTested": [],
+  "sixtyFpsMobileGate": "NOT CERTIFIED",
+  "notes": [
+    "Simulator sampling showed Apple's GLRendererFloat software rasterizer.",
+    "Simulator rendering is not representative of an iPhone GPU.",
+    "Native Device Hub UI inspection repeatedly timed out; native render execution was checked with logs and process sampling, not visual signoff.",
+    "Desktop and simulator results were taken during development, not under controlled thermal or load conditions."
+  ],
+  "iosSimulatorRepeat": {
+    "configuration": "Debug, final development reload before delivery",
+    "averageFps": 55.058007919029635,
+    "p95FrameMs": 17.840541005134583,
+    "framesOver20Ms": 13,
+    "frames": 290
+  }
+}

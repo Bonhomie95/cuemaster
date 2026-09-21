@@ -1,0 +1,50 @@
+
+> test
+> npm --prefix mobile test
+
+
+> cuemaster@1.0.0 test
+> tsx --test ../tests/*.test.ts
+
+✔ rack has 16 distinct legal balls, 8 in centre, opposite corner groups (1.304917ms)
+✔ stationary balls remain stationary indefinitely (3.389ms)
+✔ rolling stop distance matches v²/2μg and exact stop time (0.161292ms)
+✔ centre strike becomes natural roll at exactly 5/7 initial speed (0.115042ms)
+✔ cloth integration is independent of partitioning (0.576291ms)
+✔ head-on collision conserves linear momentum and loses energy (0.226625ms)
+✔ oblique spinning contact never adds kinetic energy (0.536834ms)
+✔ maximum-speed ball cannot pass through another ball (3.5935ms)
+✔ rail reverses normal velocity without adding energy (0.155541ms)
+✔ sidespin changes the rail exit direction (0.1545ms)
+✔ a side pocket takes a centred ball, no early magnetic capture (1.205209ms)
+✔ corner pocket takes a diagonally centred ball (0.595125ms)
+✔ pocket jaw rejects a badly aligned side shot (4.138666ms)
+✔ draw reverses cue ball after a nearby full contact, follow continues (9.38175ms)
+✔ invalid input cannot corrupt simulation (0.242625ms)
+✔ cannot place cue inside a ball, cushion, or off table (0.139125ms)
+✔ shot replay produces identical terminal state and events (183.226667ms)
+✔ seeded break stress: finite states, eventual rest, no escaped balls (2461.387375ms)
+✔ contact prediction keeps maximum break penetration below 0.05 mm (90.166583ms)
+✔ right cue-tip offset applies the correct torque and opposite squirt (0.132041ms)
+✔ break pots remain unassigned and retain the turn (1.139167ms)
+✔ first post-break pot assigns opposing groups (0.120042ms)
+✔ opponent-only pot is recorded but passes the turn (0.070125ms)
+✔ scratch does not assign groups or put the cue ball in the return tray (0.068292ms)
+✔ multi-pot feedback keeps every ball and ignores duplicate events (0.094125ms)
+✔ eight ends the practice rack without declaring a rules-based winner (0.057958ms)
+✔ replay restores ball ledger, groups and turn without double counting (201.913833ms)
+✔ real pocket drill updates return tray, groups and replay together (13.088083ms)
+✔ completed 8-ball drill restarts as a playable full rack (4.221291ms)
+✔ clearing a drill without an 8 also ends cleanly and can repeat (7.392875ms)
+✔ render rates 30/60/120 give identical final physics state (308.732458ms)
+✔ material skins never alter simulation (140.575542ms)
+✔ repeat restores the exact pre-shot state and input (148.417ms)
+✔ suspension gaps do not launch unbounded catch-up work (0.96475ms)
+ℹ tests 34
+ℹ suites 0
+ℹ pass 34
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2874.562333

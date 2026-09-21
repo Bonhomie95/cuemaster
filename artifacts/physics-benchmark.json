@@ -1,0 +1,308 @@
+{
+  "date": "2026-09-20T18:50:24.727Z",
+  "runtime": "v24.15.0",
+  "architecture": "arm64",
+  "runs": [
+    {
+      "wallMs": 373.6123329999999,
+      "simulatedSeconds": 5.7291666666666625,
+      "ticks": 1375,
+      "steps": 3512,
+      "contacts": 53,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353047887115552,
+      "settled": true
+    },
+    {
+      "wallMs": 235.006209,
+      "simulatedSeconds": 5.587500000000014,
+      "ticks": 1341,
+      "steps": 3467,
+      "contacts": 51,
+      "potted": 0,
+      "maxOverlapMm": 0.001035304869959064,
+      "settled": true
+    },
+    {
+      "wallMs": 265.62375,
+      "simulatedSeconds": 5.6750000000000025,
+      "ticks": 1362,
+      "steps": 3502,
+      "contacts": 53,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353049512690227,
+      "settled": true
+    },
+    {
+      "wallMs": 199.96425,
+      "simulatedSeconds": 5.537500000000012,
+      "ticks": 1329,
+      "steps": 3452,
+      "contacts": 50,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353050326344926,
+      "settled": true
+    },
+    {
+      "wallMs": 218.65258300000005,
+      "simulatedSeconds": 5.5333333333333465,
+      "ticks": 1328,
+      "steps": 3463,
+      "contacts": 53,
+      "potted": 0,
+      "maxOverlapMm": 0.001035305113840368,
+      "settled": true
+    },
+    {
+      "wallMs": 184.431875,
+      "simulatedSeconds": 5.612500000000005,
+      "ticks": 1347,
+      "steps": 3476,
+      "contacts": 51,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353051952127768,
+      "settled": true
+    },
+    {
+      "wallMs": 233.43541700000014,
+      "simulatedSeconds": 5.487500000000012,
+      "ticks": 1317,
+      "steps": 3461,
+      "contacts": 53,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353052765435522,
+      "settled": true
+    },
+    {
+      "wallMs": 190.49333299999967,
+      "simulatedSeconds": 5.7124999999999995,
+      "ticks": 1371,
+      "steps": 3518,
+      "contacts": 47,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353053578188165,
+      "settled": true
+    },
+    {
+      "wallMs": 185.77224999999999,
+      "simulatedSeconds": 5.949999999999988,
+      "ticks": 1428,
+      "steps": 3567,
+      "contacts": 47,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353054391565308,
+      "settled": true
+    },
+    {
+      "wallMs": 180.9017920000001,
+      "simulatedSeconds": 5.795833333333327,
+      "ticks": 1391,
+      "steps": 3519,
+      "contacts": 51,
+      "potted": 0,
+      "maxOverlapMm": 0.001035305520438734,
+      "settled": true
+    },
+    {
+      "wallMs": 152.85158300000012,
+      "simulatedSeconds": 5.6583333333333385,
+      "ticks": 1358,
+      "steps": 3502,
+      "contacts": 53,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353056016793039,
+      "settled": true
+    },
+    {
+      "wallMs": 151.68708300000026,
+      "simulatedSeconds": 5.520833333333344,
+      "ticks": 1325,
+      "steps": 3456,
+      "contacts": 51,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353056829823237,
+      "settled": true
+    },
+    {
+      "wallMs": 146.67587500000036,
+      "simulatedSeconds": 5.600000000000003,
+      "ticks": 1344,
+      "steps": 3476,
+      "contacts": 51,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353057643408548,
+      "settled": true
+    },
+    {
+      "wallMs": 161.6780829999998,
+      "simulatedSeconds": 5.600000000000008,
+      "ticks": 1344,
+      "steps": 3472,
+      "contacts": 51,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353058456508135,
+      "settled": true
+    },
+    {
+      "wallMs": 172.46441700000014,
+      "simulatedSeconds": 5.470833333333347,
+      "ticks": 1313,
+      "steps": 3456,
+      "contacts": 53,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353059269052611,
+      "settled": true
+    },
+    {
+      "wallMs": 160.46737500000017,
+      "simulatedSeconds": 5.54583333333334,
+      "ticks": 1331,
+      "steps": 3459,
+      "contacts": 51,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353060082290977,
+      "settled": true
+    },
+    {
+      "wallMs": 171.2613749999996,
+      "simulatedSeconds": 5.420833333333353,
+      "ticks": 1301,
+      "steps": 3439,
+      "contacts": 53,
+      "potted": 0,
+      "maxOverlapMm": 0.001035306089497423,
+      "settled": true
+    },
+    {
+      "wallMs": 192.30004199999985,
+      "simulatedSeconds": 5.416666666666685,
+      "ticks": 1300,
+      "steps": 3426,
+      "contacts": 51,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353061708212596,
+      "settled": true
+    },
+    {
+      "wallMs": 162.18616599999996,
+      "simulatedSeconds": 5.98749999999998,
+      "ticks": 1437,
+      "steps": 3577,
+      "contacts": 53,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353062521104017,
+      "settled": true
+    },
+    {
+      "wallMs": 175.36124999999947,
+      "simulatedSeconds": 5.833333333333327,
+      "ticks": 1400,
+      "steps": 3546,
+      "contacts": 47,
+      "potted": 0,
+      "maxOverlapMm": 0.001035306333448116,
+      "settled": true
+    },
+    {
+      "wallMs": 159.33616699999948,
+      "simulatedSeconds": 5.687499999999998,
+      "ticks": 1365,
+      "steps": 3510,
+      "contacts": 47,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353064147372582,
+      "settled": true
+    },
+    {
+      "wallMs": 189.5839160000005,
+      "simulatedSeconds": 5.920833333333323,
+      "ticks": 1421,
+      "steps": 3569,
+      "contacts": 48,
+      "potted": 0,
+      "maxOverlapMm": 0.0034542523625197274,
+      "settled": true
+    },
+    {
+      "wallMs": 161.00745800000004,
+      "simulatedSeconds": 5.774999999999995,
+      "ticks": 1386,
+      "steps": 3529,
+      "contacts": 53,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353065773918702,
+      "settled": true
+    },
+    {
+      "wallMs": 176.81529199999932,
+      "simulatedSeconds": 5.633333333333338,
+      "ticks": 1352,
+      "steps": 3479,
+      "contacts": 51,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353066586393789,
+      "settled": true
+    },
+    {
+      "wallMs": 223.34670800000004,
+      "simulatedSeconds": 5.612500000000004,
+      "ticks": 1347,
+      "steps": 3500,
+      "contacts": 48,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353067399562765,
+      "settled": true
+    },
+    {
+      "wallMs": 209.74912500000028,
+      "simulatedSeconds": 5.479166666666681,
+      "ticks": 1315,
+      "steps": 3462,
+      "contacts": 48,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353068212107241,
+      "settled": true
+    },
+    {
+      "wallMs": 201.68375000000015,
+      "simulatedSeconds": 5.483333333333343,
+      "ticks": 1316,
+      "steps": 3454,
+      "contacts": 54,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353069025345607,
+      "settled": true
+    },
+    {
+      "wallMs": 262.4073749999998,
+      "simulatedSeconds": 5.558333333333342,
+      "ticks": 1334,
+      "steps": 3479,
+      "contacts": 48,
+      "potted": 0,
+      "maxOverlapMm": 0.001035306983809825,
+      "settled": true
+    },
+    {
+      "wallMs": 242.60404200000085,
+      "simulatedSeconds": 5.429166666666687,
+      "ticks": 1303,
+      "steps": 3451,
+      "contacts": 48,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353070651475393,
+      "settled": true
+    },
+    {
+      "wallMs": 197.93183300000055,
+      "simulatedSeconds": 5.312500000000025,
+      "ticks": 1275,
+      "steps": 3407,
+      "contacts": 50,
+      "potted": 0,
+      "maxOverlapMm": 0.0010353071464228036,
+      "settled": true
+    }
+  ],
+  "meanMs": 197.97642356666668
+}

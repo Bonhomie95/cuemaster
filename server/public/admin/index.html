@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>CueMaster · Administration</title>
+    <link rel="stylesheet" href="/admin/console.css" />
+  </head>
+  <body>
+    <header>
+      <b>CUEMASTER</b><span>Bonhomie LLC · Administration</span
+      ><button id="logout" hidden>Sign out</button>
+    </header>
+    <main>
+      <p id="message" role="status" aria-live="polite"></p>
+      <section id="login">
+        <h1>Administrator sign-in</h1>
+        <p>This account is separate from player accounts.</p>
+        <form id="login-form">
+          <label
+            >Username<input
+              name="username"
+              autocomplete="username"
+              required /></label
+          ><label
+            >Password<input
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              required /></label
+          ><button>Sign in</button>
+        </form>
+      </section>
+      <section id="password" hidden>
+        <h1>Set your administrator password</h1>
+        <p>
+          Use at least 16 characters. Your temporary password cannot administer
+          the service.
+        </p>
+        <form id="password-form">
+          <label
+            >Current password<input
+              name="currentPassword"
+              type="password"
+              autocomplete="current-password"
+              required /></label
+          ><label
+            >New password<input
+              name="newPassword"
+              type="password"
+              autocomplete="new-password"
+              minlength="16"
+              required /></label
+          ><button>Change password and sign out</button>
+        </form>
+      </section>
+      <section id="dashboard" hidden>
+        <h1>Club management</h1>
+        <div id="overview" class="cards"></div>
+        <nav>
+          <button data-page="tournaments">Tournaments</button
+          ><button data-page="players">Players</button
+          ><button data-page="reports">Reports</button
+          ><button data-page="staff">Administrators</button>
+        </nav>
+        <section id="tournaments">
+          <h2>Tournaments</h2>
+          <button id="new-event">Create tournament</button>
+          <div id="event-list"></div>
+          <form id="event-form" hidden>
+            <h2 id="event-title">New draft</h2>
+            <label>Name<input name="name" maxlength="70" required /></label
+            ><label
+              >Subtitle<input name="subtitle" maxlength="100" required /></label
+            ><label
+              >Description<textarea
+                name="description"
+                minlength="10"
+                maxlength="2000"
+                required
+              ></textarea>
+            </label>
+            <div class="cards">
+              <label
+                >Minimum level<input
+                  name="level"
+                  type="number"
+                  min="1"
+                  max="100"
+                  value="1"
+                  required /></label
+              ><label
+                >Coin entry fee<input
+                  name="entry"
+                  type="number"
+                  min="0"
+                  max="1000000"
+                  value="0"
+                  required /></label
+              ><label
+                >Prize currency<select name="currency">
+                  <option>coins</option>
+                  <option>USDC</option>
+                </select></label
+              ><label
+                >Completion coin reward<input
+                  name="reward"
+                  type="number"
+                  min="0"
+                  max="10000"
+                  value="0"
+                  required
+              /></label>
+            </div>
+            <label
+              >Prize description<input
+                name="prize"
+                maxlength="160"
+                required /></label
+            ><label
+              >Rewarded positions (one position:amount per line)<textarea
+                name="placements"
+                placeholder="1:100&#10;2:50&#10;3:25"
+              ></textarea></label
+            ><label
+              >Eligible countries (ISO codes, comma separated)<input
+                name="countries"
+                placeholder="US,GB"
+            /></label>
+            <div class="cards">
+              <label
+                >Starts (your local time)<input
+                  name="startsAt"
+                  type="datetime-local"
+                  required /></label
+              ><label
+                >Ends (your local time)<input
+                  name="endsAt"
+                  type="datetime-local"
+                  required
+              /></label>
+            </div>
+            <label
+              >Official rules (one rule per line)<textarea
+                name="rules"
+                rows="5"
+                required
+              ></textarea>
+            </label>
+            <p>
+              Drafts do not collect entry fees. Paid-entry and USDC events
+              cannot open until funding, eligibility, settlement and
+              distribution requirements are verified. Currently playable format:
+              server-verified straight-pot challenge.
+            </p>
+            <button>Save draft</button
+            ><button type="button" id="cancel-edit">Cancel</button>
+          </form>
+        </section>
+        <section id="players" hidden>
+          <h2>Players</h2>
+          <form id="player-search">
+            <label>Name or player ID<input name="q" maxlength="80" /></label
+            ><button>Search</button>
+          </form>
+          <div id="player-list"></div>
+        </section>
+        <section id="reports" hidden>
+          <h2>Reported players</h2>
+          <div id="report-list"></div>
+        </section>
+        <section id="staff" hidden>
+          <h2>Administrators</h2>
+          <p>
+            Only the owner can access this section. Credentials are never shared
+            with player accounts.
+          </p>
+          <div id="staff-list"></div>
+          <form id="staff-form">
+            <h3>Add staff administrator</h3>
+            <label
+              >Username<input
+                name="username"
+                pattern="[a-z0-9._-]{3,60}"
+                required /></label
+            ><label
+              >Name<input
+                name="name"
+                minlength="2"
+                maxlength="80"
+                required /></label
+            ><label>Email<input name="email" type="email" required /></label
+            ><button>Create staff account</button>
+          </form>
+        </section>
+      </section>
+    </main>
+    <script src="/admin/console.js" defer></script>
+  </body>
+</html>
