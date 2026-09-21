@@ -1,0 +1,166 @@
+{
+  "apkBytes": 85245637,
+  "libraries": [
+    {
+      "library": "lib/arm64-v8a/libappmodules.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/arm64-v8a/libc++_shared.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/arm64-v8a/libexpo-gl.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/arm64-v8a/libexpo-modules-core.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/arm64-v8a/libfbjni.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/arm64-v8a/libgifimage.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/arm64-v8a/libhermestooling.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/arm64-v8a/libhermesvm.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/arm64-v8a/libimagepipeline.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/arm64-v8a/libjsi.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/arm64-v8a/libnative-filters.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/arm64-v8a/libnative-imagetranscoder.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/arm64-v8a/libreact_codegen_safeareacontext.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/arm64-v8a/libreactnative.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/arm64-v8a/libstatic-webp.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/arm64-v8a/libzstd-kmp.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/x86_64/libappmodules.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/x86_64/libc++_shared.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/x86_64/libexpo-gl.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/x86_64/libexpo-modules-core.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/x86_64/libfbjni.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/x86_64/libgifimage.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/x86_64/libhermestooling.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/x86_64/libhermesvm.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/x86_64/libimagepipeline.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/x86_64/libjsi.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/x86_64/libnative-filters.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/x86_64/libnative-imagetranscoder.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/x86_64/libreact_codegen_safeareacontext.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/x86_64/libreactnative.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/x86_64/libstatic-webp.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    },
+    {
+      "library": "lib/x86_64/libzstd-kmp.so",
+      "minimumLoadAlignment": 16384,
+      "passed": true
+    }
+  ],
+  "all64BitLibraries16KiBAligned": true
+}
