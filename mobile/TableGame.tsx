@@ -28,12 +28,14 @@ import {
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
+import Feather from "@expo/vector-icons/Feather";
 import { StatusBar } from "expo-status-bar";
 import * as Haptics from "expo-haptics";
 import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
 import { Canvas } from "./src/render/Canvas";
 import { Scene } from "./src/render/Scene";
 import { session, skins } from "./src/game/session";
+import { Press, Enter } from "./src/app/motion";
 import { groupOf } from "./src/game/progress";
 import { ballColors } from "./src/render/textures";
 const C = {
@@ -58,20 +60,15 @@ function Button({
   disabled?: boolean;
 }) {
   return (
-    <Pressable
+    <Press
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
       disabled={disabled}
-      style={({ pressed }) => [
-        s.button,
-        active && s.selected,
-        pressed && { opacity: 0.65 },
-        disabled && { opacity: 0.35 },
-      ]}
+      style={[s.button, active && s.selected, disabled && { opacity: 0.35 }]}
     >
       {children || <Text style={s.buttonText}>{label}</Text>}
-    </Pressable>
+    </Press>
   );
 }
 function Power({ compact = false }: { compact?: boolean }) {
@@ -118,38 +115,43 @@ function Power({ compact = false }: { compact?: boolean }) {
       }),
     [travel],
   );
+  const pulling = power > 0.02;
+  const disabled =
+    session.running || session.cpuTurn || session.progress.finished;
   return (
     <View style={s.powerColumn}>
       <View
         accessibilityLabel="Pull down and release to shoot"
-        hitSlop={18}
+        accessibilityValue={{ now: Math.round(power * 100), min: 0, max: 100 }}
+        hitSlop={22}
         {...responder.panHandlers}
         style={[
           s.powerTrack,
-          compact && { height: 132 },
-          (session.running || session.cpuTurn || session.progress.finished) && { opacity: 0.35 },
+          { height: travel + 30 },
+          disabled && { opacity: 0.3 },
         ]}
       >
-        <LinearGradient colors={["#54e9e0", "#42d89c", "#ffd05b", "#ff694c"]}
-          style={[StyleSheet.absoluteFill, { borderRadius: 18, opacity: 0.45 + power * 0.55 }]} />
-        <View style={[s.powerFill, { height: `${power * 100}%` }]} />
-        {[0, 2, 4, 6, 8].map((n) => (
+        {/* The track reads empty at rest; the bright fill is the whole affordance. */}
+        <View style={[s.powerFillClip, { height: `${6 + power * 94}%` }]}>
+          <LinearGradient
+            colors={["#24dbb3", "#ffd05b", "#ff694c"]}
+            locations={[0, 0.55, 1]}
+            style={{ width: "100%", height: travel + 30 }}
+          />
+        </View>
+        {[1, 2, 3].map((n) => (
           <View
             key={n}
-            style={[
-              s.powerTick,
-              { top: 10 + (n * (travel + 1)) / 8, width: 4 },
-            ]}
+            style={[s.powerTick, { top: ((travel + 30) * n) / 4 }]}
           />
         ))}
-        <View style={[s.powerKnob, { top: 8 + power * travel }]}>
-          <View style={s.knobLine} />
-        </View>
+        <View style={[s.powerKnob, { top: power * travel }]} />
       </View>
-      <Text style={s.powerValue}>
-        {Math.round(power * 100)}
-        <Text style={{ fontSize: 10, color: C.muted }}> %</Text>
-      </Text>
+      {pulling ? (
+        <Text style={s.powerValue}>{Math.round(power * 100)}%</Text>
+      ) : (
+        <Text style={s.controlCaption}>POWER</Text>
+      )}
     </View>
   );
 }
@@ -254,7 +256,8 @@ function FineAim() {
   const pan = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => !session.running && !session.cpuTurn,
+        onStartShouldSetPanResponder: () =>
+          !session.running && !session.cpuTurn,
         onPanResponderGrant: () => {
           start.current = session.angle;
         },
@@ -266,24 +269,28 @@ function FineAim() {
     [],
   );
   return (
-    <View
-      {...pan.panHandlers}
-      accessibilityLabel="Drag horizontally to fine tune aim"
-      hitSlop={12}
-      style={s.fineAim}
-    >
-      <Text style={s.fineArrow}>‹</Text>
-      {Array.from({ length: 21 }, (_, i) => (
-        <View
-          key={i}
-          style={{
-            width: 1,
-            height: i % 5 === 0 ? 12 : 6,
-            backgroundColor: i === 10 ? C.gold : "#617065",
-          }}
-        />
-      ))}
-      <Text style={s.fineArrow}>›</Text>
+    <View style={s.fineAimWrap}>
+      <Text style={s.controlCaption}>FINE AIM</Text>
+      <View
+        {...pan.panHandlers}
+        accessibilityLabel="Drag horizontally to fine tune aim"
+        hitSlop={14}
+        style={s.fineAim}
+      >
+        <Feather name="chevron-left" size={15} color="#9fc2d6" />
+        {Array.from({ length: 17 }, (_, i) => (
+          <View
+            key={i}
+            style={{
+              width: 1,
+              height: i === 8 ? 13 : i % 4 === 0 ? 9 : 5,
+              borderRadius: 1,
+              backgroundColor: i === 8 ? C.gold : "#ffffff4d",
+            }}
+          />
+        ))}
+        <Feather name="chevron-right" size={15} color="#9fc2d6" />
+      </View>
     </View>
   );
 }
@@ -299,7 +306,8 @@ function Audio() {
     let last = -1;
     session.onEvent = (e) => {
       if (!session.sound) return;
-      if (e.type === "ball" && e.time - last < 0.014) return;
+      // abs(): a replay restarts world time at zero.
+      if (e.type === "ball" && Math.abs(e.time - last) < 0.014) return;
       last = e.time;
       const p = players[e.type as keyof typeof players];
       if (p) {
@@ -711,7 +719,10 @@ function Game({
 }) {
   const insets = useSafeAreaInsets();
   useSyncExternalStore(session.subscribe, session.snapshot);
-  const { width, height } = useWindowDimensions();
+  const win = useWindowDimensions();
+  // Landscape-locked: the reported orientation can lag on device, so derive it from the sizes.
+  const width = Math.max(win.width, win.height),
+    height = Math.min(win.width, win.height);
   const [panel, setPanel] = useState<
     "skins" | "drills" | "spin" | "settings" | "quit" | null
   >(null);
@@ -736,28 +747,34 @@ function Game({
   const compact = height < 560;
   const skin = skins[session.skin];
   const tableHeight =
-    Platform.OS === "web"
-      ? Math.min(height, width * 0.5625)
-      : height - insets.top - insets.bottom;
+    Platform.OS === "web" ? Math.min(height, width * 0.5625) : height;
+  // The table is full bleed to the glass; only the HUD keeps clear of the notch and the home
+  // indicator. Scene fits the rack inside these margins, so widening them here moves the table,
+  // it never crops it.
+  session.hud = {
+    top: 52 + insets.top,
+    bottom: 50 + insets.bottom,
+    left: 46 + insets.left,
+    right: 56 + insets.right,
+  };
   return (
-    <View
-      style={[
-        s.root,
-        {
-          paddingTop: insets.top,
-          paddingBottom: insets.bottom,
-          paddingLeft: insets.left,
-          paddingRight: insets.right,
-        },
-      ]}
-    >
+    <View style={s.root}>
       <StatusBar hidden />
       <Audio />
       <View style={[s.stage, { height: tableHeight, maxWidth: 1700 }]}>
         <GroupAnnouncement />
-        <View style={s.matchHeader}>
+        <View
+          style={[
+            s.matchHeader,
+            {
+              top: 4 + insets.top,
+              left: 12 + insets.left,
+              right: 12 + insets.right,
+            },
+          ]}
+        >
           <Button label="Table settings" onPress={() => setPanel("settings")}>
-            <Text style={{ color: C.ink, fontSize: 22 }}>☰</Text>
+            <Feather name="menu" size={20} color={C.ink} />
           </Button>
           <View style={[s.playerCard, turn === 0 && s.activePlayerCard]}>
             {paidMatch ? <ClockBall player={0} /> : null}
@@ -767,7 +784,7 @@ function Game({
                 {playerName.toUpperCase()} {turn === 0 ? " ◂" : ""}
               </Text>
               <Text
-                style={{ fontSize: 11, color: "#d8efff", fontWeight: "700" }}
+                style={{ fontSize: 10, color: "#9fc2d6", fontWeight: "600" }}
               >
                 {cueById(session.cueIds[0]).name}
               </Text>
@@ -776,15 +793,29 @@ function Game({
           </View>
           <View style={s.matchCenter}>
             <Text style={s.matchBrand}>CUEMASTER</Text>
-            <Text numberOfLines={2} style={s.matchMode}>{modeLabel.toUpperCase()}</Text>
+            <Text numberOfLines={2} style={s.matchMode}>
+              {modeLabel.toUpperCase()}
+            </Text>
           </View>
-          <View style={[s.playerCard, { flexDirection: "row-reverse" }, turn === 1 && s.activePlayerCard]}>
+          <View
+            style={[
+              s.playerCard,
+              { flexDirection: "row-reverse" },
+              turn === 1 && s.activePlayerCard,
+            ]}
+          >
             {paidMatch ? <ClockBall player={1} /> : null}
-            <Avatar opponent variant={session.cpu?.avatar ?? (playerAvatar === 0 ? 1 : 0)} />
+            <Avatar
+              opponent
+              variant={session.cpu?.avatar ?? (playerAvatar === 0 ? 1 : 0)}
+            />
             <View style={{ alignItems: "flex-end" }}>
-              <Text numberOfLines={1} style={[s.playerName,{maxWidth:135}]}>{turn === 1 ? "▸ " : ""}{session.cpu ? session.cpu.name.toUpperCase() : "PLAYER 2"}</Text>
+              <Text numberOfLines={1} style={[s.playerName, { maxWidth: 135 }]}>
+                {turn === 1 ? "▸ " : ""}
+                {session.cpu ? session.cpu.name.toUpperCase() : "PLAYER 2"}
+              </Text>
               <Text
-                style={{ fontSize: 11, color: "#d8efff", fontWeight: "700" }}
+                style={{ fontSize: 10, color: "#9fc2d6", fontWeight: "600" }}
               >
                 {cueById(session.cueIds[1]).name}
               </Text>
@@ -799,23 +830,24 @@ function Game({
               session.notify();
             }}
           >
-            <Text style={s.cameraIcon}>◎</Text>
+            <Feather
+              name="video"
+              size={19}
+              color={session.camera === "aim" ? C.gold : C.ink}
+            />
           </Button>
         </View>
         <View
           style={[
             s.canvas,
-            {
-              top: 86,
-              bottom: 58,
-              left: 52,
-              right: 52,
-            },
+            // Full-bleed table, as in the reference game: the playfield is the interface.
+            // The HUD bands are reserved through session.hud so the table never sits under them.
+            { top: 0, bottom: 0, left: 0, right: 0 },
           ]}
         >
           <SceneBoundary>
             <Canvas
-              camera={{ position: [0, 3, 1.86], fov: 42, near: 0.05, far: 30 }}
+              camera={{ position: [0, 3, 0.001], fov: 19, near: 0.05, far: 40 }}
               dpr={[1, 1.7]}
               gl={{
                 antialias: true,
@@ -833,63 +865,90 @@ function Game({
             <Text style={s.description}>Preparing your table…</Text>
           </View>
         )}
-        <View style={s.shotPower}>
+        <View style={[s.shotPower, { left: 15 + insets.left }]}>
           <Power compact />
         </View>
-        <View style={s.shotSpin}>
+        <View style={[s.shotSpin, { right: 6 + insets.right }]}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Adjust spin"
             disabled={session.running || session.cpuTurn}
             onPress={() => setPanel("spin")}
-            style={{ padding: 8 }}
+            style={({ pressed }) => [
+              s.spinButtonFrame,
+              pressed && { opacity: 0.75 },
+              (session.running || session.cpuTurn) && { opacity: 0.35 },
+            ]}
           >
-            <Spin size={38} />
+            <Spin size={34} />
           </Pressable>
+          <Text style={s.controlCaption}>SPIN</Text>
         </View>
-        <View style={s.returnTray} accessibilityLiveRegion="polite">
-          <Text style={s.returnLabel}>POTTED</Text>
-          <View style={s.ballRow}>
-            {session.progress.returned.length ? (
-              session.progress.returned.map((id) => (
-                <BallBadge
-                  key={id}
-                  id={id}
-                  recent={session.progress.shotPots.includes(id)}
-                />
-              ))
-            ) : (
-              <Text style={s.returnEmpty}>Balls appear here when pocketed</Text>
+        <View
+          style={[s.pottedRack, { right: 6 + insets.right }]}
+          accessibilityLiveRegion="polite"
+          accessibilityLabel={
+            session.progress.returned.length
+              ? `Potted: ${session.progress.returned.join(", ")}`
+              : "No balls potted yet"
+          }
+        >
+          {session.progress.returned.length > 0 && (
+            <Text style={s.returnLabel}>POTTED</Text>
+          )}
+          <View style={s.pottedColumn}>
+            {session.progress.returned.map((id) => (
+              <BallBadge
+                key={id}
+                id={id}
+                recent={session.progress.shotPots.includes(id)}
+              />
+            ))}
+          </View>
+        </View>
+        <View
+          style={[
+            s.shotFooter,
+            {
+              bottom: 6 + insets.bottom,
+              left: 16 + insets.left,
+              right: 60 + insets.right,
+            },
+          ]}
+        >
+          <View style={s.footerSide}>
+            <Text
+              style={[s.shotStatus, session.replaying && { color: C.gold }]}
+            >
+              {session.replaying
+                ? "▶ INSTANT REPLAY · SLOW MOTION"
+                : session.running
+                  ? session.progress.shotPots.length
+                    ? `POTTED: ${session.progress.shotPots.join(", ")}`
+                    : "BALLS IN PLAY"
+                  : session.cpuTurn
+                    ? `${session.cpu!.name.toUpperCase()} IS AIMING…`
+                    : session.placement
+                      ? session.headStringPlacement
+                        ? "DRAG ON / BEHIND LINE · RELEASE TO PLACE"
+                        : "PLACE THE CUE BALL"
+                      : session.progress.finished
+                        ? "RESET TABLE TO PLAY AGAIN"
+                        : `${turn === 0 ? "YOUR" : "PLAYER 2’S"} TURN`}
+            </Text>
+            {!session.replaying &&
+              (session.progress.scratch ||
+                (paidMatch && !!session.progress.foul)) && (
+                <Text style={s.scratchLabel}>
+                  {session.placement || session.running
+                    ? `${session.progress.foul || "SCRATCH"} · BALL IN HAND`
+                    : `LAST SHOT · ${session.progress.foul || "SCRATCH"}`}
+                </Text>
+              )}
+            {session.progress.finished && (
+              <Text style={s.scratchLabel}>RACK COMPLETE</Text>
             )}
           </View>
-          {(session.progress.scratch ||
-            (paidMatch && !!session.progress.foul)) && (
-            <Text style={s.scratchLabel}>
-              {session.placement || session.running
-                ? `${session.progress.foul || "SCRATCH"} · BALL IN HAND`
-                : `LAST SHOT · ${session.progress.foul || "SCRATCH"}`}
-            </Text>
-          )}
-          {session.progress.finished && (
-            <Text style={s.scratchLabel}>RACK COMPLETE</Text>
-          )}
-        </View>
-        <View style={s.shotFooter}>
-          <Text style={s.shotStatus}>
-            {session.running
-              ? session.progress.shotPots.length
-                ? `POTTED: ${session.progress.shotPots.join(", ")}`
-                : "BALLS IN PLAY"
-              : session.cpuTurn
-                ? `${session.cpu!.name.toUpperCase()} IS AIMING…`
-              : session.placement
-                ? session.headStringPlacement
-                  ? "DRAG ON / BEHIND LINE · RELEASE TO PLACE"
-                  : "PLACE THE CUE BALL"
-                : session.progress.finished
-                  ? "RESET TABLE TO PLAY AGAIN"
-                  : `${turn === 0 ? "YOUR" : "PLAYER 2’S"} TURN`}
-          </Text>
           {session.drill === "break" &&
           session.shots === 0 &&
           !session.cpuTurn &&
@@ -906,11 +965,27 @@ function Game({
           ) : (
             <FineAim />
           )}
-          <Text style={s.tableBadge}>{skin.name.toUpperCase()} · 9 FT</Text>
+          <View style={[s.footerSide, { justifyContent: "flex-end" }]}>
+            {!paidMatch && session.canReplay && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Watch replay of the last shot"
+                hitSlop={8}
+                onPress={() => session.startReplay()}
+                style={({ pressed }) => [
+                  s.replayPill,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={s.replayPillText}>▶ REPLAY</Text>
+              </Pressable>
+            )}
+            <Text style={s.tableBadge}>{skin.name.toUpperCase()} · 9 FT</Text>
+          </View>
         </View>
         {session.progress.finished && !session.running && (
           <View style={s.finishOverlay}>
-            <View style={s.finishCard} accessibilityLiveRegion="polite">
+            <Enter style={s.finishCard} accessibilityLiveRegion="polite">
               <Text style={s.finishTitle}>
                 {paidMatch
                   ? localWinner(session.progress) === 0
@@ -924,14 +999,14 @@ function Game({
                   : "Every object ball is pocketed."}
               </Text>
               {!paidMatch && (
-                <Pressable
+                <Press
                   accessibilityRole="button"
                   accessibilityLabel="Play again"
                   style={s.playAgain}
                   onPress={() => session.reset("break")}
                 >
                   <Text style={s.playAgainText}>PLAY AGAIN · FULL RACK</Text>
-                </Pressable>
+                </Press>
               )}
               {onExit && (
                 <Button
@@ -953,10 +1028,10 @@ function Game({
                   onPress={() => session.reset(session.drill)}
                 />
               )}
-            </View>
+            </Enter>
           </View>
         )}
-        {width < height && Platform.OS !== "web" && (
+        {win.width < win.height && Platform.OS !== "web" && (
           <View style={s.rotate}>
             <Text style={s.title}>A wider perspective.</Text>
             <Text style={s.description}>Rotate your phone to play.</Text>
@@ -965,7 +1040,9 @@ function Game({
       </View>
       <Modal
         transparent
-        visible={!!session.progress.breakChoice && !session.running && !session.cpuTurn}
+        visible={
+          !!session.progress.breakChoice && !session.running && !session.cpuTurn
+        }
         animationType="fade"
         onRequestClose={() => {}}
       >
@@ -1034,6 +1111,7 @@ function Game({
         onRequestClose={() => setPanel(null)}
       >
         <Pressable
+          accessibilityRole="button"
           accessibilityLabel="Dismiss spin picker"
           onPress={() => setPanel(null)}
           style={s.scrim}
@@ -1194,6 +1272,16 @@ function Game({
                   ))}
                 </View>
                 <View style={s.actions}>
+                  {!paidMatch && (
+                    <Button
+                      label="Watch replay"
+                      disabled={!session.canReplay}
+                      onPress={() => {
+                        session.startReplay();
+                        setPanel(null);
+                      }}
+                    />
+                  )}
                   <Button
                     label="Repeat last shot"
                     disabled={session.running || !session.saved}
@@ -1394,15 +1482,21 @@ const s = StyleSheet.create({
     letterSpacing: 0.8,
     marginTop: 3,
   },
-  returnTray: {
+  pottedRack: {
     position: "absolute",
-    bottom: 31,
-    left: 65,
-    right: 65,
-    flexDirection: "row",
-    gap: 10,
+    right: 6,
+    top: 96,
+    bottom: 40,
+    width: 48,
     alignItems: "center",
-    height: 24,
+    gap: 6,
+  },
+  pottedColumn: {
+    flex: 1,
+    flexWrap: "wrap",
+    alignContent: "center",
+    justifyContent: "flex-start",
+    gap: 4,
   },
   returnLabel: {
     color: "#bec9d8",
@@ -1419,10 +1513,10 @@ const s = StyleSheet.create({
   },
   matchHeader: {
     position: "absolute",
-    top: 8,
-    left: 14,
-    right: 14,
-    height: 70,
+    top: 4,
+    left: 12,
+    right: 12,
+    height: 54,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -1434,26 +1528,26 @@ const s = StyleSheet.create({
     gap: 6,
     alignItems: "center",
     flex: 1,
-    maxWidth: 320,
+    maxWidth: 300,
     minWidth: 0,
-    paddingHorizontal: 8,
-    paddingVertical: 7,
-    borderRadius: 22,
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#486477",
-    backgroundColor: "#102c40",
+    borderColor: "#ffffff1f",
+    backgroundColor: "#0a1a27d9",
     justifyContent: "center",
   },
   activePlayerCard: {
-    borderColor: "#4ee7bb",
-    backgroundColor: "#143e49",
-    boxShadow: "0 3px 14px #00000040",
+    borderColor: "#24dbb3aa",
+    backgroundColor: "#0d2a2ee6",
+    boxShadow: "0 2px 16px #00000055",
   },
   playerName: {
-    color: "#f4f6fb",
+    color: "#fffdf3",
     fontSize: 13,
     fontWeight: "800",
-    letterSpacing: 1,
+    letterSpacing: 0.6,
   },
   playerState: {
     color: "#5de5ba",
@@ -1461,18 +1555,28 @@ const s = StyleSheet.create({
     letterSpacing: 1,
     marginTop: 5,
   },
-  matchCenter: { alignItems: "center", justifyContent: "center", gap: 5, width: 108 },
+  matchCenter: {
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    width: 108,
+  },
   matchBrand: {
     color: "#ffd05b",
     fontSize: 12,
     fontWeight: "800",
     letterSpacing: 2,
   },
-  matchMode: { color: "#e0f3fc", fontSize: 10, letterSpacing: 0.8, textAlign: "center" },
+  matchMode: {
+    color: "#e0f3fc",
+    fontSize: 10,
+    letterSpacing: 0.8,
+    textAlign: "center",
+  },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1,
     overflow: "hidden",
     alignItems: "center",
@@ -1508,17 +1612,48 @@ const s = StyleSheet.create({
     backgroundColor: "#24212a",
   },
   shotPower: { position: "absolute", left: 15, top: "36%" },
-  shotSpin: { position: "absolute", right: 8, top: "43%" },
+  shotSpin: {
+    position: "absolute",
+    right: 6,
+    top: "43%",
+    alignItems: "center",
+    gap: 4,
+  },
   shotFooter: {
     position: "absolute",
-    bottom: 4,
-    left: 74,
-    right: 74,
+    bottom: 6,
+    left: 16,
+    right: 60,
+    height: 26,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    gap: 10,
+  },
+  footerSide: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   shotStatus: { color: "#9eafc3", fontSize: 10, letterSpacing: 1 },
+  replayPill: {
+    marginLeft: 12,
+    paddingHorizontal: 12,
+    minHeight: 30,
+    justifyContent: "center",
+    borderRadius: 15,
+    borderWidth: 1,
+    borderColor: "#ffd05b88",
+    backgroundColor: "#ffd05b1f",
+  },
+  replayPillText: {
+    color: "#ffd05b",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1,
+  },
   tableBadge: { color: "#708198", fontSize: 10, letterSpacing: 1 },
   root: {
     flex: 1,
@@ -1569,11 +1704,12 @@ const s = StyleSheet.create({
   },
   button: {
     minHeight: 44,
+    minWidth: 44,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderWidth: 1,
-    borderColor: C.line,
-    borderRadius: 8,
+    borderColor: "#ffffff1f",
+    borderRadius: 22,
     flexDirection: "row",
     gap: 9,
     alignItems: "center",
@@ -1610,49 +1746,66 @@ const s = StyleSheet.create({
   },
   spinButton: { alignItems: "center", gap: 8, marginBottom: 20 },
   toolLabel: { fontSize: 7, letterSpacing: 1.4, color: C.muted, marginTop: 6 },
-  cameraIcon: { fontSize: 26, lineHeight: 28, color: C.ink },
+  spinButtonFrame: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#ffffff1f",
+    backgroundColor: "#0a1a27d9",
+  },
   rightTools: { position: "absolute", right: 32, top: "34%" },
   powerColumn: { alignItems: "center", gap: 10 },
   eyebrow: { fontSize: 10, fontWeight: "600", letterSpacing: 2, color: C.gold },
   powerTrack: {
-    width: 12,
-    height: 178,
-    borderRadius: 18,
+    width: 11,
+    borderRadius: 7,
     borderWidth: 1,
-    borderColor: "#85cde9",
-    backgroundColor: "#0b120e",
+    borderColor: "#ffffff26",
+    backgroundColor: "#061420cc",
     overflow: "visible",
   },
-  powerFill: {
+  // The fill is clipped so the gradient keeps its colours as the bar grows.
+  powerFillClip: {
     position: "absolute",
-    bottom: 0,
+    top: 0,
     left: 0,
     right: 0,
-    backgroundColor: "#ffffff",
-    opacity: 0.24,
-    borderRadius: 18,
+    borderRadius: 7,
+    overflow: "hidden",
   },
   powerTick: {
     position: "absolute",
-    right: 3,
+    left: 14,
+    width: 5,
     height: 1,
-    backgroundColor: "#b6e6f6",
+    backgroundColor: "#ffffff30",
   },
   powerKnob: {
     position: "absolute",
-    width: 24,
-    height: 18,
-    left: -7,
-    borderRadius: 9,
-    backgroundColor: "#ffcd42",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 3,
-    borderWidth: 1,
-    borderColor: "#efe1bd",
+    width: 25,
+    height: 25,
+    left: -8,
+    borderRadius: 13,
+    backgroundColor: "#fffdf3",
+    borderWidth: 3,
+    borderColor: "#ffd05b",
+    boxShadow: "0 2px 8px #00000066",
   },
-  knobLine: { height: 2, width: 9, backgroundColor: "#614100" },
-  powerValue: { fontSize: 12, color: C.ink, fontVariant: ["tabular-nums"] },
+  powerValue: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: C.gold,
+    fontVariant: ["tabular-nums"],
+  },
+  controlCaption: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 1.6,
+    color: "#89a6bb",
+  },
   tiny: {
     fontSize: 6,
     lineHeight: 10,
@@ -1683,14 +1836,19 @@ const s = StyleSheet.create({
   chevron: { color: C.gold, fontSize: 17 },
   centerBottom: { alignItems: "center", gap: 9, flex: 1 },
   message: { color: "#bcc9bc", fontSize: 12, letterSpacing: 0.2 },
+  fineAimWrap: { alignItems: "center", gap: 3 },
   fineAim: {
-    width: 185,
-    height: 22,
+    width: 196,
+    height: 26,
+    paddingHorizontal: 8,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    borderRadius: 13,
+    borderWidth: 1,
+    borderColor: "#ffffff1a",
+    backgroundColor: "#0a1a27b3",
   },
-  fineArrow: { color: C.muted, fontSize: 17 },
   aimHelp: { fontSize: 6, color: "#6d8072", letterSpacing: 1.2 },
   loading: { position: "absolute", top: "48%", alignSelf: "center" },
   pottedTray: {

@@ -9,31 +9,71 @@ import {
   TextInput,
   View,
 } from "react-native";
+import Feather from "@expo/vector-icons/Feather";
+import { LinearGradient } from "expo-linear-gradient";
 import { api, Player } from "./api";
 import { portraits } from "./art";
+import { Press, Enter } from "./motion";
 type Area = "wallet" | "leaderboard" | "blocked";
+type Icon = React.ComponentProps<typeof Feather>["name"];
+
+/** One button shape for the whole club: a gold primary, or dark glass for everything else. */
 function Button({
   label,
   onPress,
   disabled = false,
+  primary = false,
+  icon,
+  selected = false,
 }: {
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  primary?: boolean;
+  icon?: Icon;
+  selected?: boolean;
 }) {
   return (
-    <Pressable
+    <Press
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled, selected }}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [
+      style={[
         s.button,
-        (pressed || disabled) && { opacity: 0.5 },
+        primary && !disabled ? s.primary : s.ghost,
+        selected && s.selected,
+        disabled && { opacity: 0.45 },
       ]}
     >
-      <Text style={s.buttonText}>{label}</Text>
-    </Pressable>
+      {!!icon && (
+        <Feather
+          name={icon}
+          size={15}
+          color={primary && !disabled ? "#10233a" : "#cfe0ee"}
+        />
+      )}
+      <Text
+        style={[s.buttonText, primary && !disabled && { color: "#10233a" }]}
+      >
+        {label}
+      </Text>
+    </Press>
+  );
+}
+function Card({ children }: { children: React.ReactNode }) {
+  return (
+    <View style={s.card}>
+      <LinearGradient
+        pointerEvents="none"
+        colors={["#153048", "#0a1c2900", "#00000000"]}
+        locations={[0, 0.3, 1]}
+        style={StyleSheet.absoluteFill}
+      />
+      <View pointerEvents="none" style={s.topLight} />
+      {children}
+    </View>
   );
 }
 export default function AccountCenter({
@@ -112,28 +152,36 @@ export default function AccountCenter({
                 : "Leaderboard"}
           </Text>
         </View>
-        <Button label="Back to profile" onPress={onClose} />
+        <Button icon="arrow-left" label="Back to profile" onPress={onClose} />
       </View>
       {!!error && (
-        <Text accessibilityRole="alert" style={s.error}>
-          {error}
-        </Text>
+        <View style={s.alert}>
+          <Feather name="alert-circle" size={15} color="#ffb6b6" />
+          <Text accessibilityRole="alert" style={s.error}>
+            {error}
+          </Text>
+        </View>
       )}
       {!!notice && (
-        <Text accessibilityLiveRegion="polite" style={s.notice}>
-          {notice}
-        </Text>
+        <View style={[s.alert, s.noticeBox]}>
+          <Feather name="check-circle" size={15} color="#a1f0ca" />
+          <Text accessibilityLiveRegion="polite" style={s.notice}>
+            {notice}
+          </Text>
+        </View>
       )}
       {loading ? (
         <ActivityIndicator color="#ffd184" />
       ) : !data ? (
         <Button
+          primary
+          icon="refresh-cw"
           label="Retry"
           onPress={() => void work(refresh)}
           disabled={busy}
         />
       ) : area === "wallet" ? (
-        <View style={s.card}>
+        <Card>
           <View style={s.header}>
             <Text style={s.heading}>Base · USDC</Text>
             <Text style={s.badge}>PAYOUTS NOT ACTIVE</Text>
@@ -155,7 +203,7 @@ export default function AccountCenter({
             }}
             maxLength={42}
             placeholder="0x…"
-            placeholderTextColor="#a5b6cc"
+            placeholderTextColor="#7f95a8"
             style={s.input}
           />
           <Text style={s.copy}>
@@ -164,16 +212,22 @@ export default function AccountCenter({
           </Text>
           <Pressable
             accessibilityRole="checkbox"
+            accessibilityLabel="I confirm this is my Base address"
             accessibilityState={{ checked: confirmed }}
             onPress={() => setConfirmed(!confirmed)}
-            style={s.check}
+            style={({ pressed }) => [s.check, pressed && { opacity: 0.7 }]}
           >
-            <Text style={s.copy}>
-              {confirmed ? "☑" : "☐"} I confirm this is my Base address.
-            </Text>
+            <Feather
+              name={confirmed ? "check-square" : "square"}
+              size={19}
+              color={confirmed ? "#24dbb3" : "#8fa8bb"}
+            />
+            <Text style={s.copy}>I confirm this is my Base address.</Text>
           </Pressable>
           <View style={s.actions}>
             <Button
+              primary
+              icon="save"
               label={busy ? "Saving…" : "Save payout address"}
               disabled={busy || !confirmed || !address.trim()}
               onPress={() =>
@@ -193,6 +247,7 @@ export default function AccountCenter({
             />
             {!!data.wallet && (
               <Button
+                icon="trash-2"
                 label="Remove saved address"
                 disabled={busy}
                 onPress={() =>
@@ -207,11 +262,19 @@ export default function AccountCenter({
             )}
           </View>
           {!!data.wallet && (
-            <Text style={s.copy}>
-              Ownership: {data.wallet.verified ? "verified" : "not verified"} ·
-              Network: Base
-            </Text>
+            <View style={s.statusRow}>
+              <Feather
+                name={data.wallet.verified ? "shield" : "shield-off"}
+                size={15}
+                color={data.wallet.verified ? "#24dbb3" : "#ffb82e"}
+              />
+              <Text style={s.copy}>
+                Ownership {data.wallet.verified ? "verified" : "not verified"} ·
+                Network Base
+              </Text>
+            </View>
           )}
+          <View style={s.divider} />
           <Text style={s.heading}>Prize history</Text>
           {data.payouts.length ? (
             data.payouts.map((p: any) => (
@@ -222,9 +285,9 @@ export default function AccountCenter({
           ) : (
             <Text style={s.copy}>No prize payouts yet.</Text>
           )}
-        </View>
+        </Card>
       ) : area === "blocked" ? (
-        <View style={s.card}>
+        <Card>
           <Text style={s.copy}>
             Blocked players are hidden from your leaderboards.
           </Text>
@@ -233,6 +296,7 @@ export default function AccountCenter({
               <View key={p.id} style={s.row}>
                 <Text style={s.name}>{p.name}</Text>
                 <Button
+                  icon="user-check"
                   label={`Unblock ${p.name}`}
                   disabled={busy}
                   onPress={() =>
@@ -247,19 +311,23 @@ export default function AccountCenter({
           ) : (
             <Text style={s.copy}>You have not blocked any players.</Text>
           )}
-        </View>
+        </Card>
       ) : (
         <>
           <View style={s.actions}>
             <Button
-              label={scope === "global" ? "✓ Global" : "Global"}
+              icon="globe"
+              selected={scope === "global"}
+              label="Global"
               onPress={() => {
                 setSelected(null);
                 setScope("global");
               }}
             />
             <Button
-              label={scope === "country" ? "✓ My country" : "My country"}
+              icon="map-pin"
+              selected={scope === "country"}
+              label="My country"
               onPress={() => {
                 setSelected(null);
                 setScope("country");
@@ -271,7 +339,7 @@ export default function AccountCenter({
             are not used for this ranking.
           </Text>
           {!!selected && (
-            <View style={s.card}>
+            <Card>
               <Text style={s.heading}>{selected.name}</Text>
               <Text style={s.copy}>
                 Report an inappropriate name or unfair play. A moderator will
@@ -283,13 +351,14 @@ export default function AccountCenter({
                 onChangeText={setDetails}
                 maxLength={1000}
                 placeholder="Optional details"
-                placeholderTextColor="#a5b6cc"
+                placeholderTextColor="#7f95a8"
                 style={s.input}
               />
               <View style={s.actions}>
                 {(["name", "cheating", "abuse"] as const).map((reason) => (
                   <Button
                     key={reason}
+                    icon="flag"
                     label={`Report ${reason}`}
                     disabled={busy}
                     onPress={() =>
@@ -306,6 +375,7 @@ export default function AccountCenter({
                   />
                 ))}
                 <Button
+                  icon="slash"
                   label="Block player"
                   disabled={busy}
                   onPress={() =>
@@ -319,18 +389,25 @@ export default function AccountCenter({
                 />
                 <Button label="Cancel" onPress={() => setSelected(null)} />
               </View>
-            </View>
+            </Card>
           )}
-          <View style={s.card}>
+          <Card>
             {data.players.length ? (
-              data.players.map((p: any) => (
-                <View key={p.id} style={s.row}>
-                  <Text style={s.rank}>#{p.rank}</Text>
+              data.players.map((p: any, i: number) => (
+                <Enter key={p.id} index={i} style={s.row}>
+                  <Text
+                    style={[
+                      s.rank,
+                      p.rank <= 3 && { color: MEDAL[p.rank - 1] },
+                    ]}
+                  >
+                    #{p.rank}
+                  </Text>
                   <Image
                     source={portraits[p.avatar] || portraits[0]}
                     style={s.avatar}
                   />
-                  <View style={{ flex: 1 }}>
+                  <View style={{ flex: 1, minWidth: 120 }}>
                     <Text style={s.name}>
                       {p.name}
                       {p.id === player.id ? " · You" : ""}
@@ -342,6 +419,7 @@ export default function AccountCenter({
                   <Text style={s.score}>{p.xp} XP</Text>
                   {p.id !== player.id && (
                     <Button
+                      icon="more-horizontal"
                       label={`Options for ${p.name}`}
                       onPress={() => {
                         setSelected(p);
@@ -349,21 +427,29 @@ export default function AccountCenter({
                       }}
                     />
                   )}
-                </View>
+                </Enter>
               ))
             ) : (
               <Text style={s.copy}>
                 {data.message || "No players to show yet."}
               </Text>
             )}
-          </View>
+          </Card>
         </>
       )}
     </ScrollView>
   );
 }
+const MEDAL = ["#ffd05b", "#cfd8dc", "#d59a63"];
 const s = StyleSheet.create({
-  page: { padding: 24, gap: 16, paddingBottom: 50 },
+  page: {
+    padding: 24,
+    gap: 14,
+    paddingBottom: 50,
+    maxWidth: 1100,
+    width: "100%",
+    alignSelf: "center",
+  },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -377,53 +463,90 @@ const s = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 2,
   },
-  title: { color: "#fff", fontSize: 28, fontWeight: "800" },
+  title: { color: "#fffdf3", fontSize: 26, fontWeight: "800" },
   card: {
-    backgroundColor: "#122339",
+    backgroundColor: "#04121def",
     borderWidth: 1,
-    borderColor: "#405773",
-    borderRadius: 18,
+    borderColor: "#ffffff1c",
+    borderRadius: 16,
     padding: 20,
-    gap: 14,
+    gap: 12,
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.5,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
   },
-  heading: { color: "#fff", fontSize: 20, fontWeight: "700" },
-  copy: { color: "#d2deed", fontSize: 14, lineHeight: 22 },
-  label: { color: "#e5c48e", fontSize: 12, fontWeight: "700" },
+  topLight: {
+    position: "absolute",
+    top: 0,
+    left: 14,
+    right: 14,
+    height: 1,
+    backgroundColor: "#ffffff30",
+  },
+  heading: { color: "#fffdf3", fontSize: 18, fontWeight: "800" },
+  copy: { color: "#a9c4d6", fontSize: 13, lineHeight: 21 },
+  label: {
+    color: "#e5c48e",
+    fontSize: 11,
+    fontWeight: "800",
+    letterSpacing: 1.1,
+  },
   input: {
     minHeight: 48,
-    backgroundColor: "#081524",
+    backgroundColor: "#02090f",
     color: "#fff",
     borderWidth: 1,
-    borderColor: "#65819f",
+    borderColor: "#ffffff26",
     borderRadius: 10,
-    padding: 12,
-    fontSize: 16,
+    paddingHorizontal: 12,
+    fontSize: 15,
   },
   button: {
     minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
     justifyContent: "center",
+    gap: 8,
     paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: "#eac183",
+    borderRadius: 11,
+    borderWidth: 1,
   },
-  buttonText: { color: "#142236", fontWeight: "800", fontSize: 13 },
+  primary: { backgroundColor: "#eac183", borderColor: "#ffd9a5" },
+  ghost: { backgroundColor: "#0a1f2edd", borderColor: "#ffffff24" },
+  selected: { borderColor: "#ffd05b", backgroundColor: "#ffd05b1f" },
+  buttonText: { color: "#e6f0f7", fontWeight: "800", fontSize: 13 },
   actions: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  check: { minHeight: 48, justifyContent: "center" },
+  check: { minHeight: 48, flexDirection: "row", alignItems: "center", gap: 10 },
+  statusRow: { flexDirection: "row", alignItems: "center", gap: 8 },
   badge: { color: "#ffda95", fontSize: 11, fontWeight: "800" },
-  error: { color: "#ffb6b6", fontSize: 15 },
-  notice: { color: "#a1f0ca", fontSize: 15 },
+  alert: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 9,
+    padding: 12,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "#8c4a4a",
+    backgroundColor: "#2a1214cc",
+  },
+  noticeBox: { borderColor: "#2f7a5e", backgroundColor: "#0c261ecc" },
+  error: { color: "#ffb6b6", fontSize: 14, flex: 1 },
+  notice: { color: "#a1f0ca", fontSize: 14, flex: 1 },
+  divider: { height: 1, backgroundColor: "#ffffff1a", marginTop: 4 },
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: 12,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: "#304660",
+    borderBottomColor: "#ffffff14",
     flexWrap: "wrap",
   },
-  name: { color: "#fff", fontSize: 16, fontWeight: "700", flexShrink: 1 },
-  rank: { color: "#f5cd89", fontSize: 17, fontWeight: "800", minWidth: 36 },
-  avatar: { width: 42, height: 42, borderRadius: 21 },
-  score: { color: "#f5cd89", fontSize: 16, fontWeight: "800" },
+  name: { color: "#fff", fontSize: 15, fontWeight: "700", flexShrink: 1 },
+  rank: { color: "#8fa8bb", fontSize: 16, fontWeight: "800", minWidth: 38 },
+  avatar: { width: 40, height: 40, borderRadius: 20 },
+  score: { color: "#ffd05b", fontSize: 15, fontWeight: "800" },
 });

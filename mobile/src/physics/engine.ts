@@ -8,15 +8,24 @@ export const P = {
   ...table,
   g: 9.81,
   slide: 0.2,
-  roll: 0.012,
+  // pooltool default u_r; 0.012 made the cloth feel slow.
+  roll: 0.01,
   spinDecel: 9,
   restitution: 0.96,
-  ballFriction: 0.035,
+  // Cushion friction at the nose contact (Han 2005 / Mathavan 2010 range 0.14-0.25).
+  cushionFriction: 0.2,
   tick: 1 / 240,
 };
+/** Ball-ball friction falls with slip speed: Alciatore TP A.14, mu = a + b·exp(-c·v). */
+export function throwFriction(slip: number) {
+  return 9.951e-3 + 0.108 * Math.exp(-1.088 * slip);
+}
 export const H = P.length / 2,
   W = P.width / 2,
   R = P.radius;
+/** Cushion nose contact sits above the ball centre: sin θ = (nose − R)/R. */
+const NOSE_SIN = Math.max(0, Math.min(0.5, (P.noseHeight - R) / R)),
+  NOSE_COS = Math.sqrt(1 - NOSE_SIN * NOSE_SIN);
 export type Ball = {
   id: number;
   x: number;
@@ -56,12 +65,33 @@ for (const s of [-1, 1]) {
     const a = side * P.sideHalf,
       b = side * (H - P.cornerCut);
     seg(a, s * W, b, s * W);
-    seg(a, s * W, side * (P.sideHalf - 0.017), s * (W + 0.065), true);
-    seg(b, s * W, side * (H - 0.027), s * (W + 0.05), true);
+    seg(a, s * W, side * (P.sideHalf - 0.5 * R), s * (W + 1.9 * R), true);
+    seg(b, s * W, side * (H - 0.79 * R), s * (W + 1.45 * R), true);
   }
   seg(s * H, -W + P.cornerCut, s * H, W - P.cornerCut);
   for (const t of [-1, 1])
-    seg(s * H, t * (W - P.cornerCut), s * (H + 0.05), t * (W - 0.027), true);
+    seg(
+      s * H,
+      t * (W - P.cornerCut),
+      s * (H + 1.45 * R),
+      t * (W - 0.79 * R),
+      true,
+    );
+}
+/**
+ * Resting orientation. The old value turned every ball's number patch straight up, which from
+ * the overhead camera read as a white dot on a flat disc. Tilt and per-ball yaw put the number
+ * and the stripe band on the side, as balls actually lie. Deterministic in `id`.
+ */
+function restingSpin(id: number) {
+  const a = (0.9 + id * 1.37) / 2,
+    t = 1.02 / 2;
+  return {
+    qx: Math.cos(a) * Math.sin(t),
+    qy: Math.cos(t) * Math.sin(a),
+    qz: -Math.sin(a) * Math.sin(t),
+    qw: Math.cos(a) * Math.cos(t),
+  };
 }
 export function ball(id: number, x: number, z: number): Ball {
   return {
@@ -75,12 +105,17 @@ export function ball(id: number, x: number, z: number): Ball {
     wz: 0,
     pocketed: false,
     drop: 0,
-    qx: Math.SQRT1_2,
-    qy: 0,
-    qz: 0,
-    qw: Math.SQRT1_2,
+    ...restingSpin(id),
   };
 }
+/**
+ * A real frozen rack is not a perfect lattice. With 0.08 mm gaps and no jitter the break ran
+ * down the lattice lines like a Newton's cradle and potted 0.1 balls on average; sub-millimetre
+ * imperfection (still visually frozen) breaks the lines up and pots ~0.6. Gap exceeds the worst
+ * jitter approach (0.2 mm·√2 per ball) so racked balls never overlap.
+ */
+const RACK_GAP = 0.0003,
+  RACK_JITTER = 0.0004;
 export function rack(seed = 1): Ball[] {
   let s = seed >>> 0;
   const rand = () => {
@@ -95,8 +130,10 @@ export function rack(seed = 1): Ball[] {
       balls.push(
         ball(
           ids[n++],
-          H / 2 + row * Math.sqrt(3) * (R + 0.00008),
-          (col - row / 2) * 2 * (R + 0.00008) + (rand() - 0.5) * 0.00004,
+          H / 2 +
+            row * Math.sqrt(3) * (R + RACK_GAP) +
+            (rand() - 0.5) * RACK_JITTER,
+          (col - row / 2) * 2 * (R + RACK_GAP) + (rand() - 0.5) * RACK_JITTER,
         ),
       );
   return balls.sort((a, b) => a.id - b.id);
@@ -229,7 +266,7 @@ export class World {
       for (const b of this.balls) if (!b.pocketed) cloth(b, dt);
       this.time += dt;
       this.steps++;
-      // Repeated contact solve handles tightly packed break contacts.
+      // Repeated passes separate any residual overlap and resolve cushions.
       for (let pass = 0; pass < 4; pass++) {
         for (let i = 0; i < this.balls.length; i++)
           for (let j = i + 1; j < this.balls.length; j++)
@@ -293,41 +330,51 @@ export class World {
     }
     return Math.min(limit, first);
   }
-  collide(a: Ball, b: Ball) {
+  collide(a: Ball, b: Ball, share = 1, skin = 0) {
     if (a.pocketed || b.pocketed) return;
     const dx = b.x - a.x,
       dz = b.z - a.z,
       d2 = dx * dx + dz * dz;
-    if (d2 >= (2 * R) ** 2) return;
+    if (d2 >= (2 * R + skin) ** 2) return;
     const d = Math.sqrt(d2),
       nx = d > 1e-10 ? dx / d : 1,
       nz = d > 1e-10 ? dz / d : 0;
     const overlap = 2 * R - d;
-    this.maxOverlap = Math.max(this.maxOverlap, overlap);
-    a.x -= nx * (overlap / 2 + 1e-9);
-    a.z -= nz * (overlap / 2 + 1e-9);
-    b.x += nx * (overlap / 2 + 1e-9);
-    b.z += nz * (overlap / 2 + 1e-9);
+    if (overlap > 0) {
+      this.maxOverlap = Math.max(this.maxOverlap, overlap);
+      a.x -= nx * (overlap / 2 + 1e-9);
+      a.z -= nz * (overlap / 2 + 1e-9);
+      b.x += nx * (overlap / 2 + 1e-9);
+      b.z += nz * (overlap / 2 + 1e-9);
+    }
     const vn = (a.vx - b.vx) * nx + (a.vz - b.vz) * nz;
     if (vn <= 0) return;
-    const j = ((1 + P.restitution) * vn) / 2;
+    const j = (share * (1 + P.restitution) * vn) / 2;
     a.vx -= j * nx;
     a.vz -= j * nz;
     b.vx += j * nx;
     b.vz += j * nz;
     const tx = -nz,
       tz = nx,
-      vt = (a.vx - b.vx) * tx + (a.vz - b.vz) * tz - R * (a.wy + b.wy);
-    const jt = Math.max(
-      -P.ballFriction * j,
-      Math.min(P.ballFriction * j, vt / 7),
-    );
-    a.vx -= jt * tx;
-    a.vz -= jt * tz;
-    b.vx += jt * tx;
-    b.vz += jt * tz;
-    a.wy += (2.5 * jt) / R;
-    b.wy += (2.5 * jt) / R;
+      vt = (a.vx - b.vx) * tx + (a.vz - b.vz) * tz - R * (a.wy + b.wy),
+      // Vertical slip from follow/draw roll: why rolling balls throw less than stunned ones.
+      vv = R * ((a.wx + b.wx) * tx + (a.wz + b.wz) * tz),
+      slip = Math.hypot(vt, vv);
+    if (slip > 1e-9) {
+      const jf = Math.min(throwFriction(slip) * j, slip / 7),
+        jt = (jf * vt) / slip,
+        jv = (jf * vv) / slip;
+      a.vx -= jt * tx;
+      a.vz -= jt * tz;
+      b.vx += jt * tx;
+      b.vz += jt * tz;
+      a.wy += (2.5 * jt) / R;
+      b.wy += (2.5 * jt) / R;
+      a.wx -= (2.5 * jv * tx) / R;
+      a.wz -= (2.5 * jv * tz) / R;
+      b.wx -= (2.5 * jv * tx) / R;
+      b.wz -= (2.5 * jv * tz) / R;
+    }
     if (vn > 0.015) this.emit("ball", a.id, vn, b.id);
   }
   cushions(b: Ball) {
@@ -354,21 +401,38 @@ export class World {
         imp = -(1 + e) * vn;
       b.vx += imp * nx;
       b.vz += imp * nz;
+      // Friction at the raised nose contact. r = R(−cosθ n + sinθ ŷ); slip directions are the
+      // rail tangent t and s = sinθ n + cosθ ŷ, both with effective inverse mass 3.5 per unit mass.
+      // The s term is what turns a rolling ball's topspin over; without it a rolling ball left
+      // a rail with under a third of its speed.
       const tx = -nz,
         tz = nx,
-        vt = b.vx * tx + b.vz * tz + R * b.wy;
-      const jt = Math.max(-0.14 * imp, Math.min(0.14 * imp, vt / 3.5));
-      b.vx -= jt * tx;
-      b.vz -= jt * tz;
-      b.wy -= (2.5 * jt) / R;
+        wn = b.wx * nx + b.wz * nz,
+        wt = b.wx * tx + b.wz * tz,
+        vt = b.vx * tx + b.vz * tz + R * (NOSE_COS * b.wy + NOSE_SIN * wn),
+        vs = NOSE_SIN * (vn + imp / 2) - R * wt,
+        slip = Math.hypot(vt, vs);
+      if (slip > 1e-9) {
+        const jf = Math.min(P.cushionFriction * imp, slip / 3.5),
+          jt = (jf * vt) / slip,
+          js = (jf * vs) / slip;
+        b.vx -= jt * tx + js * NOSE_SIN * nx;
+        b.vz -= jt * tz + js * NOSE_SIN * nz;
+        b.wy -= (2.5 * jt * NOSE_COS) / R;
+        // Δω = r×F/I = −(2.5/R)·jt(cosθ ŷ + sinθ n) + (2.5/R)·js t
+        b.wx += (2.5 * (js * tx - jt * NOSE_SIN * nx)) / R;
+        b.wz += (2.5 * (js * tz - jt * NOSE_SIN * nz)) / R;
+      }
       if (Math.abs(vn) > 0.015) this.emit("rail", b.id, -vn);
     }
   }
   capture(b: Ball) {
     const x = Math.abs(b.x),
       z = Math.abs(b.z);
-    const side = x < P.sideHalf - 0.012 && z > W + 0.032;
-    const corner = x + z > H + W - 0.04 && x > H - 0.11 && z > W - 0.11;
+    // Expressed in ball radii so the mouths keep their proportions if the ball size changes.
+    const side = x < P.sideHalf - 0.35 * R && z > W + 0.9 * R;
+    const corner =
+      x + z > H + W - 1.2 * R && x > H - 3.2 * R && z > W - 3.2 * R;
     if (side || corner) {
       b.pocketed = true;
       b.drop = 0;
@@ -415,8 +479,14 @@ export function simulate(world: World, limit = 40) {
 }
 export function drill(name: string): Ball[] {
   if (name === "break") return rack(41);
-  if (name === "finish") return [ball(0,0,.36),ball(8,0,.05)];
-  if (name === "pocket") return [ball(0,0,.36),ball(1,0,.05),ball(9,.7,.15),ball(8,-.7,-.2)];
+  if (name === "finish") return [ball(0, 0, 0.36), ball(8, 0, 0.05)];
+  if (name === "pocket")
+    return [
+      ball(0, 0, 0.36),
+      ball(1, 0, 0.05),
+      ball(9, 0.7, 0.15),
+      ball(8, -0.7, -0.2),
+    ];
   if (name === "cut")
     return [
       ball(0, -0.65, 0.25),

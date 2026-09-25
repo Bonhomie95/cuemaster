@@ -240,8 +240,8 @@ export default function CityInlay({ city }: { city: number }) {
     const pieces: T.BufferGeometry[] = [];
     for (const path of landmarks[city] || landmarks[0]) {
       for (let i = 1; i < path.length; i++) {
-        const [ax, ay] = path[i - 1].map((n) => n * 0.3);
-        const [bx, by] = path[i].map((n) => n * 0.3);
+        const [ax, ay] = path[i - 1].map((n) => n * 0.24);
+        const [bx, by] = path[i].map((n) => n * 0.24);
         const length = Math.hypot(bx - ax, by - ay);
         if (!length) continue;
         const nx = (-(by - ay) / length) * 0.006;
@@ -253,12 +253,14 @@ export default function CityInlay({ city }: { city: number }) {
         shape.lineTo(ax - nx, ay - ny);
         shape.closePath();
         const part = new T.ExtrudeGeometry(shape, {
-          depth: 0.004,
+          // A shallow inlay: at ball height the old 4 mm relief looked like a sculpture the
+          // balls rolled through. Still beveled and metallic, just closer to the cloth.
+          depth: 0.0016,
           bevelEnabled: true,
           bevelSegments: 1,
           steps: 1,
-          bevelSize: 0.0025,
-          bevelThickness: 0.002,
+          bevelSize: 0.0016,
+          bevelThickness: 0.0008,
         });
         part.rotateX(-Math.PI / 2);
         pieces.push(part);
@@ -278,57 +280,49 @@ export default function CityInlay({ city }: { city: number }) {
   });
   const color = colors[city] || colors[0];
   return (
-    <group position={[0.65, 0.006, 0]}>
-      {/* A shallow metallic relief: its entire silhouette is centered on the rack half. */}
-      <mesh geometry={geometry} position={[0.006, -0.003, 0.008]}>
+    <group position={[0.635, 0.0007, 0]}>
+      {/* A shallow inlay centred across the rack half: readable, but the balls stay the subject. */}
+      <mesh geometry={geometry} position={[0.0035, -0.0015, 0.0045]}>
         <meshBasicMaterial
-          color="#062230"
+          color="#03131c"
           transparent
-          opacity={0.7}
+          opacity={0.5}
           depthWrite={false}
         />
       </mesh>
       <mesh geometry={geometry}>
         <meshStandardMaterial
           color={color}
-          metalness={0.62}
-          roughness={0.26}
+          metalness={0.55}
+          roughness={0.34}
           emissive={color}
-          emissiveIntensity={0.24}
+          emissiveIntensity={0.1}
         />
       </mesh>
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.002, 0]}>
-        <ringGeometry args={[0.352, 0.356, 96]} />
+        <ringGeometry args={[0.286, 0.2885, 96]} />
         <meshBasicMaterial
           color={color}
           transparent
-          opacity={0.75}
+          opacity={0.4}
           depthWrite={false}
-          toneMapped={false}
         />
       </mesh>
       <group ref={orbit}>
-        {[0, Math.PI].map((angle) => (
-          <mesh
-            key={angle}
-            rotation={[-Math.PI / 2, 0, angle]}
-            position={[0, -0.001, 0]}
-          >
-            <ringGeometry args={[0.369, 0.375, 40, 1, 0, Math.PI * 0.38]} />
-            <meshBasicMaterial
-              color={color}
-              transparent
-              opacity={0.9}
-              depthWrite={false}
-              toneMapped={false}
-            />
-          </mesh>
-        ))}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.001, 0]}>
+          <ringGeometry args={[0.286, 0.2905, 40, 1, 0, Math.PI * 0.3]} />
+          <meshBasicMaterial
+            color={color}
+            transparent
+            opacity={0.75}
+            depthWrite={false}
+          />
+        </mesh>
       </group>
       {city === 1 && (
-        <group ref={hand} position={[0, 0.01, -0.066]}>
-          <mesh position={[0.017, 0, 0]}>
-            <boxGeometry args={[0.034, 0.003, 0.004]} />
+        <group ref={hand} position={[0, 0.006, -0.053]}>
+          <mesh position={[0.014, 0, 0]}>
+            <boxGeometry args={[0.028, 0.002, 0.003]} />
             <meshBasicMaterial color="#fff5d7" toneMapped={false} />
           </mesh>
         </group>

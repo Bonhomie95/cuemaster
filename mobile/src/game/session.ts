@@ -81,17 +81,28 @@ export class Session {
   cpuWait = 0;
   cpuPlan: CpuShot | null = null;
   cpuSerial = -1;
-  get cpuTurn() { return !!this.cpu && this.progress.turn === 1 && !this.progress.finished; }
+  get cpuTurn() {
+    return !!this.cpu && this.progress.turn === 1 && !this.progress.finished;
+  }
   updateCpu(dt: number) {
-    if (!this.cpuTurn || this.running) { this.cpuWait = 0; this.cpuPlan = null; return; }
-    if (this.cpuSerial !== this.turnSerial) {
-      this.cpuSerial = this.turnSerial; this.cpuWait = 0; this.cpuPlan = null;
+    if (!this.cpuTurn || this.running) {
+      this.cpuWait = 0;
+      this.cpuPlan = null;
+      return;
     }
-    this.cpuWait += Math.min(.1, Math.max(0, dt));
+    if (this.cpuSerial !== this.turnSerial) {
+      this.cpuSerial = this.turnSerial;
+      this.cpuWait = 0;
+      this.cpuPlan = null;
+    }
+    this.cpuWait += Math.min(0.1, Math.max(0, dt));
     if (this.cpuWait < 1.2) return;
     if (this.progress.breakChoice) {
-      this.resolveBreak(this.progress.breakChoice === "eight" ? "spot" : "hand");
-      this.cpuWait = 0; return;
+      this.resolveBreak(
+        this.progress.breakChoice === "eight" ? "spot" : "hand",
+      );
+      this.cpuWait = 0;
+      return;
     }
     if (this.placement) {
       const pos = cpuPlacement(this.world.balls, this.headStringPlacement);
@@ -99,15 +110,25 @@ export class Session {
       else return;
     }
     if (!this.cpuPlan) {
-      this.cpuPlan = planCpuShot(this.world.balls, this.progress, this.cpu!.skill, this.shots === 0);
-      this.side = this.cpuPlan.side; this.top = this.cpuPlan.top;
+      this.cpuPlan = planCpuShot(
+        this.world.balls,
+        this.progress,
+        this.cpu!.skill,
+        this.shots === 0,
+      );
+      this.side = this.cpuPlan.side;
+      this.top = this.cpuPlan.top;
       this.notify();
     }
-    const difference = Math.atan2(Math.sin(this.cpuPlan.angle - this.angle), Math.cos(this.cpuPlan.angle - this.angle));
+    const difference = Math.atan2(
+      Math.sin(this.cpuPlan.angle - this.angle),
+      Math.cos(this.cpuPlan.angle - this.angle),
+    );
     this.angle += difference * Math.min(1, Math.max(0, dt) * 8);
     if (this.cpuWait > 2.2) {
       Object.assign(this, this.cpuPlan);
-      this.cpuPlan = null; this.cpuWait = 0;
+      this.cpuPlan = null;
+      this.cpuWait = 0;
       this.shoot();
     }
   }
@@ -167,6 +188,8 @@ export class Session {
   top = 0;
   skin = 0;
   camera: "table" | "aim" = "table";
+  /** Screen-edge bands the HUD occupies, in logical pixels; the table camera frames around them. */
+  hud = { top: 52, bottom: 50, left: 46, right: 56 };
   placement = false;
   shots = 0;
   potted = 0;
@@ -206,7 +229,10 @@ export class Session {
     this.listeners.forEach((f) => f());
   }
   reset(name = this.drill) {
-    this.cpuWait = 0; this.cpuPlan = null; this.cpuSerial = -1;
+    if (this.replaying) this.endReplay();
+    this.cpuWait = 0;
+    this.cpuPlan = null;
+    this.cpuSerial = -1;
     this.replayShots = [];
     this.savedReplay = [];
     this.usedPlacement = false;
@@ -353,6 +379,43 @@ export class Session {
       this.notify();
     }
   }
+  /** Slow-motion re-run of the last shot from its saved start state; the live table is untouched. */
+  replaying = false;
+  snapDrops = false;
+  live: { world: World; previous: Ball[]; shotStartTime: number } | null = null;
+  get canReplay() {
+    return !this.running && !this.matchRules && !!this.saved && !!this.lastShot;
+  }
+  startReplay() {
+    if (!this.canReplay) return;
+    const shot = this.lastShot!;
+    this.live = {
+      world: this.world,
+      previous: this.previous,
+      shotStartTime: this.shotStartTime,
+    };
+    this.world = new World(this.saved!);
+    this.world.strike(shot.angle, shot.power, shot.side, shot.top);
+    this.previous = this.world.balls.map((b) => ({ ...b }));
+    this.shotStartTime = 0;
+    this.replaying = true;
+    this.running = true;
+    this.accumulator = 0;
+    this.camera = "table";
+    this.notify();
+  }
+  endReplay() {
+    if (!this.live) return;
+    this.world = this.live.world;
+    this.previous = this.live.previous;
+    this.shotStartTime = this.live.shotStartTime;
+    this.live = null;
+    this.replaying = false;
+    this.running = false;
+    this.alpha = 1;
+    this.snapDrops = true;
+    this.notify();
+  }
   repeat() {
     if (this.running || !this.saved || !this.lastShot) return;
     this.progress = this.savedProgress?.copy() || new Progress();
@@ -372,6 +435,24 @@ export class Session {
     // Ignore suspension gaps; never advance minutes of simulation on resume.
     if (dt > 1) {
       this.accumulator = 0;
+      return;
+    }
+    if (this.replaying) {
+      this.accumulator = Math.min(0.1, this.accumulator + dt * 0.4);
+      let steps = 0;
+      while (this.accumulator >= P.tick && steps < 24) {
+        this.previous = this.world.balls.map((b) => ({ ...b }));
+        this.world.tick();
+        this.accumulator -= P.tick;
+        steps++;
+        for (const e of this.world.events) this.onEvent?.(e);
+        this.world.events.length = 0;
+        if (!this.world.active) {
+          this.endReplay();
+          return;
+        }
+      }
+      this.alpha = Math.min(1, this.accumulator / P.tick);
       return;
     }
     if (dt > 0) {
@@ -444,3 +525,6 @@ export class Session {
   }
 }
 export const session = new Session();
+// Dev-only handle for inspecting and scripting shots from a browser console.
+if (typeof __DEV__ !== "undefined" && __DEV__)
+  (globalThis as any).__cm = session;

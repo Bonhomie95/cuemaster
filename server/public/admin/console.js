@@ -33,12 +33,9 @@ async function call(path, method = "GET", body) {
     const data =
       r.status === 204
         ? null
-        : await r
-            .json()
-            .catch(() => ({
-              error:
-                "Request could not be completed. Please try again shortly.",
-            }));
+        : await r.json().catch(() => ({
+            error: "Request could not be completed. Please try again shortly.",
+          }));
     if (!r.ok) {
       if (r.status === 401 && path != "/auth/login") signedOut();
       throw Error(data?.error || "Request failed");
@@ -124,11 +121,12 @@ for (const b of document.querySelectorAll("[data-page]"))
   b.onclick = () =>
     run(async () => {
       const page = b.dataset.page;
-      for (const id of ["tournaments", "players", "reports", "staff"])
+      for (const id of ["tournaments", "players", "reports", "staff", "audit"])
         $(id).hidden = id !== page;
       if (page === "tournaments") await loadEvents();
       if (page === "reports") await loadReports();
       if (page === "staff") await loadStaff();
+      if (page === "audit") await loadAudit();
     });
 function edit(event) {
   editing = event || null;
@@ -212,6 +210,26 @@ async function loadEvents() {
           );
         }),
       );
+      if (event.status !== "open") {
+        const remove = button("Delete", async () => {
+          if (
+            !confirm(
+              `Permanently delete "${event.name}"? The deletion is recorded in the audit log.`,
+            )
+          )
+            return;
+          const reason = prompt("Reason for deleting (at least 5 characters)");
+          if (!reason) return;
+          await call(`/tournaments/${event.id}`, "DELETE", {
+            version: event.version,
+            reason,
+          });
+          await dashboard();
+          message("Tournament deleted.");
+        });
+        remove.className = "danger";
+        actions.append(remove);
+      }
       card.append(actions);
       return card;
     }),
@@ -362,3 +380,22 @@ $("staff-form").onsubmit = (e) => {
     );
   }, e.submitter);
 };
+
+async function loadAudit() {
+  const rows = await call("/audit");
+  $("audit-list").replaceChildren(
+    ...rows.map((r) => {
+      const n = node("article", "");
+      n.append(
+        node("h3", `${r.action} · ${r.event?.name || ""}`),
+        node(
+          "p",
+          `${new Date(r.at).toLocaleString()} · ${r.actorName || r.actor}`,
+        ),
+        node("p", r.reason || ""),
+      );
+      return n;
+    }),
+  );
+  if (!rows.length) $("audit-list").textContent = "No recorded deletions.";
+}

@@ -12,6 +12,7 @@ import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
 import { Catalog, Player, Venue, Challenge, Tournament } from "./api";
 import IconButton from "./IconButton";
+import { Press, Enter } from "./motion";
 export { default as IconButton } from "./IconButton";
 import HomeLobby from "./HomeLobby";
 import { venueArt } from "./art";
@@ -27,6 +28,7 @@ export type LobbyProps = {
   onPlay: () => void;
   onCues: () => void;
   onFree: () => void;
+  onRewards: () => void;
   onEquip: (v: Venue) => void;
   onChallenge: (c: Challenge) => void;
   onEvent: (e: Tournament) => void;
@@ -40,32 +42,42 @@ function Badge({ icon, text }: { icon: Icon; text: string }) {
     </View>
   );
 }
+/**
+ * Card footer control. Only a real next step is gold: an already-equipped table or a locked
+ * one reads as state, not as a call to action, so it stays dark.
+ */
 function CardAction({
   icon = "arrow-right",
   label,
   onPress,
   disabled = false,
+  tone = "primary",
 }: {
   icon?: Icon;
   label: string;
   onPress: () => void;
   disabled?: boolean;
+  tone?: "primary" | "muted" | "locked";
 }) {
+  const gold = tone === "primary";
   return (
-    <Pressable
+    <Press
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={{ disabled: disabled || tone === "locked" }}
       onPress={onPress}
       disabled={disabled}
-      style={({ pressed }) => [
+      style={[
         s.action,
-        disabled && { opacity: 0.5 },
-        pressed && { opacity: 0.7 },
+        gold ? s.actionPrimary : s.actionQuiet,
+        tone === "locked" && { opacity: 0.75 },
+        disabled && !gold && { opacity: 0.85 },
+        disabled && gold && { opacity: 0.5 },
       ]}
     >
-      <Text style={s.actionText}>{label}</Text>
-      <Feather name={icon} size={19} color="#142333" />
-    </Pressable>
+      <Text style={[s.actionText, !gold && { color: "#cfe0ee" }]}>{label}</Text>
+      <Feather name={icon} size={18} color={gold ? "#142333" : "#8fa8bb"} />
+    </Press>
   );
 }
 export default function Lobby(p: LobbyProps) {
@@ -128,8 +140,8 @@ export default function Lobby(p: LobbyProps) {
         contentContainerStyle={s.track}
       >
         {p.page === "tables" &&
-          p.catalog.venues.map((v) => (
-            <View key={v.id} style={[s.card, frame]}>
+          p.catalog.venues.map((v, i) => (
+            <Enter key={v.id} index={i} style={[s.card, frame]}>
               <Image
                 source={venueArt[v.id]}
                 style={[s.tableArt, short && { minHeight: 25 }]}
@@ -161,26 +173,39 @@ export default function Lobby(p: LobbyProps) {
                   {v.subtitle}
                 </Text>
                 <CardAction
-                  icon={v.level > p.player.level ? "lock" : "check"}
+                  icon={
+                    v.level > p.player.level
+                      ? "lock"
+                      : p.selected.id === v.id
+                        ? "check"
+                        : "arrow-right"
+                  }
+                  tone={
+                    v.level > p.player.level
+                      ? "locked"
+                      : p.selected.id === v.id
+                        ? "muted"
+                        : "primary"
+                  }
                   label={
                     v.level > p.player.level
-                      ? `Level ${v.level}`
+                      ? `Unlocks at level ${v.level}`
                       : p.selected.id === v.id
                         ? "Equipped"
-                        : "Equip"
+                        : `Equip ${v.name}`
                   }
                   disabled={p.busy || p.selected.id === v.id}
                   onPress={() => p.onEquip(v)}
                 />
               </View>
-            </View>
+            </Enter>
           ))}
         {p.page === "practice" && (
           <>
             {p.catalog.challenges.map((c, i) => {
               const done = p.player.completed.includes("practice:" + c.id);
               return (
-                <View key={c.id} style={[s.card, frame, s.padded]}>
+                <Enter key={c.id} index={i} style={[s.card, frame, s.padded]}>
                   <View style={s.between}>
                     <Text style={[s.number, short && { fontSize: 22 }]}>
                       0{i + 1}
@@ -207,12 +232,13 @@ export default function Lobby(p: LobbyProps) {
                     </Text>
                     <CardAction
                       icon="play"
+                      tone={done ? "muted" : "primary"}
                       label={done ? "Play again" : "Start challenge"}
                       disabled={p.busy}
                       onPress={() => p.onChallenge(c)}
                     />
                   </View>
-                </View>
+                </Enter>
               );
             })}
             <View style={[s.card, frame, s.padded]}>
@@ -231,9 +257,10 @@ export default function Lobby(p: LobbyProps) {
           </>
         )}
         {p.page === "events" &&
-          p.catalog.tournaments.map((t) => (
-            <View
+          p.catalog.tournaments.map((t, i) => (
+            <Enter
               key={t.id}
+              index={i}
               style={[
                 s.card,
                 frame,
@@ -271,7 +298,7 @@ export default function Lobby(p: LobbyProps) {
                   onPress={() => p.onEvent(t)}
                 />
               </View>
-            </View>
+            </Enter>
           ))}
       </ScrollView>
       <View style={s.footer}>
@@ -316,11 +343,16 @@ const s = StyleSheet.create({
   scroll: { flex: 1 },
   track: { paddingHorizontal: 24, gap: 16, paddingVertical: 6 },
   card: {
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: "hidden",
-    backgroundColor: "#1b2925",
+    backgroundColor: "#04121def",
     borderWidth: 1,
-    borderColor: "#304452",
+    borderColor: "#ffffff1c",
+    shadowColor: "#000",
+    shadowOpacity: 0.5,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
   },
   padded: { padding: 12 },
   cover: { width: "100%", height: "100%" },
@@ -332,13 +364,15 @@ const s = StyleSheet.create({
     height: 44,
     marginTop: 10,
     paddingHorizontal: 15,
-    borderRadius: 10,
-    backgroundColor: "#e1c18a",
+    borderRadius: 11,
+    borderWidth: 1,
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
-  actionText: { fontSize: 12, fontWeight: "600", color: "#142333" },
+  actionPrimary: { backgroundColor: "#e1c18a", borderColor: "#ffd9a5" },
+  actionQuiet: { backgroundColor: "#0a1f2edd", borderColor: "#ffffff24" },
+  actionText: { fontSize: 12, fontWeight: "700", color: "#142333" },
   badge: {
     flexDirection: "row",
     alignItems: "center",

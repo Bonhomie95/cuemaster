@@ -10,12 +10,12 @@ npm --prefix server ci
 npm run dev
 ```
 
-The launcher starts an isolated local MongoDB on `127.0.0.1:27028`, the API on `127.0.0.1:4000`, and Metro on `8081`. MongoDB files live in `.data/mongo`. It reuses existing services and only stops processes it started. MongoDB must be installed (`mongod` is already available on this Mac).
+The launcher starts an isolated local MongoDB on `127.0.0.1:27028`, the API on `127.0.0.1:4000`, and Metro on the first free port from `8081` (it prints the URL, and tells the API to accept that origin; another project holding 8081 used to serve the wrong app here). Set `WEB_PORT` to pin it. MongoDB files live in `.data/mongo`. It reuses existing services and only stops processes it started. MongoDB must be installed (`mongod` is already available on this Mac).
 
-Open <http://localhost:8081>. Guest play works without OAuth keys. The native app uses custom native modules and needs a development build, not Expo Go.
+Open the printed preview URL. Guest play works without OAuth keys. The native app uses custom native modules and needs a development build, not Expo Go.
 
 - `npm run ios` / `npm run android`: build and launch the native app; keep the API running.
-- `npm run check`: mobile/server TypeScript, 34 physics/session tests, and API integration tests. Start `npm run dev` first; API tests create and remove only their own test account.
+- `npm run check`: mobile/server TypeScript, 64 physics/session/rule tests, and 14 API integration suites. Start `npm run dev` first; API tests create and remove only their own test account.
 - `npm run api`: API only. Reads `server/.env` when run this way.
 - `npm --prefix mobile run benchmark`: desktop simulation benchmark; not a mobile frame-rate certification.
 
@@ -27,17 +27,48 @@ For Atlas, set `MONGODB_URI` and `MONGODB_DB` in `server/.env` using `server/.en
 - Profile name, country, two original avatars, persistent account progress and account deletion.
 - Six table finishes with server-enforced level locks and saved equipment selection.
 - Six practice challenges, verified first-clear XP/coins, repeatable free practice, daily gifts.
-- Free Precision Open preseason event, server-replayed scores, persistent leaderboard, one-time coin reward.
+- Reward crates: a win seals one of six crate tiers, four slots, one unlock at a time, opened on the timer or early with rubies. Contents are rolled on the server and the odds are published in the app.
+- Two currencies: coins are earned and pay for everything that affects play; rubies are a scarce bonus and the only thing real money buys. Ruby purchases stay disabled until store billing is configured.
+- Optional rewarded video takes an hour off a crate. It ships on Google's public AdMob test units, and the hour is granted by AdMob's signed server callback, never by the device. Non-personalised ads only; no advertising identifier, no tracking prompt.
+- Coin competitions with optional coin entry fees, server-replayed scores, a persistent leaderboard, and ranked coin prizes that settle automatically when the event closes.
 - Weekly Pro and USDC Masters event pages with announced status and closed entries.
 - Native Google sign-in and iOS Apple sign-in integration, with server-side identity-token verification; provider configuration still required.
 
-Drag cloth to aim, pull the left power handle down and release to shoot. Returning to zero cancels. Spin opens the cue-ball picker. The menu contains camera, practice, collection, restart and return-to-club controls.
+Drag cloth to aim, pull the left power handle down and release to shoot. Returning to zero cancels. Spin opens the cue-ball picker. The menu contains camera, practice, collection, restart, replay and return-to-club controls. After an unranked shot, ▶ REPLAY re-runs it in slow motion.
 
 ## Art and implementation
 
-`mobile/assets/models/cuemaster-table.blend` and `mobile/assets/lounge/lounge.blend` are editable originals. Rebuild table and club images with `tools/build_table.py` and `tools/build_lounge.py` using Blender's background mode. `tools/build_details.py` creates original procedural ball textures and audio; it requires Pillow.
+`mobile/assets/models/cuemaster-table.blend` and `mobile/assets/lounge/lounge.blend` are editable originals. Rebuild table and club images with `tools/build_table.py`, `tools/build_lounge.py` and `tools/build_hero.py` (welcome art) using Blender's background mode. `tools/build_details.py` creates original procedural ball textures and audio; it requires Pillow.
 
 `mobile/src/app` contains club screens, API client and provider integration. `mobile/TableGame.tsx` contains the match screen. `server/src/catalog.ts` defines progression, venues and events. `server/src/verify.ts` replays the same engine used by the client before granting rewards.
+
+## Public pages
+
+The API serves the pages both stores require, at `/legal/privacy`, `/legal/terms`,
+`/legal/support` and `/legal/delete-account`, all linked from Profile → Legal & support. They
+show a draft banner until `PUBLIC_BASE_URL`, `PUBLIC_SUPPORT_EMAIL` and `PUBLIC_POLICY_DATE`
+are set, and production start-up refuses to run without them.
+
+A release build whose `EXPO_PUBLIC_API_URL` is not HTTPS refuses every request and says so on
+screen, rather than appearing to work and then failing in review.
+
+## Ads and purchases
+
+`mobile/app.json` holds the AdMob identifiers in its `react-native-google-mobile-ads` block —
+one place, read by both the Android gradle plugin and the app. They default to Google's public
+test units so the whole flow runs today; a release build refuses to compile until they are
+replaced. Point each rewarded unit's server-side verification at `https://<api>/ads/reward`.
+
+Ruby purchases need `STORE_BILLING` and an implementation of `verifyPurchase()` in
+`server/src/store.ts`. Until then the endpoint returns 503 and credits nothing. Full list in
+[what only you can do](docs/release/OWNER-CHECKLIST.md).
+
+## Administration
+
+`http://localhost:4000/admin/` is a separate console with its own accounts. The owner can
+create, edit, publish, close and delete tournaments; deletion is blocked while an event is open
+or once players have entered, and every deletion is kept in a permanent audit log. See
+[administration](docs/release/ADMIN.md).
 
 ## Release boundary
 

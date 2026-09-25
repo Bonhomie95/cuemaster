@@ -1,4 +1,8 @@
 import { assertProductionConfig } from "./config";
+import { installLegal, legalConfigured } from "./legal";
+import { installRewards, crateAwardStage, publicCrate } from "./rewards";
+import { installStore, billingConfigured } from "./store";
+import { installAds, adsConfigured } from "./ads";
 import {
   appleConfigured,
   exchangeAppleCode,
@@ -49,6 +53,11 @@ await Promise.all([
   users.createIndex({ "providers.google": 1 }, { unique: true, sparse: true }),
   users.createIndex({ "providers.apple": 1 }, { unique: true, sparse: true }),
   entries.createIndex({ playerId: 1, eventId: 1 }, { unique: true }),
+  entries.createIndex({ eventId: 1, score: 1, submittedAt: 1 }),
+  db.collection("purchases").createIndex({ playerId: 1, createdAt: -1 }),
+  db
+    .collection("adTickets")
+    .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
   tickets.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
   nonces.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
 ]);
@@ -71,7 +80,11 @@ for (const event of tournaments)
   );
 const app = express();
 app.disable("x-powered-by");
-if(process.env.TRUST_PROXY)app.set("trust proxy",process.env.TRUST_PROXY.split(",").map(s=>s.trim()));
+if (process.env.TRUST_PROXY)
+  app.set(
+    "trust proxy",
+    process.env.TRUST_PROXY.split(",").map((s) => s.trim()),
+  );
 app.use(helmet());
 app.use((_req, res, next) => {
   res.set("Cache-Control", "no-store");
@@ -84,9 +97,12 @@ app.use(
     dotfiles: "deny",
   }),
 );
+installLegal(app);
 const origins = (
   process.env.CORS_ORIGINS || "http://localhost:8081,http://127.0.0.1:8081"
-).split(",").map(s=>s.trim());
+)
+  .split(",")
+  .map((s) => s.trim());
 app.use(
   cors({
     origin: (origin, cb) => cb(null, !origin || origins.includes(origin)),
@@ -108,6 +124,12 @@ const authLimit = rateLimit({
   limit: 15,
 });
 const hash = (v: string) => createHash("sha256").update(v).digest("hex");
+// Store forms and the in-app links need absolute URLs; PUBLIC_BASE_URL is the deployed origin.
+const publicUrl = (path: string) =>
+  (process.env.PUBLIC_BASE_URL || `http://127.0.0.1:${port}`).replace(
+    /\/$/,
+    "",
+  ) + path;
 const publicUser = (u: any) => ({
   id: u._id,
   name: u.name,
@@ -118,6 +140,8 @@ const publicUser = (u: any) => ({
   xp: u.xp,
   level: levelOf(u.xp),
   coins: u.coins,
+  rubies: u.rubies || 0,
+  crates: (u.crates || []).length,
   ownedCues: u.ownedCues || ["club"],
   selectedCue: u.selectedCue || "club",
   completed: u.completed || [],
@@ -167,6 +191,15 @@ app.get("/config", (_req, res) =>
     apple: appleConfigured(),
     cashPayouts: false,
     onlineMatchmaking: false,
+    legal: legalConfigured(),
+    rubyStore: billingConfigured(),
+    ads: adsConfigured(),
+    urls: {
+      privacy: publicUrl("/legal/privacy"),
+      terms: publicUrl("/legal/terms"),
+      support: publicUrl("/legal/support"),
+      deleteAccount: publicUrl("/legal/delete-account"),
+    },
   }),
 );
 app.get("/catalog", async (_req, res) =>
@@ -282,6 +315,10 @@ app.post("/local-matches/:id/finish", required, async (req: any, res) => {
   const cpu = req.player.localMatch?.mode === "cpu";
   const prefix = cpu ? "cpu" : "local";
   const won = outcome === "won";
+  // A win seals a reward crate. Crates are the only thing a client-reported result can mint,
+  // and they mint nothing on their own: one crate unlocks at a time, so the coin rate is
+  // bounded by the clock rather than by how many wins a device claims.
+  const award = won ? crateAwardStage() : null;
   const updated = await users.findOneAndUpdate(
     {
       _id: req.player._id,
@@ -318,6 +355,7 @@ app.post("/local-matches/:id/finish", required, async (req: any, res) => {
                 },
               }
             : {}),
+          ...(award ? award.fields : {}),
         },
       },
     ],
@@ -327,7 +365,12 @@ app.post("/local-matches/:id/finish", required, async (req: any, res) => {
   if (u.localMatch?.id !== req.params.id)
     return res.status(404).json({ error: "Match not found." });
   // Local outcomes are unranked; never mint coins or competitive rewards from client results.
-  res.json({ player: publicUser(u), match: u.localMatch });
+  const earned = (u.crates || []).find((c: any) => c.id === award?.crate.id);
+  res.json({
+    player: publicUser(u),
+    match: u.localMatch,
+    crate: earned ? publicCrate(earned) : null,
+  });
 });
 app.post("/auth/guest", authLimit, async (req, res) => {
   const input = z.object({ adultConfirmed: z.literal(true) }).parse(req.body);
@@ -338,6 +381,8 @@ app.post("/auth/guest", authLimit, async (req, res) => {
     avatar: 0,
     xp: 0,
     coins: 1000,
+    rubies: 0,
+    crates: [],
     completed: [],
     selectedTable: "heritage",
     providers: {},
@@ -398,11 +443,9 @@ app.post("/auth/provider", authLimit, async (req, res) => {
         input.nonce!,
       );
     } catch {
-      return res
-        .status(503)
-        .json({
-          error: "Apple sign-in could not be completed. Please try again.",
-        });
+      return res.status(503).json({
+        error: "Apple sign-in could not be completed. Please try again.",
+      });
     }
   }
   const field = `providers.${input.provider}`;
@@ -434,6 +477,8 @@ app.post("/auth/provider", authLimit, async (req, res) => {
       avatar: 0,
       xp: 0,
       coins: 1000,
+      rubies: 0,
+      crates: [],
       completed: [],
       selectedTable: "heritage",
       providers: { [input.provider]: identity.subject },
@@ -511,7 +556,7 @@ app.post("/auth/logout", required, async (req, res) => {
   res.status(204).end();
 });
 app.delete("/me", required, async (req: any, res) => {
-  if (req.body.confirm !== "DELETE")
+  if (req.body?.confirm !== "DELETE")
     return res.status(400).json({ error: "Type DELETE to confirm." });
   const id = req.player._id;
   if (req.player.providers?.apple) {
@@ -521,12 +566,10 @@ app.delete("/me", required, async (req: any, res) => {
         req.player.providers.apple,
       );
     } catch {
-      return res
-        .status(503)
-        .json({
-          error:
-            "Apple authorization could not be revoked. Sign in with Apple again, then retry deletion.",
-        });
+      return res.status(503).json({
+        error:
+          "Apple authorization could not be revoked. Sign in with Apple again, then retry deletion.",
+      });
     }
   }
   await users.deleteOne({ _id: id });
@@ -538,29 +581,45 @@ app.delete("/me", required, async (req: any, res) => {
     db
       .collection("reports")
       .deleteMany({ $or: [{ playerId: id }, { reporterId: id }] }),
+    // Financial records may have to be retained, so unlink rather than destroy them.
+    db
+      .collection("payouts")
+      .updateMany(
+        { playerId: id },
+        { $set: { playerId: null, playerDeletedAt: new Date() } },
+      ),
     users.updateMany({}, { $pull: { blockedPlayers: id } as any }),
   ]);
   res.status(204).end();
 });
-app.post("/practice/start", required, async (req: any, res) => {
-  const { challengeId, tableId } = z
-    .object({ challengeId: z.string(), tableId: z.string() })
-    .parse(req.body);
-  const challenge = challenges.find((c) => c.id === challengeId),
-    table = venues.find((v) => v.id === tableId);
-  if (!challenge || !table)
-    return res.status(404).json({ error: "Challenge or table not found." });
-  if (levelOf(req.player.xp) < table.level)
-    return res.status(403).json({ error: "This table is still locked." });
-  const ticket = {
-    _id: randomUUID(),
-    playerId: req.player._id,
-    challengeId,
-    expiresAt: new Date(Date.now() + 3600000),
-  };
-  await tickets.insertOne(ticket);
-  res.status(201).json({ ticket: ticket._id, challenge });
-});
+app.post(
+  "/practice/start",
+  required,
+  rateLimit({
+    message: { error: "Too many requests. Please try again shortly." },
+    windowMs: 60000,
+    limit: 30,
+  }),
+  async (req: any, res) => {
+    const { challengeId, tableId } = z
+      .object({ challengeId: z.string(), tableId: z.string() })
+      .parse(req.body);
+    const challenge = challenges.find((c) => c.id === challengeId),
+      table = venues.find((v) => v.id === tableId);
+    if (!challenge || !table)
+      return res.status(404).json({ error: "Challenge or table not found." });
+    if (levelOf(req.player.xp) < table.level)
+      return res.status(403).json({ error: "This table is still locked." });
+    const ticket = {
+      _id: randomUUID(),
+      playerId: req.player._id,
+      challengeId,
+      expiresAt: new Date(Date.now() + 3600000),
+    };
+    await tickets.insertOne(ticket);
+    res.status(201).json({ ticket: ticket._id, challenge });
+  },
+);
 let verifying = 0;
 function replay(drill: string, shots: any[], targets: number[]): Promise<any> {
   return new Promise((resolve, reject) => {
@@ -662,6 +721,9 @@ app.post(
     });
   },
 );
+installRewards(app, db, required, publicUser);
+installStore(app, db, required, publicUser);
+installAds(app, db, required);
 installPlatform(app, db, required);
 app.get("/tournaments/:id", required, async (req: any, res) => {
   const event = await events.findOne({
@@ -710,34 +772,68 @@ app.get("/tournaments/:id", required, async (req: any, res) => {
     leaderboard: board,
   });
 });
-app.post("/tournaments/:id/enter", required, async (req: any, res) => {
-  const event = await events.findOne({
-    id: req.params.id,
-    status: { $ne: "draft" },
-  });
-  if (!event) return res.status(404).json({ error: "Event not found." });
-  if (!eventIsOpen(event))
-    return res
-      .status(409)
-      .json({ error: "Registration is not open. No payment has been taken." });
-  if (levelOf(req.player.xp) < event.level)
-    return res.status(403).json({ error: "Level requirement not met." });
-  if (req.body.acceptRules !== true)
-    return res.status(400).json({ error: "Please accept the event rules." });
-  await entries.updateOne(
-    { playerId: req.player._id, eventId: event.id },
-    {
-      $setOnInsert: {
-        _id: randomUUID(),
-        playerId: req.player._id,
-        eventId: event.id,
-        joinedAt: new Date(),
+app.post(
+  "/tournaments/:id/enter",
+  required,
+  rateLimit({
+    message: { error: "Too many requests. Please try again shortly." },
+    windowMs: 60000,
+    limit: 20,
+  }),
+  async (req: any, res) => {
+    const event = await events.findOne({
+      id: req.params.id,
+      status: { $ne: "draft" },
+    });
+    if (!event) return res.status(404).json({ error: "Event not found." });
+    if (!eventIsOpen(event))
+      return res.status(409).json({
+        error: "Registration is not open. No payment has been taken.",
+      });
+    if (levelOf(req.player.xp) < event.level)
+      return res.status(403).json({ error: "Level requirement not met." });
+    if (req.body.acceptRules !== true)
+      return res.status(400).json({ error: "Please accept the event rules." });
+    const fee = Math.max(0, Math.floor(event.entry || 0));
+    if (fee > 0) {
+      // paidEvents makes the charge idempotent by construction: a retry, a duplicate tap or a
+      // crash between charging and recording the entry can never take a second fee.
+      const charged = await users.findOneAndUpdate(
+        {
+          _id: req.player._id,
+          coins: { $gte: fee },
+          paidEvents: { $ne: event.id },
+        },
+        { $inc: { coins: -fee }, $addToSet: { paidEvents: event.id } },
+        { returnDocument: "after" },
+      );
+      if (!charged) {
+        const current = await users.findOne({ _id: req.player._id });
+        if (!(current.paidEvents || []).includes(event.id))
+          return res.status(409).json({
+            error: `This event costs ${fee} coins and your balance is ${current.coins}.`,
+          });
+      }
+    }
+    await entries.updateOne(
+      { playerId: req.player._id, eventId: event.id },
+      {
+        $setOnInsert: {
+          _id: randomUUID(),
+          playerId: req.player._id,
+          eventId: event.id,
+          entry: fee,
+          joinedAt: new Date(),
+        },
       },
-    },
-    { upsert: true },
-  );
-  res.json({ joined: true });
-});
+      { upsert: true },
+    );
+    res.json({
+      joined: true,
+      player: publicUser(await users.findOne({ _id: req.player._id })),
+    });
+  },
+);
 app.post(
   "/tournaments/:id/submit",
   required,

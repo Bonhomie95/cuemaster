@@ -59,12 +59,10 @@ export function installUsdc(app: Express, db: Db, required: RequestHandler) {
     try {
       address = baseAddress(input.address);
     } catch {
-      return res
-        .status(400)
-        .json({
-          error:
-            "Invalid Base address or checksum. TRON/TRC20 addresses are not supported for USDC.",
-        });
+      return res.status(400).json({
+        error:
+          "Invalid Base address or checksum. TRON/TRC20 addresses are not supported for USDC.",
+      });
     }
     const current = req.player.usdcWallet;
     const wallet =

@@ -66,13 +66,20 @@ export function eventIsOpen(e: any, now = Date.now()) {
   return (
     !!e &&
     e.status === "open" &&
+    // Coins are virtual items. USDC would be a real-currency payout, which needs eligibility
+    // and settlement that do not exist; country lists imply the same. Both stay closed.
     e.currency === "coins" &&
-    e.entry === 0 &&
-    !e.placements?.length &&
     !e.countries?.length &&
     (!e.startsAt || Date.parse(e.startsAt) <= now) &&
     (!e.endsAt || Date.parse(e.endsAt) > now)
   );
+}
+/** Prize coins owed per finishing position, once an event closes. */
+export function placementFor(event: any, position: number) {
+  const row = (event.placements || []).find(
+    (p: any) => p.position === position,
+  );
+  return row ? Math.floor(row.amount) : 0;
 }
 export function installPlatform(
   app: Express,
@@ -89,7 +96,9 @@ export function installPlatform(
       history: Record<string, unknown>[];
       [key: string]: any;
     }>("tournaments"),
-    reports = db.collection<any>("reports");
+    reports = db.collection<any>("reports"),
+    entries = db.collection<any>("entries"),
+    audit = db.collection<any>("adminAudit");
   const staffRequired = installAdminAuth(app, db);
   const admin: RequestHandler = (req: any, res, next) => {
     if (
@@ -190,18 +199,31 @@ export function installPlatform(
       res.status(201).json({ received: true });
     },
   );
-  app.post("/players/:id/block", required, async (req: any, res) => {
-    if (
-      req.params.id === req.player._id ||
-      !(await users.findOne({ _id: req.params.id }))
-    )
-      return res.status(404).json({ error: "Player not found." });
-    await users.updateOne(
-      { _id: req.player._id },
-      { $addToSet: { blockedPlayers: req.params.id } },
-    );
-    res.json({ blocked: true });
-  });
+  app.post(
+    "/players/:id/block",
+    required,
+    rateLimit({
+      message: { error: "Too many requests. Please try again shortly." },
+      windowMs: 3600000,
+      limit: 60,
+    }),
+    async (req: any, res) => {
+      if (
+        req.params.id === req.player._id ||
+        !(await users.findOne({ _id: req.params.id }))
+      )
+        return res.status(404).json({ error: "Player not found." });
+      if ((req.player.blockedPlayers || []).length >= 500)
+        return res.status(409).json({
+          error: "Block list is full. Unblock someone before adding another.",
+        });
+      await users.updateOne(
+        { _id: req.player._id },
+        { $addToSet: { blockedPlayers: req.params.id } },
+      );
+      res.json({ blocked: true });
+    },
+  );
   app.get("/me/blocked", required, async (req: any, res) => {
     const rows = await users
       .find(
@@ -322,14 +344,12 @@ export function installPlatform(
       if (
         status === "open" &&
         (event.currency !== "coins" ||
-          event.entry !== 0 ||
-          event.placements?.length ||
           event.countries?.length ||
           event.drill !== "pocket")
       )
         return res.status(409).json({
           error:
-            "Only unrestricted free coin challenges with completion rewards can open. Ranked prizes, country restrictions and USDC events require settlement and eligibility setup.",
+            "Only coin competitions can open. USDC prizes and country restrictions need eligibility and payout setup that is not in place.",
         });
       if (
         status === "open" &&
@@ -353,8 +373,108 @@ export function installPlatform(
         return res
           .status(409)
           .json({ error: "Event changed. Refresh before retrying." });
-      res.json(publicEvent(updated));
+      const settlement =
+        status === "closed" ? await settle(updated, req.staff._id) : null;
+      res.json({ ...publicEvent(updated), settlement });
     },
+  );
+  /**
+   * Pay a closed coin competition. Ranking matches the public board: fewest shots first, then
+   * whoever got there earliest. Each credit is guarded by its own `prize:<event>` marker, so
+   * running this twice — or resuming after a crash — pays every winner exactly once.
+   */
+  async function settle(event: any, actor: string) {
+    if (event.currency !== "coins" || !(event.placements || []).length)
+      return { paid: [], skipped: "No coin placements to pay." };
+    const ranked = await entries
+      .find({ eventId: event.id, score: { $exists: true } })
+      .sort({ score: 1, submittedAt: 1 })
+      .limit(1000)
+      .toArray();
+    const paid: { playerId: string; position: number; coins: number }[] = [];
+    for (const [index, entry] of ranked.entries()) {
+      const coins = placementFor(event, index + 1);
+      if (coins <= 0) continue;
+      const key = `prize:${event.id}`;
+      const credited = await users.findOneAndUpdate(
+        { _id: entry.playerId, completed: { $ne: key } },
+        { $addToSet: { completed: key }, $inc: { coins } },
+      );
+      if (credited)
+        paid.push({ playerId: entry.playerId, position: index + 1, coins });
+    }
+    await audit.insertOne({
+      _id: randomUUID(),
+      action: "tournament.settled",
+      actor,
+      at: new Date(),
+      event: { id: event.id, name: event.name },
+      reason: `Paid ${paid.length} placement${paid.length === 1 ? "" : "s"}`,
+      paid,
+    });
+    return { paid };
+  }
+  app.post(
+    "/admin/tournaments/:id/settle",
+    staffRequired,
+    admin,
+    async (req: any, res) => {
+      const event = await events.findOne({ id: req.params.id });
+      if (!event) return res.status(404).json({ error: "Event not found." });
+      if (event.status !== "closed")
+        return res
+          .status(409)
+          .json({ error: "Close the event before paying prizes." });
+      res.json(await settle(event, req.staff._id));
+    },
+  );
+  app.delete(
+    "/admin/tournaments/:id",
+    staffRequired,
+    admin,
+    async (req: any, res) => {
+      const { version, reason } = z
+        .object({
+          version: z.number().int().positive(),
+          reason: z.string().trim().min(5).max(300),
+        })
+        .strict()
+        .parse(req.body);
+      const event = await events.findOne({ id: req.params.id, version });
+      if (!event)
+        return res
+          .status(409)
+          .json({ error: "Event changed. Refresh before retrying." });
+      // An open competition holds live entries; close it first so players see a result.
+      if (event.status === "open")
+        return res
+          .status(409)
+          .json({ error: "Close the competition before deleting it." });
+      if (await entries.countDocuments({ eventId: event.id }, { limit: 1 }))
+        return res.status(409).json({
+          error:
+            "Players have entered this event. Their records must be kept; close it instead.",
+        });
+      // Written before the delete: the audit must survive even if the removal fails.
+      await audit.insertOne({
+        _id: randomUUID(),
+        action: "tournament.deleted",
+        actor: req.staff._id,
+        actorName: req.staff.username,
+        reason,
+        at: new Date(),
+        event: publicEvent(event),
+      });
+      const removed = await events.deleteOne({ id: event.id, version });
+      if (!removed.deletedCount)
+        return res
+          .status(409)
+          .json({ error: "Event changed. Refresh before retrying." });
+      res.json({ deleted: true });
+    },
+  );
+  app.get("/admin/audit", staffRequired, admin, async (_req, res) =>
+    res.json(await audit.find({}).sort({ at: -1 }).limit(200).toArray()),
   );
   app.get("/admin/players", staffRequired, admin, async (req: any, res) => {
     const q = z.string().max(80).default("").parse(req.query.q);

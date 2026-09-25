@@ -8,44 +8,105 @@ import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment
 import meshData from "../../assets/models/table-mesh.json";
 import { session, skins } from "../game/session";
 import { R, H, W } from "../physics/engine";
-import { ballTexture, grain, shadowTexture, clothSurface } from "./textures";
+import {
+  ballTexture,
+  grain,
+  shadowTexture,
+  clothSurface,
+  floorTexture,
+} from "./textures";
 const spinQ = new T.Quaternion();
+// Three shaded lamps over the table, as in a real pool hall. Their positions drive both the
+// light and the direction each ball's soft shadow falls.
+export const lamps = [-0.82, 0, 0.82].map((x) => new T.Vector3(x, 1.05, 0));
+/** A dark room whose only bright features are the lamp panels, so balls reflect lamps, not a studio. */
+function hallEnvironment() {
+  const room = new T.Scene();
+  const box = new T.Mesh(
+    new T.BoxGeometry(12, 5, 8),
+    new T.MeshBasicMaterial({ color: "#16120e", side: T.BackSide }),
+  );
+  box.position.y = 1.5;
+  room.add(box);
+  const floor = new T.Mesh(
+    new T.PlaneGeometry(3, 1.6),
+    new T.MeshBasicMaterial({ color: "#0d3a2a" }),
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.position.y = -0.05;
+  room.add(floor);
+  for (const l of lamps) {
+    const panel = new T.Mesh(
+      new T.PlaneGeometry(0.3, 0.19),
+      new T.MeshBasicMaterial({ color: new T.Color(26, 24, 21) }),
+    );
+    panel.rotation.x = Math.PI / 2;
+    panel.position.set(l.x, 1.2, l.z);
+    room.add(panel);
+  }
+  const rim = new T.Mesh(
+    new T.PlaneGeometry(10, 0.6),
+    new T.MeshBasicMaterial({ color: new T.Color(0.5, 0.42, 0.32) }),
+  );
+  rim.position.set(0, 2.4, -3.9);
+  room.add(rim);
+  return room;
+}
 function Lighting() {
   const { gl, scene } = useThree();
   useEffect(() => {
+    // Neutral keeps ivory white and ball colours true; ACES greys the cue ball.
+    gl.toneMapping = T.NeutralToneMapping;
+    gl.toneMappingExposure = 1.15;
+  }, [gl]);
+  const spots = useMemo(
+    () =>
+      lamps.map((l) => {
+        const spot = new T.SpotLight("#fff2dc", 2.9, 5, 0.8, 1, 2);
+        spot.position.copy(l);
+        // No shadow maps: the lamps are almost overhead, so a real shadow hides under its own
+        // ball from this camera. The ball meshes carry a drawn contact shadow instead.
+        // The target must live in the graph or its world matrix never updates.
+        spot.target.position.set(0, -l.y, 0);
+        spot.add(spot.target);
+        return spot;
+      }),
+    [],
+  );
+  useEffect(() => {
     const pm = new T.PMREMGenerator(gl);
-    const room = new RoomEnvironment();
-    const env = pm.fromScene(room, 0.04, 0.1, 100, { size: 128 });
+    const room = hallEnvironment();
+    const env = pm.fromScene(room, 0.02, 0.1, 100, { size: 256 });
     scene.environment = env.texture;
-    scene.environmentIntensity = 0.35;
+    scene.environmentIntensity = 0.55;
+    // The same hall stands in for the room behind the table in the aim camera.
+    scene.background = env.texture;
+    scene.backgroundBlurriness = 0.55;
+    scene.backgroundIntensity = 0.32;
     return () => {
       scene.environment = null;
+      scene.background = null;
       env.dispose();
-      room.dispose();
+      room.traverse((o) => {
+        const m = o as T.Mesh;
+        m.geometry?.dispose();
+        (m.material as T.Material | undefined)?.dispose();
+      });
       pm.dispose();
     };
   }, [gl, scene]);
   return (
     <>
-      <ambientLight intensity={0.15} />
-      <pointLight
-        position={[-0.4, 1.8, -0.25]}
-        intensity={1.6}
-        color="#fff4e5"
-        distance={6}
-        decay={2}
-      />
-      <hemisphereLight args={["#fbf2d5", "#162c24", 0.65]} />
+      <hemisphereLight args={["#fff1d8", "#0b1712", 0.34]} />
+      {/* Lamp spill that reaches the rails and the players' side of the table. */}
       <directionalLight
-        position={[-1, 3, 1]}
-        intensity={1.15}
-        color="#fff0d4"
+        position={[0.3, 2, 1.4]}
+        intensity={0.35}
+        color="#ffe7c4"
       />
-      <directionalLight
-        position={[1, 2, -2]}
-        intensity={0.45}
-        color="#d9e8ff"
-      />
+      {spots.map((spot, i) => (
+        <primitive key={i} object={spot} />
+      ))}
     </>
   );
 }
@@ -87,8 +148,10 @@ function Table() {
             <meshStandardMaterial
               roughness={0.95}
               envMapIntensity={0.12}
-              bumpMap={name === "cloth" ? textures.weave : null}
-              bumpScale={0.00015}
+              bumpMap={
+                name === "cloth" || name === "cushion" ? textures.weave : null
+              }
+              bumpScale={0.0009}
               color={
                 name === "cloth"
                   ? skin.cloth
@@ -110,7 +173,7 @@ function Table() {
                     body: "#151c1b",
                     brass: skin.metal,
                     leather: "#070b0a",
-                    ivory: "#d7d1b1",
+                    ivory: "#f4f0e2",
                   } as any
                 )[name]
               }
@@ -118,7 +181,7 @@ function Table() {
                 name === "cloth" || name === "cushion"
                   ? 0.92
                   : name === "wood"
-                    ? 0.55
+                    ? 0.38
                     : name === "brass"
                       ? 0.4
                       : 0.6
@@ -134,7 +197,13 @@ function Table() {
               bumpMap={name === "cloth" ? textures.cloth : null}
               bumpScale={0.00005}
               envMapIntensity={
-                name === "leather" ? 0.08 : name === "cloth" ? 0.25 : 0.65
+                name === "leather"
+                  ? 0.08
+                  : name === "cloth"
+                    ? 0.25
+                    : name === "wood"
+                      ? 1.1
+                      : 0.65
               }
               side={name === "cushion" ? T.DoubleSide : T.FrontSide}
             />
@@ -151,16 +220,71 @@ function Table() {
     </group>
   );
 }
+/** [x, z, mouth radius] in ball radii, so the trim follows the ball size and the rail cut. */
+const pocketCenters: [number, number, number][] = [
+  [H + 0.35 * R, W + 0.35 * R, 2.35 * R],
+  [H + 0.35 * R, -W - 0.35 * R, 2.35 * R],
+  [-H - 0.35 * R, W + 0.35 * R, 2.35 * R],
+  [-H - 0.35 * R, -W - 0.35 * R, 2.35 * R],
+  [0, W + 0.6 * R, 1.95 * R],
+  [0, -W - 0.6 * R, 1.95 * R],
+];
+/**
+ * Pocket trim. Overhead, the modelled mouth reads as a muddle of cloth shelf, cushion ends and
+ * liner, so each mouth is covered by a black opening that sits above the shelf but below the
+ * balls, framed by a metal cap arc on the rail top in the venue's finish.
+ */
+function Pockets() {
+  const skin = skins[session.skin];
+  return (
+    <group>
+      {pocketCenters.map(([x, z, r], i) => (
+        <group key={i} position={[x, 0, z]}>
+          <mesh
+            rotation={[-Math.PI / 2, 0, 0]}
+            position={[0, 0.004, 0]}
+            renderOrder={1}
+          >
+            <circleGeometry args={[r, 32]} />
+            <meshBasicMaterial color="#04060a" toneMapped={false} />
+          </mesh>
+          <mesh
+            rotation={[-Math.PI / 2, 0, -Math.atan2(z, x) - Math.PI * 0.58]}
+            position={[0, 0.0665, 0]}
+          >
+            <ringGeometry
+              args={[r - 0.008, r + 0.012, 32, 1, 0, Math.PI * 1.12]}
+            />
+            <meshStandardMaterial
+              color={skin.metal}
+              metalness={0.4}
+              roughness={0.24}
+              envMapIntensity={1.3}
+            />
+          </mesh>
+        </group>
+      ))}
+    </group>
+  );
+}
 function Balls() {
   const contactShadow = useMemo(() => shadowTexture(), []);
   const meshes = useRef<(T.Mesh | null)[]>([]),
+    contacts = useRef<(T.Mesh | null)[]>([]),
     shadows = useRef<(T.Mesh | null)[]>([]);
   const drops = useRef<number[]>(Array(16).fill(0));
   useFrame((_, dt) => {
+    if (session.snapDrops) {
+      // Returning from a replay: balls already down stay down instead of falling again.
+      session.snapDrops = false;
+      for (const b of session.world.balls)
+        if (b.pocketed) drops.current[b.id] = 0.5;
+    }
     for (let i = 0; i < session.world.balls.length; i++) {
       const b = session.world.balls[i],
         m = meshes.current[b.id],
-        shadow = shadows.current[b.id];
+        shadow = shadows.current[b.id],
+        contact = contacts.current[b.id];
       if (!m) continue;
       const old = session.previous.find((p) => p.id === b.id) || b,
         a = session.running ? session.alpha : 1;
@@ -169,17 +293,32 @@ function Balls() {
       else drops.current[b.id] = 0;
       const d = drops.current[b.id];
       m.visible = d < 0.35;
-      m.position.set(
-        old.x + (b.x - old.x) * a,
-        R - 3 * d * d,
-        old.z + (b.z - old.z) * a,
-      );
+      let x = old.x + (b.x - old.x) * a,
+        z = old.z + (b.z - old.z) * a;
+      if (b.pocketed) {
+        // Roll over the lip towards the pocket centre while falling, instead of sinking in place.
+        let best = pocketCenters[0];
+        for (const p of pocketCenters)
+          if (
+            Math.hypot(p[0] - b.x, p[1] - b.z) <
+            Math.hypot(best[0] - b.x, best[1] - b.z)
+          )
+            best = p;
+        const k = Math.min(1, d / 0.16);
+        x += (best[0] - x) * k;
+        z += (best[1] - z) * k;
+      }
+      m.position.set(x, R - 3 * d * d, z);
       m.quaternion.set(old.qx, old.qy, old.qz, old.qw);
       spinQ.set(b.qx, b.qy, b.qz, b.qw);
       m.quaternion.slerp(spinQ, a);
+      if (contact) {
+        contact.visible = !b.pocketed;
+        contact.position.set(x, 0.0009, z);
+      }
       if (shadow) {
         shadow.visible = !b.pocketed;
-        shadow.position.set(m.position.x, 0.0008, m.position.z);
+        shadow.position.set(x + R * 0.42, 0.00085, z + R * 0.5);
       }
     }
   });
@@ -194,27 +333,47 @@ function Balls() {
             position={[b.x, R, b.z]}
             rotation={[Math.PI / 2, 0.15, 0]}
           >
-            <sphereGeometry args={[R, 32, 20]} />
-            <meshStandardMaterial
+            <sphereGeometry args={[R, 48, 32]} />
+            <meshPhysicalMaterial
               map={ballTexture(b.id)}
-              roughness={0.18}
+              roughness={0.22}
               metalness={0}
-              envMapIntensity={0.5}
+              clearcoat={1}
+              clearcoatRoughness={0.04}
+              envMapIntensity={1.1}
             />
           </mesh>
           <mesh
             ref={(m) => {
               shadows.current[b.id] = m;
             }}
+            renderOrder={2}
             rotation={[-Math.PI / 2, 0, 0]}
-            position={[b.x, 0.0008, b.z]}
+            position={[b.x, 0.00085, b.z]}
           >
-            <planeGeometry args={[R * 3.2, R * 3.2]} />
+            <planeGeometry args={[R * 3.1, R * 3.1]} />
             <meshBasicMaterial
               map={contactShadow}
               color="#ffffff"
               transparent
-              opacity={0.95}
+              opacity={0.8}
+              depthWrite={false}
+            />
+          </mesh>
+          <mesh
+            ref={(m) => {
+              contacts.current[b.id] = m;
+            }}
+            renderOrder={3}
+            rotation={[-Math.PI / 2, 0, 0]}
+            position={[b.x, 0.0009, b.z]}
+          >
+            <planeGeometry args={[R * 1.9, R * 1.9]} />
+            <meshBasicMaterial
+              map={contactShadow}
+              color="#ffffff"
+              transparent
+              opacity={1}
               depthWrite={false}
             />
           </mesh>
@@ -253,6 +412,7 @@ function Aim() {
     line = useRef<T.Mesh>(null),
     ghost = useRef<T.Mesh>(null),
     objectLine = useRef<T.Mesh>(null),
+    cueLine = useRef<T.Mesh>(null),
     forbidden = useRef<T.Group>(null);
   useFrame(() => {
     const b = session.world.balls.find((b) => b.id === 0);
@@ -337,7 +497,7 @@ function Aim() {
     }
     if (line.current)
       (line.current.material as T.MeshBasicMaterial).color.set(
-        warning ? "#ff795f" : "#65e6ff",
+        warning ? "#ff795f" : "#f4f6ef",
       );
     const gx = b.x + dx * dist,
       gz = b.z + dz * dist;
@@ -366,7 +526,7 @@ function Aim() {
           ez > 0 ? (W - hit.z) / ez : ez < 0 ? (-W - hit.z) / ez : 99,
         );
         const length = Math.max(0.01, Math.min(reach, boundary));
-        objectLine.current.scale.x = length / 0.24;
+        objectLine.current.scale.x = length;
         objectLine.current.position.set(
           hit.x + (Math.cos(a) * length) / 2,
           0.003,
@@ -375,22 +535,55 @@ function Aim() {
         objectLine.current.rotation.set(-Math.PI / 2, 0, -a);
       }
     }
+    if (cueLine.current) {
+      cueLine.current.visible = !!hit && !warning;
+      if (hit) {
+        // Cue ball leaves along the tangent line; follow/draw bends it towards/away from the object line.
+        // ponytail: first-order preview only, the solver decides the real path.
+        const nx = hit.x - gx,
+          nz = hit.z - gz,
+          nl = Math.hypot(nx, nz) || 1,
+          ux = nx / nl,
+          uz = nz / nl,
+          c = dx * ux + dz * uz;
+        let tx = dx - c * ux,
+          tz = dz - c * uz;
+        const tl = Math.hypot(tx, tz);
+        tx = tl > 1e-6 ? tx / tl : 0;
+        tz = tl > 1e-6 ? tz / tl : 0;
+        const bend = c * session.top * 0.7,
+          px = tx * tl + ux * bend,
+          pz = tz * tl + uz * bend,
+          pl = Math.hypot(px, pz);
+        const length =
+          Math.min(0.22, 0.05 + pl * 0.2) * (session.activeCue.aim / 0.24);
+        cueLine.current.visible = pl > 0.02 && !warning;
+        const a = Math.atan2(pz, px);
+        cueLine.current.scale.x = Math.max(0.01, length);
+        cueLine.current.position.set(
+          gx + (Math.cos(a) * length) / 2,
+          0.003,
+          gz + (Math.sin(a) * length) / 2,
+        );
+        cueLine.current.rotation.set(-Math.PI / 2, 0, -a);
+      }
+    }
   });
   return (
     <>
       <group ref={cue}>
-        <Rod length={0.68} radius={0.0058} color="#c8ad7d" position={0.34} />
+        <Rod length={0.68} radius={0.0079} color="#c8ad7d" position={0.34} />
         <Rod
           length={0.43}
-          radius={0.011}
+          radius={0.0148}
           color={session.activeCue.color}
           position={0.895}
         />
-        <Rod length={0.035} radius={0.006} color="#f4e9ce" position={0.0175} />
-        <Rod length={0.009} radius={0.006} color="#62a5a0" position={0.004} />
+        <Rod length={0.035} radius={0.008} color="#f4e9ce" position={0.0175} />
+        <Rod length={0.009} radius={0.008} color="#62a5a0" position={0.004} />
         <Rod
           length={0.02}
-          radius={0.01}
+          radius={0.0135}
           color="#d1b575"
           metalness={0.75}
           position={0.695}
@@ -419,42 +612,42 @@ function Aim() {
         </group>
 
         <mesh ref={line} renderOrder={3} rotation={[-Math.PI / 2, 0, 0]}>
-          <planeGeometry args={[1, 0.012]} />
-          <mesh renderOrder={2} position={[0, 0, -0.0005]}>
-            <planeGeometry args={[1, 0.023]} />
-            <meshBasicMaterial
-              color="#071521"
-              transparent
-              opacity={0.85}
-              depthWrite={false}
-              toneMapped={false}
-            />
-          </mesh>
+          <planeGeometry args={[1, 0.0055]} />
           <meshBasicMaterial
-            color="#65e6ff"
+            color="#f4f6ef"
             toneMapped={false}
             transparent
-            opacity={1}
+            opacity={0.95}
             depthWrite={false}
           />
         </mesh>
         <mesh ref={ghost} renderOrder={3} rotation={[-Math.PI / 2, 0, 0]}>
-          <ringGeometry args={[R - 0.0035, R + 0.002, 48]} />
+          <ringGeometry args={[R - 0.003, R + 0.0015, 48]} />
           <meshBasicMaterial
-            color="#65e6ff"
+            color="#f4f6ef"
             toneMapped={false}
+            transparent
+            opacity={0.95}
             depthWrite={false}
           />
-          <mesh renderOrder={2} position={[0, 0, -0.0005]}>
-            <ringGeometry args={[R - 0.006, R + 0.005, 48]} />
-            <meshBasicMaterial color="#071521" toneMapped={false} />
-          </mesh>
         </mesh>
-        <mesh ref={objectLine}>
-          <planeGeometry args={[0.24, 0.01]} />
+        <mesh ref={objectLine} renderOrder={3}>
+          <planeGeometry args={[1, 0.0055]} />
           <meshBasicMaterial
             color="#ffd05b"
             toneMapped={false}
+            transparent
+            opacity={0.95}
+            depthWrite={false}
+          />
+        </mesh>
+        <mesh ref={cueLine} renderOrder={3}>
+          <planeGeometry args={[1, 0.0045]} />
+          <meshBasicMaterial
+            color="#f4f6ef"
+            toneMapped={false}
+            transparent
+            opacity={0.6}
             depthWrite={false}
           />
         </mesh>
@@ -462,14 +655,22 @@ function Aim() {
     </>
   );
 }
+/** Outer table extents including rails and pocket jaws (from table-mesh.json). */
+// Fit to the rail top (diamonds) rather than the outer cabinet: the overhang may bleed off screen.
+const TABLE_X = 1.4,
+  TABLE_Z = 0.762,
+  // A long lens and a slight tilt: the reference reads almost orthographic, which is what keeps
+  // it looking like a table seen from above rather than a 3D model on a stage.
+  TILT = (7 * Math.PI) / 180;
 function Camera() {
   const { camera, size } = useThree();
   const desired = useMemo(() => new T.Vector3(), []);
   const look = useRef(new T.Vector3());
   useFrame((_, dt) => {
-    const aspect = size.width / size.height;
+    const cam = camera as T.PerspectiveCamera;
     if (session.camera === "aim") {
       const b = session.world.balls.find((b) => b.id === 0)!;
+      cam.up.set(0, 1, 0);
       desired.set(
         b.x - Math.cos(session.angle) * 1.05,
         0.54,
@@ -480,18 +681,61 @@ function Camera() {
         0.01,
         b.z + Math.sin(session.angle) * 0.7,
       );
-    } else {
-      const d = Math.max(2.22, 4.25 / aspect);
-      desired.set(0, d, d * 0.4);
-      look.current.set(0, 0, 0);
+      camera.position.lerp(desired, 1 - Math.exp(-dt * 9));
+      camera.lookAt(look.current);
+      return;
     }
+    // Nearly overhead, tilted just enough to show the cushion faces and the tops of the balls,
+    // and fitted so the table fills the HUD-free rectangle (the reference game's framing).
+    const hud = session.hud,
+      f = ((cam.fov || 30) * Math.PI) / 180,
+      c = Math.cos(TILT),
+      safeW = Math.max(40, size.width - hud.left - hud.right),
+      safeH = Math.max(40, size.height - hud.top - hud.bottom),
+      // Pixels per metre measured perpendicular to the view direction.
+      ppm = Math.min(
+        safeW / (2 * TABLE_X * 1.02),
+        safeH / ((2 * TABLE_Z * c + 0.12 * Math.sin(TILT)) * 1.04),
+      ),
+      dist = size.height / 2 / (Math.tan(f / 2) * ppm),
+      offsetX = (hud.left - hud.right) / 2 / ppm,
+      offsetZ = (hud.top - hud.bottom) / 2 / ppm / c;
+    cam.up.set(0, 1, 0);
+    look.current.set(-offsetX, 0, -offsetZ);
+    desired.set(-offsetX, dist * c, -offsetZ + dist * Math.sin(TILT));
     camera.position.lerp(desired, 1 - Math.exp(-dt * 9));
     camera.lookAt(look.current);
   });
   return null;
 }
+/** Permanent head-string marking (owner brief), printed flat on the cloth. Brighter while it restricts placement. */
+function HeadString() {
+  const mat = useRef<T.MeshBasicMaterial>(null);
+  useFrame(() => {
+    if (mat.current)
+      mat.current.opacity = session.headStringPlacement ? 0.95 : 0.6;
+  });
+  return (
+    <mesh
+      rotation={[-Math.PI / 2, 0, 0]}
+      position={[-H / 2, 0.0012, 0]}
+      renderOrder={2}
+    >
+      <planeGeometry args={[0.007, 2 * W - 0.02]} />
+      <meshBasicMaterial
+        ref={mat}
+        color="#ffffff"
+        transparent
+        opacity={0.6}
+        depthWrite={false}
+        toneMapped={false}
+      />
+    </mesh>
+  );
+}
 export function Scene() {
   const floorShadow = useMemo(() => shadowTexture(), []);
+  const floor = useMemo(() => floorTexture(), []);
   const checkFrames = useRef(0);
   const benchmarkReported = useRef(false);
   useFrame(({ gl }) => {
@@ -537,7 +781,8 @@ export function Scene() {
   useFrame((_, dt) => session.update(dt), -1);
   const placingGesture = useRef(false);
   const interact = (e: ThreeEvent<PointerEvent>) => {
-    if (session.running || session.cpuTurn || session.progress.breakChoice) return;
+    if (session.running || session.cpuTurn || session.progress.breakChoice)
+      return;
     if (session.placement) {
       session.placeCue(e.point.x, e.point.z, false);
       return;
@@ -549,9 +794,13 @@ export function Scene() {
     <>
       <Lighting />
       <Camera />
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.28, 0]}>
-        <planeGeometry args={[200, 200]} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.285, 0]}>
+        <planeGeometry args={[60, 60]} />
         <meshBasicMaterial color="#081e30" toneMapped={false} />
+      </mesh>
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.28, 0]}>
+        <planeGeometry args={[5.2, 3.4]} />
+        <meshBasicMaterial map={floor} toneMapped={false} />
       </mesh>
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
@@ -561,39 +810,36 @@ export function Scene() {
         <planeGeometry args={[2.5, 2.5]} />
         <meshBasicMaterial map={floorShadow} transparent depthWrite={false} />
       </mesh>
+      <Pockets />
       <Table />
       <CityInlay city={session.skin} />
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[-H / 2, 0.012, 0]}
-        renderOrder={2}
-      >
-        <planeGeometry args={[0.014, 2 * W - 0.02]} />
-        <meshBasicMaterial
-          color="#ffffff"
-          side={T.DoubleSide}
-          polygonOffset
-          polygonOffsetFactor={-2}
-          polygonOffsetUnits={-2}
-          depthWrite={false}
-          toneMapped={false}
-        />
-      </mesh>
+      <HeadString />
       <Balls />
       <Aim />
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}
         position={[0, 0.002, 0]}
         onPointerDown={(e) => {
-          if (session.running || session.cpuTurn || session.progress.finished || session.progress.breakChoice) return;
+          if (
+            session.running ||
+            session.cpuTurn ||
+            session.progress.finished ||
+            session.progress.breakChoice
+          )
+            return;
           const cue = session.world.balls.find((b) => b.id === 0)!;
-          if (session.drill === "break" && session.shots === 0 &&
-              Math.hypot(e.point.x - cue.x, e.point.z - cue.z) < R * 2.5) {
+          if (
+            session.drill === "break" &&
+            session.shots === 0 &&
+            Math.hypot(e.point.x - cue.x, e.point.z - cue.z) < R * 2.5
+          ) {
             session.placement = true;
             session.headStringPlacement = true;
           }
           placingGesture.current = session.placement;
-          (e.target as unknown as { setPointerCapture?: (id: number) => void })?.setPointerCapture?.(e.pointerId);
+          (
+            e.target as unknown as { setPointerCapture?: (id: number) => void }
+          )?.setPointerCapture?.(e.pointerId);
           interact(e);
         }}
         onPointerMove={(e) => {
@@ -606,9 +852,15 @@ export function Scene() {
             session.placeCue(cue.x, cue.z);
           }
           placingGesture.current = false;
-          (e.target as unknown as { releasePointerCapture?: (id: number) => void })?.releasePointerCapture?.(e.pointerId);
+          (
+            e.target as unknown as {
+              releasePointerCapture?: (id: number) => void;
+            }
+          )?.releasePointerCapture?.(e.pointerId);
         }}
-        onPointerCancel={() => { placingGesture.current = false; }}
+        onPointerCancel={() => {
+          placingGesture.current = false;
+        }}
       >
         <planeGeometry args={[2 * H, 2 * W]} />
         <meshBasicMaterial transparent opacity={0} depthWrite={false} />

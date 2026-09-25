@@ -4,79 +4,81 @@ import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
 import type { LobbyProps } from "./Lobby";
 import IconButton from "./IconButton";
+import { Press, Enter, Pulse } from "./motion";
 type Icon = React.ComponentProps<typeof Feather>["name"];
+
+/**
+ * Club home: one horizontal rail of modes, and a row of icon buttons for everything else.
+ * Each mode carries its colour in an icon chip and a soft corner glow rather than a full
+ * gradient block, so six tiles side by side stay calm.
+ */
 export default function HomeLobby(p: LobbyProps) {
   const rail = useRef<ScrollView>(null);
   const [short, setShort] = useState(false);
   const [width, setWidth] = useState(896),
     [x, setX] = useState(0),
     [content, setContent] = useState(0);
-  const tileWidth = Math.max(166, Math.min(235, (width - 80) / 4.2));
-  const pageCount = Math.max(
-    1,
-    Math.ceil((content - width) / (tileWidth + 14)) + 1,
-  );
+  const tileWidth = Math.max(170, Math.min(212, (width - 96) / 4.1));
+  const step = tileWidth + 12;
+  const pageCount = Math.max(1, Math.ceil((content - width) / step) + 1);
+  const page =
+    x >= content - width - 3
+      ? pageCount - 1
+      : Math.min(pageCount - 1, Math.round(x / step));
   const done = p.player.completed.filter((k) =>
     k.startsWith("practice:"),
   ).length;
   const gifted = p.player.completed.includes(
     "daily:" + new Date().toISOString().slice(0, 10),
   );
-  const next = p.catalog.venues.find((v) => v.level > p.player.level);
+  const open = p.catalog.tournaments.find((t) => t.status === "open");
   const modes: {
     title: string;
     caption: string;
     icon: Icon;
-    colors: [string, string];
-    edge: string;
+    accent: string;
     action: () => void;
   }[] = [
     {
       title: "Play pool",
       caption: "FIND YOUR RIVAL",
       icon: "play",
-      colors: ["#087e5c", "#035640"],
-      edge: "#688d7d",
+      accent: "#24dbb3",
       action: p.onPlay,
     },
     {
       title: "Cues",
       caption: "TIME & AIM",
       icon: "edit-2",
-      colors: ["#b16b08", "#754006"],
-      edge: "#7b705b",
+      accent: "#ffb82e",
       action: p.onCues,
     },
     {
       title: "Practice",
       caption: "FIND YOUR FORM",
       icon: "crosshair",
-      colors: ["#1678bb", "#154c86"],
-      edge: "#536968",
+      accent: "#4aa8ff",
       action: () => p.onPage("practice"),
     },
     {
       title: "Compete",
       caption: "PRESEASON OPEN",
       icon: "award",
-      colors: ["#8544bb", "#562883"],
-      edge: "#6d656d",
+      accent: "#b98cff",
       action: () => p.onPage("events"),
     },
     {
       title: "Tables",
       caption: "YOUR COLLECTION",
       icon: "grid",
-      colors: ["#0e8893", "#095661"],
-      edge: "#526b60",
+      accent: "#3fd0d8",
       action: () => p.onPage("tables"),
     },
     {
       title: "Free play",
       caption: "JUST YOU & THE TABLE",
       icon: "target",
-      colors: ["#bc4e36", "#7b2d25"],
-      edge: "#7b705b",
+      accent: "#ff8a5c",
       action: p.onFree,
     },
   ];
@@ -88,305 +90,297 @@ export default function HomeLobby(p: LobbyProps) {
         setShort(e.nativeEvent.layout.height < 330);
       }}
     >
-      <View style={[s.brandArea, short && { minHeight: 52, maxHeight: 52 }]}>
-        <View style={s.brandRow}>
-          <Text style={s.brand}>CUE</Text>
-
-          <Text style={[s.brand, { color: "#ffd05b" }]}>MASTER</Text>
-        </View>
+      <View style={[s.brandArea, short && { height: 44 }]}>
+        <Text style={s.brand}>
+          CUE<Text style={{ color: "#ffd05b" }}>MASTER</Text>
+        </Text>
         {!short && <Text style={s.tagline}>THE NEXT SHOT IS YOURS</Text>}
       </View>
-      <View style={[s.modeArea, short && { height: 106 }]}>
-        <ScrollView
-          ref={rail}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          directionalLockEnabled
-          snapToInterval={tileWidth + 14}
-          decelerationRate="fast"
-          onContentSizeChange={(w) => setContent(w)}
-          onScroll={(e) => setX(e.nativeEvent.contentOffset.x)}
-          scrollEventThrottle={32}
-          contentContainerStyle={s.modeRail}
-        >
-          {modes.map((m) => (
-            <Pressable
-              key={m.title}
+
+      <ScrollView
+        ref={rail}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        directionalLockEnabled
+        snapToInterval={step}
+        decelerationRate="fast"
+        onContentSizeChange={(w) => setContent(w)}
+        onScroll={(e) => setX(e.nativeEvent.contentOffset.x)}
+        scrollEventThrottle={32}
+        style={[s.modeArea, short && { maxHeight: 118 }]}
+        contentContainerStyle={s.modeRail}
+      >
+        {modes.map((m, i) => (
+          <Enter key={m.title} index={i}>
+            <Press
+              scale={0.97}
               accessibilityRole="button"
-              accessibilityLabel={m.title}
+              accessibilityLabel={`${m.title}. ${m.caption}`}
               onPress={m.action}
-              style={({ pressed }) => [
+              style={[
                 s.tile,
-                short && { height: 94 },
-                {
-                  width: tileWidth,
-                  borderColor: m.edge,
-                  transform: [{ scale: pressed ? 0.97 : 1 }],
-                },
+                short && { height: 106 },
+                { width: tileWidth, borderColor: "#ffffff1a" },
               ]}
             >
-              <LinearGradient colors={m.colors} style={s.tileFill}>
-                <Feather
-                  name={m.icon}
-                  size={22}
-                  color="#ffffff"
-                  style={s.modeIcon}
-                />
-                <Text style={s.modeTitle}>{m.title}</Text>
-                <View style={s.captionRow}>
-                  <Text style={s.caption}>{m.caption}</Text>
-                  <Feather name="chevron-right" color="#eafaf6" size={16} />
-                </View>
-              </LinearGradient>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
-      <View style={[s.dock, short && { minHeight: 72, maxHeight: 72 }]}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={
-            gifted ? "Daily gift collected" : "Collect daily gift"
-          }
-          disabled={p.busy || gifted}
-          onPress={p.onGift}
-          style={[s.gift, gifted && { opacity: 0.65 }]}
-        >
-          <LinearGradient colors={["#a76e0b", "#775005"]} style={s.giftFill}>
-            <Feather
-              name={gifted ? "check" : "gift"}
-              color="#fff0bf"
-              size={26}
-            />
-          </LinearGradient>
-          <View>
-            <Text style={s.smallTitle}>
-              {gifted ? "Collected" : "Daily gift"}
-            </Text>
-            <Text style={s.smallCopy}>
-              {gifted ? "See you tomorrow" : "+100 coins"}
-            </Text>
-          </View>
-          {!gifted && <View style={s.dot} />}
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="View practice progress"
-          onPress={() => p.onPage("practice")}
-          style={s.progressCard}
-        >
-          <View style={s.progressHead}>
-            <Feather name="target" size={15} color="#83d7ba" />
-            <Text style={s.smallTitle}>Practice journey</Text>
-            <Text style={s.progressCount}>{done}/6</Text>
-          </View>
-          <View style={s.pips}>
-            {p.catalog.challenges.map((c) => (
+              <LinearGradient
+                pointerEvents="none"
+                colors={["#0d2537", "#061521", "#020a11"]}
+                locations={[0, 0.5, 1]}
+                style={StyleSheet.absoluteFill}
+              />
+              <LinearGradient
+                pointerEvents="none"
+                colors={[`${m.accent}52`, `${m.accent}14`, "#00000000"]}
+                start={{ x: 1, y: 0 }}
+                end={{ x: 0.05, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+              <View pointerEvents="none" style={s.topLight} />
               <View
-                key={c.id}
                 style={[
-                  s.pip,
-                  p.player.completed.includes("practice:" + c.id) && {
-                    backgroundColor: "#79c5a1",
+                  s.chip,
+                  {
+                    backgroundColor: `${m.accent}24`,
+                    borderColor: `${m.accent}66`,
+                    shadowColor: m.accent,
                   },
                 ]}
-              />
-            ))}
-          </View>
-          <Text style={s.smallCopy} numberOfLines={1}>
-            {next
-              ? `${next.name} · Level ${next.level}`
-              : "All launch tables unlocked"}
-          </Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Explore CueMaster Masters"
-          onPress={() =>
-            p.onEvent(p.catalog.tournaments.find((t) => t.kind === "crypto")!)
+              >
+                <LinearGradient
+                  pointerEvents="none"
+                  colors={["#ffffff26", "#ffffff00"]}
+                  style={StyleSheet.absoluteFill}
+                />
+                <Feather name={m.icon} size={19} color={m.accent} />
+              </View>
+              <View style={{ gap: 4 }}>
+                <Text style={s.tileTitle}>{m.title}</Text>
+                <Text style={s.tileCaption}>{m.caption}</Text>
+              </View>
+            </Press>
+          </Enter>
+        ))}
+      </ScrollView>
+
+      <View style={s.dock}>
+        <Quick
+          icon={gifted ? "check" : "gift"}
+          label={gifted ? "Collected" : "Daily gift"}
+          badge={!gifted}
+          disabled={p.busy || gifted}
+          onPress={p.onGift}
+        />
+        <Quick
+          icon="gift"
+          label={
+            p.player.crates
+              ? `${p.player.crates} crate${p.player.crates === 1 ? "" : "s"}`
+              : "Crates"
           }
-          style={s.special}
-        >
-          <Feather name="award" size={30} color="#e9c883" />
-          <View>
-            <Text style={s.specialKicker}>USDC SPECIAL · UPCOMING</Text>
-            <Text style={s.smallTitle}>CueMaster Masters</Text>
-          </View>
-          <Feather name="chevron-right" size={16} color="#dfc592" />
-        </Pressable>
-      </View>
-      <View style={s.pager}>
-        <Text style={s.equipped}>{p.selected.name.toUpperCase()}</Text>
-        <View style={s.pagerCenter}>
+          badge={!!p.player.crates}
+          onPress={p.onRewards}
+        />
+        <Quick
+          icon="crosshair"
+          label={`Drills ${done}/6`}
+          onPress={() => p.onPage("practice")}
+        />
+        <Quick
+          icon="award"
+          label={open ? "Event open" : "Events"}
+          badge={!!open}
+          onPress={() => p.onPage("events")}
+        />
+        <Quick
+          icon="grid"
+          label={p.selected.name}
+          onPress={() => p.onPage("tables")}
+        />
+        <View style={s.pager}>
           {Array.from({ length: pageCount }, (_, i) => (
-            <View
-              key={i}
-              style={[
-                s.pageDot,
-                (x >= content - width - 3
-                  ? pageCount - 1
-                  : Math.min(
-                      pageCount - 1,
-                      Math.round(x / (tileWidth + 14)),
-                    )) === i && { backgroundColor: "#d5b775", width: 18 },
-              ]}
-            />
+            <View key={i} style={[s.dot, page === i && s.dotOn]} />
           ))}
+          <IconButton
+            icon="chevron-left"
+            label="Previous modes"
+            disabled={x < 3}
+            onPress={() =>
+              rail.current?.scrollTo({
+                x: Math.max(0, x - step),
+                animated: true,
+              })
+            }
+          />
+          <IconButton
+            icon="chevron-right"
+            label="More modes"
+            disabled={x >= content - width - 3}
+            onPress={() =>
+              rail.current?.scrollTo({
+                x: Math.min(content - width, x + step),
+                animated: true,
+              })
+            }
+          />
         </View>
-        <IconButton
-          icon="chevron-left"
-          label="Previous modes"
-          disabled={x < 3}
-          onPress={() =>
-            rail.current?.scrollTo({
-              x: Math.max(0, x - tileWidth - 14),
-              animated: true,
-            })
-          }
-        />
-        <IconButton
-          icon="chevron-right"
-          label="More modes"
-          disabled={x >= content - width - 3}
-          onPress={() =>
-            rail.current?.scrollTo({
-              x: Math.min(content - width, x + tileWidth + 14),
-              animated: true,
-            })
-          }
-        />
       </View>
     </View>
   );
 }
+
+function Quick({
+  icon,
+  label,
+  badge = false,
+  disabled = false,
+  onPress,
+}: {
+  icon: Icon;
+  label: string;
+  badge?: boolean;
+  disabled?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Press
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      outer={{ minWidth: 56 }}
+      style={[s.quick, disabled && { opacity: 0.45 }]}
+    >
+      <Pulse active={badge && !disabled} style={s.quickIcon}>
+        <LinearGradient
+          pointerEvents="none"
+          colors={["#1d4160", "#0a1e2e", "#050f18"]}
+          style={[StyleSheet.absoluteFill, { borderRadius: 23 }]}
+        />
+        <View pointerEvents="none" style={s.quickLight} />
+        <Feather name={icon} size={18} color="#eef5fb" />
+        {badge && <View style={s.badge} />}
+      </Pulse>
+      <Text style={s.quickLabel} numberOfLines={1}>
+        {label}
+      </Text>
+    </Press>
+  );
+}
+
 const s = StyleSheet.create({
-  root: { flex: 1, minHeight: 0, justifyContent: "space-between" },
-  brandArea: {
-    flex: 1,
-    minHeight: 68,
-    maxHeight: 155,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  brandRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  root: { flex: 1, minHeight: 0, justifyContent: "center", gap: 16 },
+  brandArea: { alignItems: "center", gap: 6 },
   brand: {
-    fontSize: 28,
-    fontWeight: "800",
-    fontStyle: "normal",
+    fontSize: 22,
+    fontWeight: "900",
+    letterSpacing: 4,
+    color: "#fffdf3",
+    textShadowColor: "#00000088",
+    textShadowOffset: { width: 0, height: 2 },
+    textShadowRadius: 8,
+  },
+  tagline: {
+    fontSize: 9,
     letterSpacing: 3,
-    color: "#f5f1dc",
-  },
-  tagline: { fontSize: 10, letterSpacing: 3, color: "#b9c8bd", marginTop: 7 },
-  modeArea: { height: 136 },
-  modeRail: { paddingHorizontal: 24, paddingVertical: 6, gap: 14 },
-  tile: {
-    height: 124,
-    borderWidth: 1,
-    borderRadius: 10,
-    overflow: "hidden",
-    boxShadow: "0 3px 12px #00000024",
-  },
-  tileFill: {
-    flex: 1,
-    justifyContent: "center",
-    paddingHorizontal: 18,
-    overflow: "hidden",
-  },
-  modeIcon: { marginBottom: 10, opacity: 1 },
-  modeTitle: {
-    color: "#f8fff9",
-    fontSize: 20,
-    fontWeight: "800",
-  },
-  captionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: 9,
-  },
-  caption: {
-    fontSize: 10,
+    color: "#8fb0c4",
     fontWeight: "700",
-    color: "#e0ece6",
-    letterSpacing: 0.6,
+  },
+  modeArea: { maxHeight: 150, flexGrow: 0 },
+  modeRail: { paddingHorizontal: 26, gap: 12, alignItems: "center" },
+  tile: {
+    height: 138,
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    justifyContent: "space-between",
+    overflow: "hidden",
+    backgroundColor: "#04121df2",
+    shadowColor: "#000",
+    shadowOpacity: 0.55,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 8,
+  },
+  // A one-pixel lit edge along the top: the cheapest way to read as a raised surface.
+  topLight: {
+    position: "absolute",
+    top: 0,
+    left: 12,
+    right: 12,
+    height: 1,
+    backgroundColor: "#ffffff38",
+  },
+  chip: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+    shadowOpacity: 0.5,
+    shadowRadius: 9,
+    shadowOffset: { width: 0, height: 0 },
+  },
+  tileTitle: { color: "#fffdf3", fontSize: 17, fontWeight: "800" },
+  tileCaption: {
+    color: "#93b3c8",
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 1.2,
   },
   dock: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 14,
-    paddingHorizontal: 24,
-    flex: 1,
-    minHeight: 78,
-    maxHeight: 115,
+    gap: 18,
+    paddingHorizontal: 26,
   },
-  gift: { flexDirection: "row", gap: 10, alignItems: "center", minHeight: 54 },
-  giftFill: {
-    height: 48,
-    width: 48,
-    borderRadius: 12,
+  quick: { alignItems: "center", gap: 6, minWidth: 56 },
+  quickIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#81775c",
+    borderColor: "#ffffff2b",
+    backgroundColor: "#081b2ad9",
+    overflow: "hidden",
+    shadowColor: "#000",
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 6,
   },
-  smallTitle: { fontSize: 12, fontWeight: "800", color: "#f1ecd9" },
-  smallCopy: { fontSize: 11, color: "#deefff", marginTop: 5 },
-  dot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: "#f4d071",
+  quickLight: {
     position: "absolute",
-    top: 0,
-    left: 44,
+    top: 1,
+    left: 12,
+    right: 12,
+    height: 1,
+    borderRadius: 1,
+    backgroundColor: "#ffffff3d",
   },
-  progressCard: {
-    width: 205,
-    padding: 12,
-    backgroundColor: "#081916b8",
+  badge: {
+    position: "absolute",
+    top: 2,
+    right: 4,
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: "#ffd05b",
     borderWidth: 1,
-    borderColor: "#73948538",
-    borderRadius: 12,
+    borderColor: "#06131f",
   },
-  progressHead: { flexDirection: "row", alignItems: "center", gap: 7 },
-  progressCount: { fontSize: 10, color: "#89d0ad", marginLeft: "auto" },
-  pips: { flexDirection: "row", gap: 4, marginTop: 10 },
-  pip: { height: 4, flex: 1, borderRadius: 2, backgroundColor: "#ffffff20" },
-  special: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 9,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: "#cba35e65",
-    borderRadius: 12,
-    backgroundColor: "#1b251bbd",
-  },
-  specialKicker: {
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 1,
-    color: "#d7b66b",
-    marginBottom: 6,
-  },
+  quickLabel: { color: "#a9c4d6", fontSize: 10, fontWeight: "700" },
   pager: {
-    height: 44,
-    paddingHorizontal: 18,
     flexDirection: "row",
     alignItems: "center",
+    gap: 6,
+    marginLeft: "auto",
   },
-  equipped: { fontSize: 10, letterSpacing: 1.2, color: "#daf1fb" },
-  pagerCenter: {
-    flex: 1,
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 5,
-  },
-  pageDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: "#ffffff38",
-  },
+  dot: { width: 5, height: 5, borderRadius: 3, backgroundColor: "#ffffff30" },
+  dotOn: { width: 16, backgroundColor: "#ffd05b" },
 });

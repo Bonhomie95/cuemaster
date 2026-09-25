@@ -140,3 +140,9 @@ small {
     padding: 16px;
   }
 }
+
+button.danger {
+  background: #5a1420;
+  border-color: #93313f;
+  color: #ffdede;
+}

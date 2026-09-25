@@ -1,1 +1,1 @@
-export {default} from './src/app/Club';
+export { default } from "./src/app/Club";

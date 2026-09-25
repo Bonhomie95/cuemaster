@@ -47,6 +47,10 @@ try {
       TEST_API_URL: base,
       TEST_MONGODB_URI: uri,
       TEST_MONGODB_DB: dbName,
+      // Pin the feature switches so a developer's own .env cannot change what the suites assert.
+      ADS_PROVIDER: "admob-test",
+      STORE_BILLING: "",
+      NODE_ENV: "test",
     };
     server = spawn(process.execPath, ["--import", "tsx", "src/index.ts"], {
       cwd,

@@ -1,3 +1,4 @@
+const { usingTestIds } = require("./ads.cjs");
 function assertReleaseConfig(env) {
   const required = [
     "EXPO_PUBLIC_API_URL",
@@ -30,5 +31,11 @@ function assertReleaseConfig(env) {
   }
   if (!/^[0-9a-f-]{36}$/i.test(env.EAS_PROJECT_ID))
     throw Error("Set the real EAS project ID before building for stores.");
+  // Google's public test units serve adverts but earn nothing and are not allowed in a
+  // published build. Shipping them is a silent revenue loss and an AdMob policy problem.
+  if (usingTestIds())
+    throw Error(
+      'Replace the "react-native-google-mobile-ads" identifiers in app.json with your own AdMob app and rewarded unit ids; Google\'s test identifiers cannot be published.',
+    );
 }
 module.exports = { assertReleaseConfig };

@@ -1,8 +1,12 @@
 import AccountCenter from "./AccountCenter";
+import Rewards from "./Rewards";
+import { Press, Enter, CountUp, PageFade, Pulse } from "./motion";
+import { celebrate } from "./feedback";
 import MatchSearch from "./MatchSearch";
 import { CpuOpponent } from "../game/cpu";
 import CueShop from "./CueShop";
 import * as Crypto from "expo-crypto";
+import Constants from "expo-constants";
 import MatchVenues from "./MatchVenues";
 import { localWinner } from "../game/localMatch";
 import React, { useEffect, useRef, useState } from "react";
@@ -19,12 +23,14 @@ import {
   ActivityIndicator,
   useWindowDimensions,
   Platform,
+  Linking,
 } from "react-native";
 import {
   SafeAreaProvider,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
+import Feather from "@expo/vector-icons/Feather";
 import { StatusBar } from "expo-status-bar";
 import * as SplashScreen from "expo-splash-screen";
 import {
@@ -56,6 +62,7 @@ type Page =
   | "matches"
   | "cues"
   | "wallet"
+  | "rewards"
   | "leaderboard"
   | "blocked";
 type Launch = {
@@ -86,22 +93,82 @@ function Action({
   disabled?: boolean;
 }) {
   return (
-    <Pressable
+    <Press
       accessibilityRole="button"
       accessibilityLabel={label}
       disabled={disabled}
       onPress={onPress}
-      style={({ pressed }) => [
-        u.action,
-        secondary && u.secondary,
-        disabled && { opacity: 0.4 },
-        pressed && { opacity: 0.7 },
-      ]}
+      style={[u.action, secondary && u.secondary, disabled && { opacity: 0.4 }]}
     >
       <Text style={[u.actionText, secondary && { color: "#e4ecf4" }]}>
         {label}
       </Text>
-    </Pressable>
+    </Press>
+  );
+}
+/**
+ * One tappable row: an icon chip, a label, an optional second line and a trailing chevron.
+ * Used for in-app navigation and for the privacy, terms, support and deletion pages that
+ * both stores require to be reachable from inside the app.
+ */
+function NavRow({
+  icon,
+  label,
+  detail,
+  url,
+  danger = false,
+  onPress,
+}: {
+  icon: React.ComponentProps<typeof Feather>["name"];
+  label: string;
+  detail?: string;
+  url?: string;
+  danger?: boolean;
+  onPress?: () => void;
+}) {
+  const [failed, setFailed] = useState(false);
+  const external = !onPress;
+  const disabled = external && !url;
+  const tint = danger ? "#ff9b8a" : external ? "#9fc0d6" : "#ffd05b";
+  return (
+    <Press
+      accessibilityRole={external ? "link" : "button"}
+      accessibilityLabel={external ? `${label}. Opens in your browser.` : label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={() => {
+        if (onPress) return onPress();
+        setFailed(false);
+        if (url) Linking.openURL(url).catch(() => setFailed(true));
+      }}
+      style={[
+        u.navRow,
+        danger && { borderColor: "#7a3a35" },
+        disabled && { opacity: 0.45 },
+      ]}
+    >
+      <View style={[u.navChip, danger && { borderColor: "#7a3a35" }]}>
+        <Feather name={icon} size={16} color={tint} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={[u.navLabel, danger && { color: "#ffcfc6" }]}>
+          {label}
+        </Text>
+        {!!(failed || detail) && (
+          <Text
+            accessibilityRole={failed ? "alert" : undefined}
+            style={[u.navDetail, failed && { color: "#ffb6b6" }]}
+          >
+            {failed ? "Could not open this page." : detail}
+          </Text>
+        )}
+      </View>
+      <Feather
+        name={external ? "external-link" : "chevron-right"}
+        size={15}
+        color="#7f9bb0"
+      />
+    </Press>
   );
 }
 function Tag({
@@ -131,7 +198,11 @@ export default function Club() {
 }
 function ClubBody() {
   const insets = useSafeAreaInsets();
-  const { width, height } = useWindowDimensions();
+  const win = useWindowDimensions();
+  // The app is landscape-locked, but on device the window can still report portrait numbers
+  // during and after rotation, which squashed the club into a 16:9 band. Trust the orientation.
+  const width = Math.max(win.width, win.height),
+    height = Math.min(win.width, win.height);
   const small = width < 850,
     compact = height < 550;
   const entryRequest = useRef<{ venueId: string; id: string } | null>(null);
@@ -159,6 +230,8 @@ function ClubBody() {
     [deleting, setDeleting] = useState(false),
     [deleteText, setDeleteText] = useState("");
   const [verificationError, setVerificationError] = useState("");
+  const [levelUp, setLevelUp] = useState<number | null>(null);
+  const lastLevel = useRef<number | null>(null);
   const retryVerification = useRef<(() => void) | null>(null);
   const [name, setName] = useState(""),
     [country, setCountry] = useState(""),
@@ -200,6 +273,17 @@ function ClubBody() {
       setCountry(player.country);
       setAvatar(player.avatar);
     }
+    // A level is the one piece of progress worth stopping for. Sign-in and sign-out set the
+    // baseline silently; only a level gained while playing is celebrated.
+    if (!player) {
+      lastLevel.current = null;
+      return;
+    }
+    if (lastLevel.current !== null && player.level > lastLevel.current) {
+      setLevelUp(player.level);
+      celebrate();
+    }
+    lastLevel.current = player.level;
   }, [player]);
   useEffect(() => {
     launchRef.current = launch;
@@ -376,11 +460,13 @@ function ClubBody() {
         winner === null
           ? "Match forfeited. Entry fee was not refunded."
           : winner === 0
-            ? "You won the match."
+            ? result.crate
+              ? `You won the match. A ${result.crate.name.toLowerCase()} is waiting in Rewards.`
+              : "You won the match. Your crate slots are full — open one to make room."
             : `${launch.opponent?.name || "Player 2"} won the match.`,
       );
       leaveGame();
-      setPage("matches");
+      setPage(winner === 0 && result.crate ? "rewards" : "matches");
     });
   const equip = (v: Venue) =>
     work(async () => {
@@ -471,6 +557,29 @@ function ClubBody() {
       </View>
     </Modal>
   );
+  const levelModal = (
+    <Modal
+      visible={levelUp !== null}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setLevelUp(null)}
+    >
+      <View style={u.scrim}>
+        <Enter style={[u.eventModal, u.levelCard]}>
+          <Pulse style={u.levelBadge}>
+            <Text style={u.levelNumber}>{levelUp}</Text>
+          </Pulse>
+          <Text style={u.modalTitle}>Level {levelUp}</Text>
+          <Text style={u.body}>
+            {catalog?.venues.find((v) => v.level === levelUp)
+              ? `${catalog.venues.find((v) => v.level === levelUp)!.name} is open. A new room, a new table.`
+              : "Your rating is climbing. Keep the run going."}
+          </Text>
+          <Action label="Keep playing" onPress={() => setLevelUp(null)} />
+        </Enter>
+      </View>
+    </Modal>
+  );
   const rewardModal = (
     <Modal visible={reward !== null} transparent animationType="fade">
       <View style={u.scrim}>
@@ -547,6 +656,7 @@ function ClubBody() {
         />
         {topMessage}
         {rewardModal}
+        {levelModal}
         {verificationModal}
       </View>
     );
@@ -605,18 +715,20 @@ function ClubBody() {
         <ImageBackground
           source={welcome}
           imageStyle={{ width: "100%", height: "100%" }}
+          resizeMode="cover"
           style={u.fill}
         >
           <LinearGradient
-            colors={["#06111bfa", "#07111be0", "#07111b25"]}
+            colors={["#081e30f5", "#081e30d9", "#081e3055", "#081e3000"]}
+            locations={[0, 0.36, 0.62, 0.85]}
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
             style={[
               u.welcome,
               {
-                paddingTop: insets.top + 24,
-                paddingBottom: insets.bottom + 24,
-                paddingLeft: insets.left + (small ? 26 : 64),
+                paddingTop: insets.top + (compact ? 14 : 28),
+                paddingBottom: insets.bottom + (compact ? 12 : 24),
+                paddingLeft: insets.left + (small ? 28 : 56),
               },
             ]}
           >
@@ -624,24 +736,23 @@ function ClubBody() {
               contentContainerStyle={{
                 flexGrow: 1,
                 justifyContent: "center",
-                maxWidth: 470,
+                maxWidth: 420,
                 paddingRight: 24,
               }}
             >
-              <Text style={u.logo}>
-                CUE<Text style={{ color: "#e8c589" }}>MASTER</Text>
-              </Text>
+              <View style={u.brandRow}>
+                <View style={u.brandBall} />
+                <Text style={u.logo}>
+                  CUE<Text style={{ color: "#ffd05b" }}>MASTER</Text>
+                </Text>
+              </View>
               <Text
-                style={[
-                  u.welcomeTitle,
-                  compact && { fontSize: 34, marginTop: 16 },
-                ]}
+                accessibilityRole="header"
+                style={[u.welcomeTitle, compact && u.welcomeTitleCompact]}
               >
-                Your next{"\n"}great shot.
+                Real physics.{"\n"}Real rivals.
               </Text>
-              <Text style={u.welcomeCopy}>
-                Find your rhythm. Earn your table.{"\n"}Make your name.
-              </Text>
+              <Text style={u.welcomeKicker}>PLAY FOR YOUR FLAG</Text>
               <Pressable
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: adult }}
@@ -649,19 +760,42 @@ function ClubBody() {
                 onPress={() => setAdult(!adult)}
                 style={u.checkRow}
               >
-                <Text style={u.checkbox}>{adult ? "☑" : "□"}</Text>
-                <Text style={u.body}>I am 18 or older</Text>
+                <Feather
+                  name={adult ? "check-square" : "square"}
+                  size={22}
+                  color={adult ? "#24dbb3" : "#ffd05b"}
+                />
+                <Text style={u.checkText}>I am 18 or older</Text>
               </Pressable>
-              <Action
-                label={busy ? "Opening…" : "Enter as guest"}
-                onPress={guest}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Enter as guest"
+                accessibilityState={{ disabled: busy }}
                 disabled={busy}
-              />
+                onPress={guest}
+                style={({ pressed }) => [
+                  u.cta,
+                  pressed && { transform: [{ scale: 0.98 }] },
+                  busy && { opacity: 0.6 },
+                ]}
+              >
+                <LinearGradient
+                  colors={["#ffe08a", "#ffc53d"]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 0, y: 1 }}
+                  style={u.ctaFill}
+                >
+                  <Text style={u.ctaText}>
+                    {busy ? "Opening the club…" : "Play as guest"}
+                  </Text>
+                  <Feather name="arrow-right" size={20} color="#10233a" />
+                </LinearGradient>
+              </Pressable>
               <Text style={u.fine}>
-                Your guest progress saves on this device. Connect an account to
-                keep it across devices.
+                Progress saves on this device. Link an account any time to keep
+                it everywhere.
               </Text>
-              <View style={[u.row, { flexWrap: "wrap" }]}>
+              <View style={[u.row, { flexWrap: "wrap", gap: 10 }]}>
                 <ProviderButton
                   provider="google"
                   onPress={() => login("google")}
@@ -675,9 +809,29 @@ function ClubBody() {
                   />
                 )}
               </View>
-              <Text style={u.fine}>Sign in or register with your account.</Text>
             </ScrollView>
           </LinearGradient>
+          {width >= 780 && (
+            <View
+              style={[
+                u.welcomeChips,
+                { top: insets.top + 22, right: insets.right + 22 },
+              ]}
+              accessible
+              accessibilityLabel="Real cushion physics. Six city venues. Verified challenges."
+            >
+              {[
+                ["activity", "Real cushion physics"],
+                ["map-pin", "6 city venues"],
+                ["award", "Verified challenges"],
+              ].map(([icon, label]) => (
+                <View key={label} style={u.welcomeChip}>
+                  <Feather name={icon as any} size={13} color="#ffd05b" />
+                  <Text style={u.welcomeChipText}>{label}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </ImageBackground>
         {topMessage}
       </View>
@@ -690,15 +844,8 @@ function ClubBody() {
         style={[
           u.shell,
           {
-            flexGrow: 0,
-            flexShrink: 0,
-            flexBasis: "auto",
             width: "100%",
             height: Math.min(height, (width * 9) / 16),
-            paddingTop: insets.top,
-            paddingBottom: insets.bottom,
-            paddingLeft: insets.left,
-            paddingRight: insets.right,
           },
         ]}
       >
@@ -711,13 +858,31 @@ function ClubBody() {
           colors={["#07151033", "#08191112", "#04110d88"]}
           style={StyleSheet.absoluteFill}
         />
+        {/* Vignette: dark edges, lit centre, so the room reads as a lamp-lit space
+            rather than a flat backdrop. Two crossed gradients beat a blurred PNG. */}
+        <LinearGradient
+          pointerEvents="none"
+          colors={["#020a10cc", "#020a1000", "#020a1000", "#020a10cc"]}
+          locations={[0, 0.22, 0.78, 1]}
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 1, y: 0.5 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <LinearGradient
+          pointerEvents="none"
+          colors={["#020a10a8", "#020a1000", "#020a10d8"]}
+          locations={[0, 0.42, 1]}
+          style={StyleSheet.absoluteFill}
+        />
         <StatusBar hidden />
         <View
           style={[
             u.topbar,
             {
-              height: 56,
-              paddingHorizontal: 18,
+              height: 56 + insets.top,
+              paddingTop: insets.top,
+              paddingLeft: 18 + insets.left,
+              paddingRight: 18 + insets.right,
               backgroundColor: "#081512df",
               borderBottomColor: "#dcc28c30",
             },
@@ -772,285 +937,366 @@ function ClubBody() {
               onPress={() => setPage("events")}
             />
           </View>
-          <View style={[u.topRight, { gap: 16 }]}>
-            <Text style={u.coins}>◉ {money(player.coins)}</Text>
+          <View style={[u.topRight, { gap: 14 }]}>
+            {!!player.rubies && (
+              <View style={u.currency}>
+                <Feather name="hexagon" size={14} color="#ff5f6d" />
+                <CountUp value={player.rubies} style={u.rubies} />
+              </View>
+            )}
+            <View style={u.currency}>
+              <Text style={u.coins}>◉</Text>
+              <CountUp value={player.coins} style={u.coins} />
+            </View>
           </View>
         </View>
-        {page === "wallet" || page === "leaderboard" || page === "blocked" ? (
-          <AccountCenter
-            key={page}
-            area={page}
-            player={player}
-            onClose={() => setPage("profile")}
-          />
-        ) : page === "cues" ? (
-          <CueShop
-            player={player}
-            busy={busy}
-            onClose={() => setPage("home")}
-            onEquip={(cueId) =>
-              work(async () => {
-                setPlayer(await api<Player>("/me/cue", "POST", { cueId }));
-                setToast("Cue equipped.");
-              })
-            }
-          />
-        ) : page === "matches" ? (
-          <MatchVenues
-            venues={catalog!.venues}
-            player={player}
-            busy={busy}
-            onEnter={(v, mode) => {
-              setToast("");
-              if (mode === "local") void enterLocal(v);
-              else setSearchVenue(v);
-            }}
-            onClose={() => setPage("home")}
-          />
-        ) : page !== "profile" ? (
-          <Lobby
-            key={page}
-            page={page}
-            player={player}
-            catalog={catalog!}
-            selected={selected!}
-            busy={busy}
-            onPage={setPage}
-            onPlay={() => setPage("matches")}
-            onCues={() => setPage("cues")}
-            onFree={() => openGame({ kind: "free", drill: "open" })}
-            onEquip={equip}
-            onChallenge={startChallenge}
-            onEvent={viewEvent}
-            onGift={() =>
-              work(async () => {
-                const result = await api("/me/daily", "POST");
-                setPlayer(result.player);
-                setToast(
-                  result.claimed
-                    ? "100 coins added to your balance."
-                    : "Already collected today.",
-                );
-              })
-            }
-          />
-        ) : (
-          <ScrollView
-            style={u.content}
-            contentContainerStyle={[u.contentInner, { padding: 20 }]}
-          >
-            {page === "profile" && (
-              <>
-                <Text style={u.kicker}>YOUR PLACE IN THE CLUB</Text>
-                <Text style={u.heading}>Player profile</Text>
-                <View
-                  style={[
-                    u.row,
-                    { alignItems: "flex-start", flexWrap: "wrap" },
-                  ]}
-                >
-                  <View style={[u.feature, { flex: 1, minWidth: 240 }]}>
-                    <View style={u.row}>
-                      <Image
-                        source={portraits[player.avatar]}
-                        style={u.profileAvatar}
-                      />
-                      <View>
-                        <Text style={u.cardTitle}>
-                          {player.name} {flag(player.country)}
-                        </Text>
-                        <Text style={u.body}>
-                          Level {player.level} ·{" "}
-                          {player.guest ? "Guest player" : "Connected account"}
-                        </Text>
-                        <Text style={u.rewardText}>{player.xp} XP</Text>
-                      </View>
-                    </View>
-                    <View style={u.progressTrack}>
-                      <View
-                        style={[
-                          u.progressFill,
-                          { width: `${player.xp % 100}%` },
-                        ]}
-                      />
-                    </View>
-                    <View style={u.stats}>
-                      <View>
-                        <Text style={u.statValue}>{player.stats.finishes}</Text>
-                        <Text style={u.fine}>CHALLENGES</Text>
-                      </View>
-                      <View>
-                        <Text style={u.statValue}>
-                          {
-                            catalog!.venues.filter(
-                              (v) => v.level <= player.level,
-                            ).length
-                          }
-                        </Text>
-                        <Text style={u.fine}>TABLES OPEN</Text>
-                      </View>
-                      <View>
-                        <Text style={u.statValue}>{money(player.coins)}</Text>
-                        <Text style={u.fine}>COINS</Text>
-                      </View>
-                    </View>
-                    <Text style={u.body}>
-                      Head-to-head · {player.stats.cpuWins || 0} wins ·{" "}
-                      {player.stats.cpuLosses || 0} losses ·{" "}
-                      {Math.round(
-                        (100 * (player.stats.cpuWins || 0)) /
-                          Math.max(
-                            1,
-                            (player.stats.cpuWins || 0) +
-                              (player.stats.cpuLosses || 0),
-                          ),
-                      )}
-                      % wins
-                    </Text>
-                    <Text style={u.body}>
-                      Current form · {Math.abs(player.stats.cpuStreak || 0)}{" "}
-                      {(player.stats.cpuStreak || 0) < 0 ? "losses" : "wins"} in
-                      a row
-                    </Text>
-                    <Text style={u.body}>
-                      Pass & play · {player.stats.localWins || 0} wins ·{" "}
-                      {player.stats.localLosses || 0} losses
-                    </Text>
-                    <Text style={u.fieldLabel}>PLAYER NAME</Text>
-                    <TextInput
-                      accessibilityLabel="Player name"
-                      value={name}
-                      onChangeText={setName}
-                      maxLength={24}
-                      style={u.input}
-                    />
-                    <Text style={u.fieldLabel}>COUNTRY · TWO-LETTER CODE</Text>
-                    <TextInput
-                      accessibilityLabel="Country code"
-                      value={country}
-                      onChangeText={(v) => setCountry(v.toUpperCase())}
-                      maxLength={2}
-                      autoCapitalize="characters"
-                      placeholder="NG, US, GB…"
-                      placeholderTextColor="#65758a"
-                      style={u.input}
-                    />
-                    <Text style={u.fieldLabel}>AVATAR</Text>
-                    <View style={u.row}>
-                      {portraits.map((p, i) => (
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={`Choose avatar ${i + 1}`}
-                          key={i}
-                          onPress={() => setAvatar(i)}
-                          style={[
-                            u.avatarChoice,
-                            avatar === i && { borderColor: "#e0be81" },
-                          ]}
-                        >
-                          <Image
-                            source={p}
-                            style={{ width: 56, height: 56, borderRadius: 28 }}
-                          />
-                        </Pressable>
-                      ))}
-                    </View>
-                    <Action
-                      label="Save profile"
-                      disabled={busy}
-                      onPress={() =>
-                        work(async () => {
-                          setPlayer(
-                            await api<Player>("/me", "PATCH", {
-                              name,
-                              country,
-                              avatar,
-                            }),
-                          );
-                          setToast("Profile saved.");
-                        })
-                      }
-                    />
-                  </View>
-                  <View style={[u.feature, { flex: 1, minWidth: 240 }]}>
-                    <Text style={u.cardTitle}>Club & rewards</Text>
-                    <Action
-                      label="USDC rewards"
-                      onPress={() => setPage("wallet")}
-                    />
-                    <Action
-                      label="Leaderboard"
-                      onPress={() => setPage("leaderboard")}
-                    />
-                    <Action
-                      secondary
-                      label="Blocked players"
-                      onPress={() => setPage("blocked")}
-                    />
-                    <View style={u.divider} />
-                    <Text style={u.cardTitle}>Keep your progress.</Text>
-                    <Text style={u.body}>
-                      {player.guest
-                        ? "Connect a new Google or Apple account to preserve this guest profile. Signing into an existing account loads its saved progress."
-                        : "Your progress is stored with your connected account."}
-                    </Text>
-                    <View style={{ gap: 10, marginTop: 16 }}>
-                      <ProviderButton
-                        provider="google"
-                        connected={player.providers.includes("google")}
-                        disabled={busy}
-                        onPress={() => login("google")}
-                      />
-                      {(Platform.OS === "ios" || Platform.OS === "web") && (
-                        <ProviderButton
-                          provider="apple"
-                          connected={player.providers.includes("apple")}
-                          disabled={busy}
-                          onPress={() => login("apple")}
+        <PageFade
+          token={page}
+          style={{
+            flex: 1,
+            minHeight: 0,
+            paddingLeft: insets.left,
+            paddingRight: insets.right,
+            paddingBottom: insets.bottom,
+          }}
+        >
+          {page === "rewards" ? (
+            <Rewards
+              player={player}
+              onPlayer={setPlayer}
+              onClose={() => setPage("profile")}
+            />
+          ) : page === "wallet" ||
+            page === "leaderboard" ||
+            page === "blocked" ? (
+            <AccountCenter
+              key={page}
+              area={page}
+              player={player}
+              onClose={() => setPage("profile")}
+            />
+          ) : page === "cues" ? (
+            <CueShop
+              player={player}
+              busy={busy}
+              onClose={() => setPage("home")}
+              onEquip={(cueId) =>
+                work(async () => {
+                  setPlayer(await api<Player>("/me/cue", "POST", { cueId }));
+                  setToast("Cue equipped.");
+                })
+              }
+            />
+          ) : page === "matches" ? (
+            <MatchVenues
+              venues={catalog!.venues}
+              player={player}
+              busy={busy}
+              onEnter={(v, mode) => {
+                setToast("");
+                if (mode === "local") void enterLocal(v);
+                else setSearchVenue(v);
+              }}
+              onClose={() => setPage("home")}
+            />
+          ) : page !== "profile" ? (
+            <Lobby
+              key={page}
+              page={page}
+              player={player}
+              catalog={catalog!}
+              selected={selected!}
+              busy={busy}
+              onPage={setPage}
+              onPlay={() => setPage("matches")}
+              onCues={() => setPage("cues")}
+              onFree={() => openGame({ kind: "free", drill: "open" })}
+              onRewards={() => setPage("rewards")}
+              onEquip={equip}
+              onChallenge={startChallenge}
+              onEvent={viewEvent}
+              onGift={() =>
+                work(async () => {
+                  const result = await api("/me/daily", "POST");
+                  setPlayer(result.player);
+                  setToast(
+                    result.claimed
+                      ? "100 coins added to your balance."
+                      : "Already collected today.",
+                  );
+                })
+              }
+            />
+          ) : (
+            <ScrollView
+              style={u.content}
+              contentContainerStyle={[u.contentInner, { padding: 20 }]}
+            >
+              {page === "profile" && (
+                <>
+                  <Text style={u.kicker}>YOUR PLACE IN THE CLUB</Text>
+                  <Text style={u.heading}>Player profile</Text>
+                  <View
+                    style={[
+                      u.row,
+                      { alignItems: "flex-start", flexWrap: "wrap" },
+                    ]}
+                  >
+                    <View style={[u.feature, { flex: 1, minWidth: 240 }]}>
+                      <View style={u.row}>
+                        <Image
+                          source={portraits[player.avatar]}
+                          style={u.profileAvatar}
                         />
-                      )}
+                        <View>
+                          <Text style={u.cardTitle}>
+                            {player.name} {flag(player.country)}
+                          </Text>
+                          <Text style={u.body}>
+                            Level {player.level} ·{" "}
+                            {player.guest
+                              ? "Guest player"
+                              : "Connected account"}
+                          </Text>
+                          <Text style={u.rewardText}>{player.xp} XP</Text>
+                        </View>
+                      </View>
+                      <View style={u.progressTrack}>
+                        <View
+                          style={[
+                            u.progressFill,
+                            { width: `${player.xp % 100}%` },
+                          ]}
+                        />
+                      </View>
+                      <View style={u.stats}>
+                        <View>
+                          <Text style={u.statValue}>
+                            {player.stats.finishes}
+                          </Text>
+                          <Text style={u.fine}>CHALLENGES</Text>
+                        </View>
+                        <View>
+                          <Text style={u.statValue}>
+                            {
+                              catalog!.venues.filter(
+                                (v) => v.level <= player.level,
+                              ).length
+                            }
+                          </Text>
+                          <Text style={u.fine}>TABLES OPEN</Text>
+                        </View>
+                        <View>
+                          <Text style={u.statValue}>{money(player.coins)}</Text>
+                          <Text style={u.fine}>COINS</Text>
+                        </View>
+                      </View>
+                      <Text style={u.body}>
+                        Head-to-head · {player.stats.cpuWins || 0} wins ·{" "}
+                        {player.stats.cpuLosses || 0} losses ·{" "}
+                        {Math.round(
+                          (100 * (player.stats.cpuWins || 0)) /
+                            Math.max(
+                              1,
+                              (player.stats.cpuWins || 0) +
+                                (player.stats.cpuLosses || 0),
+                            ),
+                        )}
+                        % wins
+                      </Text>
+                      <Text style={u.body}>
+                        Current form · {Math.abs(player.stats.cpuStreak || 0)}{" "}
+                        {(player.stats.cpuStreak || 0) < 0 ? "losses" : "wins"}{" "}
+                        in a row
+                      </Text>
+                      <Text style={u.body}>
+                        Pass & play · {player.stats.localWins || 0} wins ·{" "}
+                        {player.stats.localLosses || 0} losses
+                      </Text>
+                      <Text style={u.fieldLabel}>PLAYER NAME</Text>
+                      <TextInput
+                        accessibilityLabel="Player name"
+                        value={name}
+                        onChangeText={setName}
+                        maxLength={24}
+                        style={u.input}
+                      />
+                      <Text style={u.fieldLabel}>
+                        COUNTRY · TWO-LETTER CODE
+                      </Text>
+                      <TextInput
+                        accessibilityLabel="Country code"
+                        value={country}
+                        onChangeText={(v) => setCountry(v.toUpperCase())}
+                        maxLength={2}
+                        autoCapitalize="characters"
+                        placeholder="NG, US, GB…"
+                        placeholderTextColor="#65758a"
+                        style={u.input}
+                      />
+                      <Text style={u.fieldLabel}>AVATAR</Text>
+                      <View style={u.row}>
+                        {portraits.map((p, i) => (
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`Choose avatar ${i + 1}`}
+                            key={i}
+                            onPress={() => setAvatar(i)}
+                            style={[
+                              u.avatarChoice,
+                              avatar === i && { borderColor: "#e0be81" },
+                            ]}
+                          >
+                            <Image
+                              source={p}
+                              style={{
+                                width: 56,
+                                height: 56,
+                                borderRadius: 28,
+                              }}
+                            />
+                          </Pressable>
+                        ))}
+                      </View>
+                      <Action
+                        label="Save profile"
+                        disabled={busy}
+                        onPress={() =>
+                          work(async () => {
+                            setPlayer(
+                              await api<Player>("/me", "PATCH", {
+                                name,
+                                country,
+                                avatar,
+                              }),
+                            );
+                            setToast("Profile saved.");
+                          })
+                        }
+                      />
                     </View>
-                    <View style={u.divider} />
-                    <Text style={u.cardTitle}>Your account, your choice.</Text>
-                    <Text style={u.body}>
-                      Guest access is tied to this device. Sign in before
-                      signing out if you want to keep access to your guest
-                      progress.
-                    </Text>
-                    <Action
-                      secondary
-                      label="Sign out"
-                      disabled={busy}
-                      onPress={() =>
-                        work(async () => {
-                          try {
-                            await api("/auth/logout", "POST");
-                          } catch (e) {
-                            if (!(e instanceof ApiError && e.status === 401))
-                              throw e;
-                          }
-                          await clearToken();
-                          setPlayer(null);
-                          setAdult(false);
-                        })
-                      }
-                    />
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Delete account"
-                      onPress={() => {
-                        setDeleteText("");
-                        setDeleting(true);
-                      }}
-                    >
-                      <Text style={u.danger}>Delete account</Text>
-                    </Pressable>
+                    <View style={[u.feature, { flex: 1, minWidth: 240 }]}>
+                      <Text style={u.cardTitle}>Club & rewards</Text>
+                      <NavRow
+                        icon="gift"
+                        label="Reward crates"
+                        detail={
+                          player.crates
+                            ? `${player.crates} crate${player.crates === 1 ? "" : "s"} waiting`
+                            : "Win a match to seal a crate"
+                        }
+                        onPress={() => setPage("rewards")}
+                      />
+                      <NavRow
+                        icon="award"
+                        label="Leaderboard"
+                        detail="Global and country rankings"
+                        onPress={() => setPage("leaderboard")}
+                      />
+                      <NavRow
+                        icon="credit-card"
+                        label="USDC rewards"
+                        detail="Payout address · payouts not active"
+                        onPress={() => setPage("wallet")}
+                      />
+                      <NavRow
+                        icon="slash"
+                        label="Blocked players"
+                        detail="Players hidden from your leaderboards"
+                        onPress={() => setPage("blocked")}
+                      />
+                      <View style={u.divider} />
+                      <Text style={u.cardTitle}>Keep your progress.</Text>
+                      <Text style={u.body}>
+                        {player.guest
+                          ? "Connect a new Google or Apple account to preserve this guest profile. Signing into an existing account loads its saved progress."
+                          : "Your progress is stored with your connected account."}
+                      </Text>
+                      <View style={{ gap: 10, marginTop: 16 }}>
+                        <ProviderButton
+                          provider="google"
+                          connected={player.providers.includes("google")}
+                          disabled={busy}
+                          onPress={() => login("google")}
+                        />
+                        {(Platform.OS === "ios" || Platform.OS === "web") && (
+                          <ProviderButton
+                            provider="apple"
+                            connected={player.providers.includes("apple")}
+                            disabled={busy}
+                            onPress={() => login("apple")}
+                          />
+                        )}
+                      </View>
+                      <View style={u.divider} />
+                      <Text style={u.cardTitle}>
+                        Your account, your choice.
+                      </Text>
+                      <Text style={u.body}>
+                        Guest access is tied to this device. Sign in before
+                        signing out if you want to keep access to your guest
+                        progress.
+                      </Text>
+                      <Action
+                        secondary
+                        label="Sign out"
+                        disabled={busy}
+                        onPress={() =>
+                          work(async () => {
+                            try {
+                              await api("/auth/logout", "POST");
+                            } catch (e) {
+                              if (!(e instanceof ApiError && e.status === 401))
+                                throw e;
+                            }
+                            await clearToken();
+                            setPlayer(null);
+                            setAdult(false);
+                          })
+                        }
+                      />
+                      <NavRow
+                        danger
+                        icon="trash-2"
+                        label="Delete account"
+                        detail="Permanent. Removes your profile and progress."
+                        onPress={() => {
+                          setDeleteText("");
+                          setDeleting(true);
+                        }}
+                      />
+                      <View style={u.divider} />
+                      <Text style={u.cardTitle}>Legal & support</Text>
+                      <NavRow
+                        icon="shield"
+                        label="Privacy policy"
+                        url={config.urls?.privacy}
+                      />
+                      <NavRow
+                        icon="file-text"
+                        label="Terms of service"
+                        url={config.urls?.terms}
+                      />
+                      <NavRow
+                        icon="life-buoy"
+                        label="Support"
+                        url={config.urls?.support}
+                      />
+                      <NavRow
+                        icon="external-link"
+                        label="Delete your account on the web"
+                        url={config.urls?.deleteAccount}
+                      />
+                      <Text style={u.fine}>
+                        CUEMASTER {version} · COINS ARE VIRTUAL ITEMS, NOT MONEY
+                      </Text>
+                    </View>
                   </View>
-                </View>
-              </>
-            )}
-          </ScrollView>
-        )}
+                </>
+              )}
+            </ScrollView>
+          )}
+        </PageFade>
         {topMessage}
         <Modal
           visible={!!abandoned}
@@ -1090,6 +1336,7 @@ function ClubBody() {
           </View>
         </Modal>
         {rewardModal}
+        {levelModal}
         <Modal
           transparent
           visible={locked !== null}
@@ -1257,9 +1504,36 @@ function ClubBody() {
     </View>
   );
 }
+const version = Constants.expoConfig?.version || "";
 const u = StyleSheet.create({
+  navRow: {
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#ffffff1c",
+    backgroundColor: "#081724b0",
+  },
+  navChip: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#ffffff1f",
+    backgroundColor: "#0d2536",
+  },
+  navLabel: { color: "#eaf2f8", fontSize: 14, fontWeight: "700" },
+  navDetail: { color: "#90aabd", fontSize: 11, marginTop: 2 },
   fill: { flex: 1, backgroundColor: "#101815" },
-  shell: { flex: 1, backgroundColor: "#101815" },
+  // No flex here: the club shell is explicitly sized. flex:1 sets flexBasis 0 (web collapses the
+  // box) and the "auto" override that used to fix that collapses it on native instead.
+  shell: { backgroundColor: "#101815", overflow: "hidden" },
   loading: {
     flex: 1,
     alignItems: "center",
@@ -1286,28 +1560,69 @@ const u = StyleSheet.create({
     letterSpacing: 1.7,
   },
   welcome: { flex: 1 },
+  brandRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  brandBall: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: "#fffdf3",
+    borderWidth: 3,
+    borderColor: "#ffd05b",
+  },
   welcomeTitle: {
-    fontSize: 58,
-    lineHeight: 64,
+    fontSize: 46,
+    lineHeight: 50,
+    fontWeight: "900",
+    letterSpacing: -1.5,
+    color: "#fffdf3",
+    marginTop: 22,
+  },
+  welcomeTitleCompact: { fontSize: 34, lineHeight: 38, marginTop: 12 },
+  welcomeKicker: {
+    color: "#ffd05b",
+    fontSize: 13,
     fontWeight: "800",
-    letterSpacing: -2,
-    color: "#f4f4ec",
-    marginTop: 35,
+    letterSpacing: 2.4,
+    marginTop: 8,
+    marginBottom: 10,
   },
-  welcomeCopy: {
-    color: "#bbc9d4",
-    fontSize: 16,
-    lineHeight: 25,
-    marginVertical: 20,
+  checkText: { color: "#fffdf3", fontSize: 15, fontWeight: "600" },
+  cta: {
+    borderRadius: 12,
+    overflow: "hidden",
+    marginTop: 2,
+    boxShadow: "0 6px 18px #ffc53d40",
   },
+  ctaFill: {
+    minHeight: 52,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    paddingHorizontal: 22,
+  },
+  ctaText: { fontSize: 17, fontWeight: "900", color: "#10233a" },
+  welcomeChips: { position: "absolute", flexDirection: "row", gap: 8 },
+  welcomeChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#081e30b3",
+    borderWidth: 1,
+    borderColor: "#ffffff22",
+  },
+  welcomeChipText: { color: "#fffdf3", fontSize: 12, fontWeight: "700" },
   body: { color: "#d4e8f6", fontSize: 12, lineHeight: 19 },
-  fine: { color: "#bad8ed", fontSize: 11, lineHeight: 15, marginTop: 4 },
+  fine: { color: "#d4e8f6", fontSize: 12, lineHeight: 16, marginTop: 8 },
   checkRow: {
     flexDirection: "row",
-    gap: 9,
+    gap: 10,
     alignItems: "center",
     minHeight: 44,
-    marginVertical: 6,
+    marginBottom: 4,
   },
   checkbox: { fontSize: 23, color: "#ffd05b" },
   row: { flexDirection: "row", gap: 14 },
@@ -1342,6 +1657,20 @@ const u = StyleSheet.create({
     borderBottomColor: "#1b2c3c",
   },
   topRight: { flexDirection: "row", alignItems: "center", gap: 25 },
+  currency: { flexDirection: "row", alignItems: "center", gap: 5 },
+  levelCard: { maxWidth: 420, padding: 30, gap: 14, alignItems: "center" },
+  levelBadge: {
+    width: 104,
+    height: 104,
+    borderRadius: 52,
+    borderWidth: 2,
+    borderColor: "#ffd05b",
+    backgroundColor: "#ffd05b1f",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  levelNumber: { color: "#ffd05b", fontSize: 44, fontWeight: "900" },
+  rubies: { color: "#ffd7db", fontSize: 15, fontWeight: "800" },
   coins: { color: "#ffd05b", fontSize: 14, fontWeight: "700" },
   identity: {
     flexDirection: "row",
@@ -1358,26 +1687,6 @@ const u = StyleSheet.create({
     borderColor: "#4f7163",
   },
   name: { fontSize: 12, fontWeight: "700", color: "#ecf1f6" },
-  main: { flex: 1, flexDirection: "row" },
-  nav: {
-    width: 80,
-    borderRightWidth: 1,
-    borderRightColor: "#1b2c3c",
-    paddingTop: 20,
-    gap: 10,
-    alignItems: "center",
-  },
-  navItem: {
-    width: 64,
-    height: 66,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-    borderRadius: 12,
-  },
-  navActive: { backgroundColor: "#d1b27313" },
-  navIcon: { fontSize: 24, color: "#d4e8f6" },
-  navLabel: { fontSize: 11, color: "#d4e8f6" },
   content: { flex: 1 },
   contentInner: {
     padding: 30,

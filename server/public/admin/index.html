@@ -61,7 +61,7 @@
           <button data-page="tournaments">Tournaments</button
           ><button data-page="players">Players</button
           ><button data-page="reports">Reports</button
-          ><button data-page="staff">Administrators</button>
+          ><button data-page="staff">Administrators</button><button data-page="audit">Audit log</button>
         </nav>
         <section id="tournaments">
           <h2>Tournaments</h2>
@@ -156,6 +156,11 @@
             <button>Save draft</button
             ><button type="button" id="cancel-edit">Cancel</button>
           </form>
+        </section>
+        <section id="audit" hidden>
+          <h2>Audit log</h2>
+          <p>Deleted tournaments are recorded here permanently.</p>
+          <div id="audit-list"></div>
         </section>
         <section id="players" hidden>
           <h2>Players</h2>

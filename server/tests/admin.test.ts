@@ -191,6 +191,53 @@ test(
         (await call(`/admin/tournaments/${eventId}/audit`)).body.length,
         2,
       );
+      // Deleting a tournament: stale version refused, entered events protected,
+      // draft removed, and the removal permanently recorded in the audit log.
+      assert.equal(
+        (
+          await call(`/admin/tournaments/${eventId}`, "DELETE", {
+            version: 1,
+            reason: "Stale version must be refused",
+          })
+        ).status,
+        409,
+      );
+      await db.collection<any>("entries").insertOne({
+        _id: randomUUID(),
+        playerId: `qa-player-${id}`,
+        eventId,
+        joinedAt: new Date(),
+      });
+      assert.equal(
+        (
+          await call(`/admin/tournaments/${eventId}`, "DELETE", {
+            version: 2,
+            reason: "Entered events must be protected",
+          })
+        ).status,
+        409,
+      );
+      await db.collection("entries").deleteMany({ eventId });
+      assert.equal(
+        (
+          await call(`/admin/tournaments/${eventId}`, "DELETE", {
+            version: 2,
+            reason: "Remove the QA draft",
+          })
+        ).status,
+        200,
+      );
+      assert.equal(
+        (await call(`/admin/tournaments/${eventId}/audit`)).status,
+        404,
+      );
+      const log = await call("/admin/audit");
+      assert.ok(
+        log.body.some(
+          (r: any) =>
+            r.event?.id === eventId && r.action === "tournament.deleted",
+        ),
+      );
       assert.equal((await call("/admin/auth/logout", "POST")).status, 204);
       assert.equal((await call("/admin/overview")).status, 401);
     } finally {
@@ -200,8 +247,11 @@ test(
       await db
         .collection("adminSessions")
         .deleteMany({ adminId: { $in: [id, staffId] } });
-      if (eventId)
+      if (eventId) {
         await db.collection("tournaments").deleteOne({ id: eventId });
+        await db.collection("adminAudit").deleteMany({ "event.id": eventId });
+        await db.collection("entries").deleteMany({ eventId });
+      }
       await client.close();
     }
   },
