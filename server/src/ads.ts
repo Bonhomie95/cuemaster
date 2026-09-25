@@ -3,6 +3,7 @@ import type { Express, RequestHandler } from "express";
 import type { Db } from "mongodb";
 import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
+import { DAILY_VIDEO_LIMIT } from "./rewards";
 
 /**
  * Rewarded video, verified by AdMob rather than by the phone.
@@ -122,6 +123,14 @@ export function installAds(app: Express, db: Db, required: RequestHandler) {
     },
   );
 
+  /**
+   * Redeem one ticket for one hour off its crate.
+   *
+   * The ticket burn is the idempotency key: one signed callback, one grant. The daily cap is
+   * then applied inside a single pipeline update, because two callbacks arriving together used
+   * to read the same `videoCount` and both write `used + 1`, which let a player race past the
+   * cap. `$map` rewrites the matching crate in place; a pipeline update has no positional `$`.
+   */
   async function redeem(ticketId: string) {
     const ticket = await tickets.findOneAndUpdate(
       { _id: ticketId, redeemed: false, expiresAt: { $gt: new Date() } },
@@ -129,17 +138,59 @@ export function installAds(app: Express, db: Db, required: RequestHandler) {
     );
     if (!ticket) return false;
     const day = new Date().toISOString().slice(0, 10);
-    const player = await users.findOne({ _id: ticket.playerId });
-    const used = player?.videoDay === day ? player.videoCount || 0 : 0;
-    if (used >= 6) return false;
-    await users.updateOne(
-      { _id: ticket.playerId, "crates.id": ticket.crateId },
+    const held = { $ifNull: ["$crates", []] };
+    const used = {
+      $cond: [{ $eq: ["$videoDay", day] }, { $ifNull: ["$videoCount", 0] }, 0],
+    };
+    const grant = {
+      $and: [
+        { $lt: [used, DAILY_VIDEO_LIMIT] },
+        {
+          $in: [
+            ticket.crateId,
+            { $map: { input: held, as: "c", in: "$$c.id" } },
+          ],
+        },
+      ],
+    };
+    const before = await users.findOneAndUpdate({ _id: ticket.playerId }, [
       {
-        $inc: { "crates.$.hoursOff": 1 },
-        $set: { videoDay: day, videoCount: used + 1 },
+        $set: {
+          crates: {
+            $map: {
+              input: held,
+              as: "c",
+              in: {
+                $cond: [
+                  {
+                    $and: [grant, { $eq: ["$$c.id", ticket.crateId] }],
+                  },
+                  {
+                    $mergeObjects: [
+                      "$$c",
+                      {
+                        hoursOff: {
+                          $add: [{ $ifNull: ["$$c.hoursOff", 0] }, 1],
+                        },
+                      },
+                    ],
+                  },
+                  "$$c",
+                ],
+              },
+            },
+          },
+          videoDay: day,
+          videoCount: { $cond: [grant, { $add: [used, 1] }, used] },
+        },
       },
+    ]);
+    if (!before) return false;
+    const usedBefore = before.videoDay === day ? before.videoCount || 0 : 0;
+    return (
+      usedBefore < DAILY_VIDEO_LIMIT &&
+      (before.crates || []).some((c: any) => c.id === ticket.crateId)
     );
-    return true;
   }
 
   /** Development only: the app redeems the ticket it was issued, because no callback can arrive. */

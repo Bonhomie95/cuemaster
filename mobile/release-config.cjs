@@ -1,11 +1,10 @@
 const { usingTestIds } = require("./ads.cjs");
 function assertReleaseConfig(env) {
+  // The privacy, terms, support and deletion links come from the API's /config response, so the
+  // server's PUBLIC_BASE_URL is their single source. Requiring copies here only created four
+  // settings the owner could get wrong and the app would never read.
   const required = [
     "EXPO_PUBLIC_API_URL",
-    "EXPO_PUBLIC_PRIVACY_URL",
-    "EXPO_PUBLIC_TERMS_URL",
-    "EXPO_PUBLIC_SUPPORT_URL",
-    "EXPO_PUBLIC_ACCOUNT_DELETION_URL",
     "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID",
     "GOOGLE_IOS_URL_SCHEME",
     "EAS_PROJECT_ID",

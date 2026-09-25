@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { createSign, generateKeyPairSync, createPublicKey } from "node:crypto";
+import { createSign, generateKeyPairSync, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { signedPortion } from "../src/ads";
 
@@ -90,5 +90,67 @@ test("a rewarded ticket cannot be redeemed twice or by another player", async ()
     404,
     "a ticket that was never issued grants nothing",
   );
+  await call("/me", "DELETE", { confirm: "DELETE" });
+});
+
+test("concurrent signed redemptions cannot race past the daily video limit", async () => {
+  const base = process.env.TEST_API_URL || "http://127.0.0.1:4000";
+  const created = await fetch(base + "/auth/guest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ adultConfirmed: true }),
+  }).then((r) => r.json());
+  const call = (path: string, method = "GET", body?: unknown) =>
+    fetch(base + path, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${created.token}`,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    }).then(async (res) => ({
+      status: res.status,
+      body: res.status === 204 ? null : await res.json(),
+    }));
+
+  // Win matches until a crate lands, then start its timer so speed-ups apply to it.
+  let crate: any = null;
+  for (let i = 0; i < 6 && !crate; i++) {
+    const id = randomUUID();
+    const started = await call("/local-matches/start", "POST", {
+      venueId: "heritage",
+      requestId: id,
+      mode: "cpu",
+    });
+    if (started.status !== 201) break;
+    const finished = await call(`/local-matches/${id}/finish`, "POST", {
+      outcome: "won",
+    });
+    crate = finished.body?.crate;
+  }
+  assert.ok(crate, "a win seals a crate");
+  assert.equal(
+    (await call(`/me/crates/${crate.id}/start`, "POST", {})).status,
+    200,
+  );
+
+  // Ten tickets, all redeemed at once. The cap is six, and the read-then-write it replaced let
+  // every concurrent redemption see the same count and grant on top of it.
+  const tickets = [];
+  for (let i = 0; i < 10; i++) {
+    const t = await call("/ads/reward-ticket", "POST", { crateId: crate.id });
+    assert.equal(t.status, 201);
+    tickets.push(t.body.ticket);
+  }
+  await Promise.all(
+    tickets.map((t) => call(`/ads/reward-ticket/${t}/redeem`, "POST", {})),
+  );
+  const after = await call("/me/crates");
+  const held = after.body.crates.find((c: any) => c.id === crate.id);
+  assert.ok(
+    held.hoursOff <= 6,
+    `hoursOff ${held.hoursOff} must respect the cap of 6`,
+  );
+  assert.equal(after.body.videosLeft, 0);
   await call("/me", "DELETE", { confirm: "DELETE" });
 });

@@ -50,6 +50,9 @@ await Promise.all([
     .collection("adminSessions")
     .createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
   sessions.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+  // The leaderboard sorts every unsuspended player by XP; without this it is a collection
+  // scan that fails outright once the in-memory sort passes 32MB.
+  users.createIndex({ xp: -1, "stats.finishes": -1, _id: 1 }),
   users.createIndex({ "providers.google": 1 }, { unique: true, sparse: true }),
   users.createIndex({ "providers.apple": 1 }, { unique: true, sparse: true }),
   entries.createIndex({ playerId: 1, eventId: 1 }, { unique: true }),
@@ -243,6 +246,7 @@ app.post("/me/cue", required, async (req: any, res) => {
   );
   if (u) return res.json(publicUser(u));
   const current = await users.findOne({ _id: req.player._id });
+  if (!current) return res.status(401).json({ error: "Please sign in again." });
   if ((current.ownedCues || []).includes(cue.id))
     return res.json(publicUser(current));
   return res.status(409).json({ error: "Not enough coins for this cue." });
@@ -735,7 +739,7 @@ app.get("/tournaments/:id", required, async (req: any, res) => {
     .aggregate([
       { $match: { eventId: event.id, score: { $exists: true } } },
       { $sort: { score: 1, submittedAt: 1 } },
-      { $limit: 20 },
+      { $limit: 200 },
       {
         $lookup: {
           from: "players",
@@ -751,6 +755,9 @@ app.get("/tournaments/:id", required, async (req: any, res) => {
           "player._id": { $nin: req.player.blockedPlayers || [] },
         },
       },
+      // Suspended and blocked players are removed before the board is cut, so a hidden entry
+      // no longer occupies one of the twenty visible places.
+      { $limit: 20 },
       {
         $project: {
           _id: 0,
@@ -792,7 +799,7 @@ app.post(
       });
     if (levelOf(req.player.xp) < event.level)
       return res.status(403).json({ error: "Level requirement not met." });
-    if (req.body.acceptRules !== true)
+    if (req.body?.acceptRules !== true)
       return res.status(400).json({ error: "Please accept the event rules." });
     const fee = Math.max(0, Math.floor(event.entry || 0));
     if (fee > 0) {

@@ -44,6 +44,13 @@ export function assertProductionConfig(env: NodeJS.ProcessEnv) {
     throw Error("Production browser origins must be explicit HTTPS origins.");
   if (env.TRUST_PROXY === "true" || env.TRUST_PROXY === "*")
     throw Error("Trust only the exact deployment proxy addresses.");
+  // Every production deployment terminates TLS at a proxy. Without TRUST_PROXY, Express reads
+  // the proxy's own address for every request, so all players share one rate-limit bucket and
+  // the API throttles itself to 120 requests a minute in total.
+  if (!env.TRUST_PROXY?.trim())
+    throw Error(
+      "TRUST_PROXY must list the deployment proxy addresses, or rate limiting counts every player as one client.",
+    );
   // Both stores reject listings whose privacy, support and deletion URLs are missing or dead.
   let base: URL;
   try {

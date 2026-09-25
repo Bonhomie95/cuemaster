@@ -37,6 +37,14 @@ const TIER: Record<string, string> = {
 };
 const tint = (tier: string) => TIER[tier] || "#7f96a8";
 
+/**
+ * A crate's `ready` flag is true only as of the moment the server answered. The screen ticks
+ * every second, so once the countdown runs out the crate becomes openable here too — otherwise
+ * a player who waits out the last minute is still asked for rubies until they reload.
+ */
+const isReady = (crate: Crate, now: number) =>
+  crate.ready || (!!crate.readyAt && new Date(crate.readyAt).getTime() <= now);
+
 /** Whole units only: a crate that says "3h left" and opens at 2h 59m looks broken. */
 function countdown(readyAt: string | null, now: number) {
   if (!readyAt) return "";
@@ -146,7 +154,7 @@ export default function Rewards({
   }
   const crates: Crate[] = data?.crates || [];
   const slots = data?.slots || 4;
-  const unlocking = crates.some((c) => c.unlocking && !c.ready);
+  const unlocking = crates.some((c) => c.unlocking && !isReady(c, now));
   return (
     <ScrollView contentContainerStyle={s.page}>
       <View style={s.header}>
@@ -191,12 +199,18 @@ export default function Rewards({
                   index={i}
                   style={s.slotFrame}
                 >
-                  <Pulse active={!!crate?.ready} style={{ flex: 1 }}>
+                  <Pulse
+                    active={!!crate && isReady(crate, now)}
+                    style={{ flex: 1 }}
+                  >
                     <View
                       style={[
                         s.slot,
                         crate && { borderColor: `${tint(crate.tier)}66` },
-                        crate?.ready && { borderColor: `${tint(crate.tier)}` },
+                        crate &&
+                          isReady(crate, now) && {
+                            borderColor: `${tint(crate.tier)}`,
+                          },
                       ]}
                     >
                       {crate ? (
@@ -216,20 +230,20 @@ export default function Rewards({
                             ]}
                           >
                             <Feather
-                              name={crate.ready ? "gift" : "package"}
+                              name={isReady(crate, now) ? "gift" : "package"}
                               size={20}
                               color={tint(crate.tier)}
                             />
                           </View>
                           <Text style={s.crateName}>{crate.name}</Text>
                           <Text style={s.crateMeta}>
-                            {crate.ready
+                            {isReady(crate, now)
                               ? "Ready to open"
                               : crate.unlocking
                                 ? countdown(crate.readyAt, now) + " left"
                                 : `${crate.hours}h unlock`}
                           </Text>
-                          {crate.ready ? (
+                          {isReady(crate, now) ? (
                             <Button
                               primary
                               icon="gift"

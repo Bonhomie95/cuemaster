@@ -14,6 +14,7 @@ test("production rejects local defaults, unauthenticated databases, insecure TLS
     PUBLIC_BASE_URL: "https://api.example.invalid",
     PUBLIC_SUPPORT_EMAIL: "support@example.invalid",
     PUBLIC_POLICY_DATE: "2026-09-23",
+    TRUST_PROXY: "10.0.0.0/8",
   };
   assert.doesNotThrow(() => assertProductionConfig(env));
   for (const uri of [
@@ -25,6 +26,8 @@ test("production rejects local defaults, unauthenticated databases, insecure TLS
     assert.throws(() => assertProductionConfig({ ...env, MONGODB_URI: uri }));
   assert.throws(() => assertProductionConfig({ ...env, TRUST_PROXY: "true" }));
   assert.throws(() => assertProductionConfig({ ...env, CORS_ORIGINS: "*" }));
+  // Unset proxy trust makes every player share one rate-limit bucket behind a load balancer.
+  assert.throws(() => assertProductionConfig({ ...env, TRUST_PROXY: "" }));
   // Store listings link to these pages; a missing or local URL must fail the release.
   for (const missing of [
     { PUBLIC_BASE_URL: "" },

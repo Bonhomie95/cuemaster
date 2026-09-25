@@ -386,10 +386,25 @@ export function installPlatform(
   async function settle(event: any, actor: string) {
     if (event.currency !== "coins" || !(event.placements || []).length)
       return { paid: [], skipped: "No coin placements to pay." };
+    // Suspended players are hidden from the public board, so they must not be paid from it
+    // either: banning a cheater before settlement has to actually cost them the prize.
     const ranked = await entries
-      .find({ eventId: event.id, score: { $exists: true } })
-      .sort({ score: 1, submittedAt: 1 })
-      .limit(1000)
+      .aggregate([
+        { $match: { eventId: event.id, score: { $exists: true } } },
+        { $sort: { score: 1, submittedAt: 1 } },
+        {
+          $lookup: {
+            from: "players",
+            localField: "playerId",
+            foreignField: "_id",
+            as: "player",
+          },
+        },
+        { $unwind: "$player" },
+        { $match: { "player.suspended": { $ne: true } } },
+        { $limit: 1000 },
+        { $project: { playerId: 1 } },
+      ])
       .toArray();
     const paid: { playerId: string; position: number; coins: number }[] = [];
     for (const [index, entry] of ranked.entries()) {
