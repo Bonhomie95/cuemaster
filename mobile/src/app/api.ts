@@ -53,7 +53,7 @@ export type Tournament = {
   id: string;
   name: string;
   kind: string;
-  status: string;
+  status: "announced" | "open" | "closed" | "cancelled" | string;
   subtitle: string;
   description: string;
   level: number;
@@ -62,6 +62,73 @@ export type Tournament = {
   currency: string;
   prize: string;
   rules: string[];
+  /** drill: server-replayed straight pot. series: best-of frames against a seeded club rival. */
+  format: "drill" | "series";
+  bestOf: 1 | 3 | 5;
+  maxPlayers: number;
+  minPlayers: number;
+  placements?: { position: number; amount: number }[];
+  registrationClosesAt?: string | null;
+  joinDeadline?: string | null;
+  startsAt?: string;
+  endsAt?: string;
+  cancelReason?: string;
+};
+export type EventPhase =
+  | "draft"
+  | "announced"
+  | "registration"
+  | "waiting"
+  | "play"
+  | "closed"
+  | "cancelled";
+export type SeriesFrame = {
+  id: string;
+  outcome: "won" | "lost" | "forfeit" | null;
+  startedAt: string;
+  endedAt: string | null;
+  flag: string | null;
+};
+export type Series = {
+  bestOf: number;
+  wins: number;
+  losses: number;
+  done: boolean;
+  opponent: {
+    name: string;
+    avatar: number;
+    skill: number;
+    tier: string;
+    kind: "cpu";
+  } | null;
+  activeFrame: { id: string; seed: number; startedAt: string } | null;
+  frames: SeriesFrame[];
+};
+export type EventDetail = {
+  event: Tournament;
+  phase: EventPhase;
+  now: string;
+  entrants: number;
+  canEnter: boolean;
+  entry: {
+    joinedAt: string;
+    entry: number;
+    score: number | null;
+    shots: number | null;
+    submittedAt: string | null;
+  } | null;
+  series: Series | null;
+  leaderboard: {
+    playerId: string;
+    name: string;
+    country: string;
+    avatar?: number;
+    shots?: number;
+    score: number;
+    wins?: number;
+    losses?: number;
+    done?: boolean;
+  }[];
 };
 export type Catalog = {
   venues: Venue[];
@@ -148,6 +215,8 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    /** The full error payload, for responses that carry state alongside the message. */
+    public body: any = null,
   ) {
     super(message);
   }
@@ -182,7 +251,11 @@ export async function api<T = any>(
           : "The server could not complete this request. Try again.",
     }));
     if (!response.ok)
-      throw new ApiError(data.error || "Request failed.", response.status);
+      throw new ApiError(
+        data.error || "Request failed.",
+        response.status,
+        data,
+      );
     return data;
   } catch (e) {
     if (e instanceof ApiError) throw e;

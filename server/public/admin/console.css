@@ -146,3 +146,55 @@ button.danger {
   border-color: #93313f;
   color: #ffdede;
 }
+
+.hint {
+  font-size: 13px;
+  margin: 0;
+}
+button.quiet {
+  background: transparent;
+  color: #e7f1f5;
+  border-color: #587389;
+}
+.phase {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 1px;
+  font-weight: 700;
+  background: #355367;
+  color: #e7f1f5;
+  margin-right: 8px;
+}
+.phase.registration {
+  background: #1f6f5c;
+}
+.phase.play {
+  background: #9a6b12;
+  color: #fff6de;
+}
+.phase.closed {
+  background: #2c3f4d;
+}
+.phase.cancelled {
+  background: #7a2e2e;
+}
+.meta {
+  color: #bcd2df;
+  font-size: 14px;
+  margin: 6px 0 12px;
+  line-height: 1.7;
+}
+table.entries {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  margin: 12px 0;
+}
+table.entries th,
+table.entries td {
+  text-align: left;
+  padding: 8px 6px;
+  border-bottom: 1px solid #355367;
+}

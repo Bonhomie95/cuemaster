@@ -30,7 +30,7 @@ For Atlas, set `MONGODB_URI` and `MONGODB_DB` in `server/.env` using `server/.en
 - Reward crates: a win seals one of six crate tiers, four slots, one unlock at a time, opened on the timer or early with rubies. Contents are rolled on the server and the odds are published in the app.
 - Two currencies: coins are earned and pay for everything that affects play; rubies are a scarce bonus and the only thing real money buys. Ruby purchases stay disabled until store billing is configured.
 - Optional rewarded video takes an hour off a crate. It ships on Google's public AdMob test units, and the hour is granted by AdMob's signed server callback, never by the device. Non-personalised ads only; no advertising identifier, no tracking prompt.
-- Coin competitions with optional coin entry fees, server-replayed scores, a persistent leaderboard, and ranked coin prizes that settle automatically when the event closes.
+- Tournaments in two formats. **Series**: the admin picks a game of 1, best of 3 or best of 5 frames of eight ball; each entrant plays a rival the server seeds at entry, and standings rank frames won, then fewest lost, then time at the table. **Score attack**: the server-replayed straight pot, fewest shots wins. Both have a join deadline with a live countdown, a player cap, a minimum-players rule (cancel and refund at the start), coin entry fees charged once, a prize table, and automatic close and payout.
 - Weekly Pro and USDC Masters event pages with announced status and closed entries.
 - Native Google sign-in and iOS Apple sign-in integration, with server-side identity-token verification; provider configuration still required.
 
@@ -66,8 +66,11 @@ Ruby purchases need `STORE_BILLING` and an implementation of `verifyPurchase()` 
 ## Administration
 
 `http://localhost:4000/admin/` is a separate console with its own accounts. The owner can
-create, edit, publish, close and delete tournaments; deletion is blocked while an event is open
-or once players have entered, and every deletion is kept in a permanent audit log. See
+create, edit, announce, open, close, cancel (with refunds) and delete tournaments, view every
+entrant's record, and force the scheduler; deletion is blocked while an event is open or once
+players have entered, and every deletion and payout is kept in a permanent audit log. The
+scheduler cancels under-subscribed events at their start and closes and pays events at their
+end (`EVENT_TICK_MS`, `EVENT_MIN_FRAME_MS` in `server/.env.example`). See
 [administration](docs/release/ADMIN.md).
 
 ## Release boundary

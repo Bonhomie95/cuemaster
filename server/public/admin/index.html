@@ -61,11 +61,17 @@
           <button data-page="tournaments">Tournaments</button
           ><button data-page="players">Players</button
           ><button data-page="reports">Reports</button
-          ><button data-page="staff">Administrators</button><button data-page="audit">Audit log</button>
+          ><button data-page="staff">Administrators</button
+          ><button data-page="audit">Audit log</button>
         </nav>
         <section id="tournaments">
           <h2>Tournaments</h2>
-          <button id="new-event">Create tournament</button>
+          <div class="actions">
+            <button id="new-event">Create tournament</button
+            ><button id="run-lifecycle" type="button" class="quiet">
+              Run scheduler now
+            </button>
+          </div>
           <div id="event-list"></div>
           <form id="event-form" hidden>
             <h2 id="event-title">New draft</h2>
@@ -80,6 +86,36 @@
                 required
               ></textarea>
             </label>
+            <div class="cards">
+              <label
+                >Format<select name="format" id="format">
+                  <option value="series">Best-of series vs club rival</option>
+                  <option value="drill">Straight-pot score attack</option>
+                </select></label
+              ><label
+                >Frames<select name="bestOf">
+                  <option value="1">Game of 1</option>
+                  <option value="3" selected>Best of 3</option>
+                  <option value="5">Best of 5</option>
+                </select></label
+              ><label
+                >Player cap<input
+                  name="maxPlayers"
+                  type="number"
+                  min="2"
+                  max="10000"
+                  value="16"
+                  required /></label
+              ><label
+                >Minimum players (else cancelled and refunded)<input
+                  name="minPlayers"
+                  type="number"
+                  min="1"
+                  max="10000"
+                  value="2"
+                  required
+              /></label>
+            </div>
             <div class="cards">
               <label
                 >Minimum level<input
@@ -129,17 +165,28 @@
             /></label>
             <div class="cards">
               <label
-                >Starts (your local time)<input
+                >Join deadline (your local time)<input
+                  name="registrationClosesAt"
+                  type="datetime-local" /></label
+              ><label
+                >Play starts (your local time)<input
                   name="startsAt"
                   type="datetime-local"
                   required /></label
               ><label
-                >Ends (your local time)<input
+                >Play ends (your local time)<input
                   name="endsAt"
                   type="datetime-local"
                   required
               /></label>
             </div>
+            <p class="hint">
+              Players enter from the moment you open registration until the join
+              deadline (defaults to the start for a series, to the end for a
+              score attack). At the start, an event short of its minimum is
+              cancelled and every fee refunded. At the end it closes and prizes
+              are paid automatically.
+            </p>
             <label
               >Official rules (one rule per line)<textarea
                 name="rules"
@@ -148,10 +195,12 @@
               ></textarea>
             </label>
             <p>
-              Drafts do not collect entry fees. Paid-entry and USDC events
-              cannot open until funding, eligibility, settlement and
-              distribution requirements are verified. Currently playable format:
-              server-verified straight-pot challenge.
+              Drafts do not collect entry fees. USDC and country-restricted
+              events cannot open until eligibility and payout requirements are
+              verified. Score attacks are replayed and verified by the server.
+              Series frames are played against a server-seeded club rival; the
+              device reports each result and the referee records a win faster
+              than a real frame as a loss, so keep series prizes in coins.
             </p>
             <button>Save draft</button
             ><button type="button" id="cancel-edit">Cancel</button>

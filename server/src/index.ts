@@ -9,7 +9,18 @@ import {
   revokeAppleToken,
 } from "./appleTokens";
 import { fileURLToPath } from "node:url";
-import { installPlatform, publicEvent, eventIsOpen } from "./platform";
+import {
+  installPlatform,
+  publicEvent,
+  eventIsOpen,
+  eventDefaults,
+  eventPhase,
+  registrationOpen,
+  seriesScore,
+  seriesTarget,
+  publicSeries,
+  frameMinimumMs,
+} from "./platform";
 import { makeCpu } from "../../mobile/src/game/cpu";
 import { cues, cueById } from "../../mobile/src/game/cues";
 import "dotenv/config";
@@ -71,7 +82,7 @@ for (const event of tournaments)
     { id: event.id },
     {
       $setOnInsert: {
-        ...event,
+        ...eventDefaults(event),
         version: 1,
         drill: "pocket",
         targets: [1],
@@ -630,9 +641,8 @@ function replay(drill: string, shots: any[], targets: number[]): Promise<any> {
     if (verifying >= 2)
       return reject(new Error("The referee is busy. Please retry shortly."));
     verifying++;
-    const worker = new Worker(new URL("./worker.ts", import.meta.url), {
+    const worker = new Worker(new URL("./worker.mjs", import.meta.url), {
       workerData: { drill, shots, targets },
-      execArgv: ["--import", "tsx"],
     });
     let done = false;
     const finish = (error?: Error, value?: any) => {
@@ -729,11 +739,18 @@ installRewards(app, db, required, publicUser);
 installStore(app, db, required, publicUser);
 installAds(app, db, required);
 installPlatform(app, db, required);
-app.get("/tournaments/:id", required, async (req: any, res) => {
-  const event = await events.findOne({
-    id: req.params.id,
-    status: { $ne: "draft" },
+const eventLimit = (limit: number) =>
+  rateLimit({
+    message: { error: "Too many requests. Please try again shortly." },
+    windowMs: 60000,
+    limit,
   });
+async function loadEvent(id: string) {
+  const event = await events.findOne({ id, status: { $ne: "draft" } });
+  return event ? eventDefaults(event) : null;
+}
+app.get("/tournaments/:id", required, async (req: any, res) => {
+  const event = await loadEvent(req.params.id);
   if (!event) return res.status(404).json({ error: "Event not found." });
   const board = await entries
     .aggregate([
@@ -764,43 +781,78 @@ app.get("/tournaments/:id", required, async (req: any, res) => {
           playerId: "$player._id",
           name: "$player.name",
           country: "$player.country",
+          avatar: "$player.avatar",
           shots: 1,
           score: 1,
+          wins: 1,
+          losses: 1,
+          done: 1,
         },
       },
     ])
     .toArray();
+  const mine = await entries.findOne({
+    playerId: req.player._id,
+    eventId: event.id,
+  });
+  const entrants = await entries.countDocuments({ eventId: event.id });
   res.json({
     event: publicEvent(event),
-    entry: await entries.findOne({
-      playerId: req.player._id,
-      eventId: event.id,
-    }),
+    phase: eventPhase(event),
+    now: new Date().toISOString(),
+    entrants,
+    // Registration and play can overlap (an event with no join deadline), so the sheet is told
+    // outright whether an entry would be accepted rather than inferring it from the phase.
+    canEnter: !mine && registrationOpen(event) && entrants < event.maxPlayers,
+    entry: mine
+      ? {
+          joinedAt: mine.joinedAt,
+          entry: mine.entry,
+          score: mine.score ?? null,
+          shots: mine.shots ?? null,
+          submittedAt: mine.submittedAt ?? null,
+        }
+      : null,
+    series: event.format === "series" ? publicSeries(mine) : null,
     leaderboard: board,
   });
 });
 app.post(
   "/tournaments/:id/enter",
   required,
-  rateLimit({
-    message: { error: "Too many requests. Please try again shortly." },
-    windowMs: 60000,
-    limit: 20,
-  }),
+  eventLimit(20),
   async (req: any, res) => {
-    const event = await events.findOne({
-      id: req.params.id,
-      status: { $ne: "draft" },
-    });
+    const event = await loadEvent(req.params.id);
     if (!event) return res.status(404).json({ error: "Event not found." });
-    if (!eventIsOpen(event))
+    const already = await entries.findOne({
+      playerId: req.player._id,
+      eventId: event.id,
+    });
+    if (already)
+      return res.json({
+        joined: true,
+        already: true,
+        phase: eventPhase(event),
+        player: publicUser(req.player),
+      });
+    if (!registrationOpen(event))
       return res.status(409).json({
-        error: "Registration is not open. No payment has been taken.",
+        error:
+          eventPhase(event) === "play" || eventPhase(event) === "waiting"
+            ? "The join deadline has passed. No payment has been taken."
+            : "Registration is not open. No payment has been taken.",
       });
     if (levelOf(req.player.xp) < event.level)
       return res.status(403).json({ error: "Level requirement not met." });
     if (req.body?.acceptRules !== true)
       return res.status(400).json({ error: "Please accept the event rules." });
+    // The cap is checked before the fee so a full event never charges anyone, and again by the
+    // insert below so two players racing for the last seat cannot both take it.
+    const seats = event.maxPlayers;
+    if ((await entries.countDocuments({ eventId: event.id })) >= seats)
+      return res.status(409).json({
+        error: `All ${seats} places are taken. No payment has been taken.`,
+      });
     const fee = Math.max(0, Math.floor(event.entry || 0));
     if (fee > 0) {
       // paidEvents makes the charge idempotent by construction: a retry, a duplicate tap or a
@@ -822,6 +874,7 @@ app.post(
           });
       }
     }
+    const seed = randomBytes(4).readUInt32BE();
     await entries.updateOne(
       { playerId: req.player._id, eventId: event.id },
       {
@@ -831,12 +884,45 @@ app.post(
           eventId: event.id,
           entry: fee,
           joinedAt: new Date(),
+          ...(event.format === "series"
+            ? {
+                bestOf: event.bestOf,
+                wins: 0,
+                losses: 0,
+                done: false,
+                frames: [],
+                // The rival is fixed at entry, so every frame of the series is against the same
+                // player, and the seed is issued by the server rather than chosen on the device.
+                opponent: makeCpu(req.player.stats || {}, seed),
+              }
+            : {}),
         },
       },
       { upsert: true },
     );
+    // The seat count is re-checked after the insert: the loser of a race for the final seat is
+    // removed and refunded, so the cap the administrator set is the cap players see.
+    if ((await entries.countDocuments({ eventId: event.id })) > seats) {
+      const late = await entries
+        .find({ eventId: event.id })
+        .sort({ joinedAt: -1 })
+        .limit(1)
+        .toArray();
+      if (late[0]?.playerId === req.player._id) {
+        await entries.deleteOne({ _id: late[0]._id });
+        if (fee > 0)
+          await users.updateOne(
+            { _id: req.player._id, paidEvents: event.id },
+            { $inc: { coins: fee }, $pull: { paidEvents: event.id } },
+          );
+        return res.status(409).json({
+          error: `All ${seats} places are taken. Your coins were returned.`,
+        });
+      }
+    }
     res.json({
       joined: true,
+      phase: eventPhase(event),
       player: publicUser(await users.findOne({ _id: req.player._id })),
     });
   },
@@ -844,18 +930,20 @@ app.post(
 app.post(
   "/tournaments/:id/submit",
   required,
-  rateLimit({
-    message: { error: "Too many requests. Please try again shortly." },
-    windowMs: 60000,
-    limit: 6,
-  }),
+  eventLimit(6),
   async (req: any, res) => {
-    const event = await events.findOne({
-      id: req.params.id,
-      status: { $ne: "draft" },
-    });
+    const event = await loadEvent(req.params.id);
     if (!event || !eventIsOpen(event))
-      return res.status(409).json({ error: "Event is not open." });
+      return res.status(409).json({
+        error:
+          event && eventPhase(event) === "registration"
+            ? "Play has not started yet."
+            : "Event is not open.",
+      });
+    if (event.format !== "drill")
+      return res
+        .status(409)
+        .json({ error: "This event is played as a series of frames." });
     const input = z
       .object({ shots: z.array(shot).min(1).max(12) })
       .strict()
@@ -903,9 +991,186 @@ app.post(
     });
   },
 );
+/**
+ * Series play. A frame is opened on the server before the rack is broken and closed with its
+ * result afterwards, so the ledger always holds who was at the table, against which rival, from
+ * when. One frame is live at a time and abandoning it is a forfeit: a frame cannot be quietly
+ * restarted when it goes badly. A win claimed faster than a real frame can be played is
+ * recorded as a loss. Results are still reported by the device, which is why series prizes are
+ * coins and why the console shows every frame with its timing.
+ */
+app.post(
+  "/tournaments/:id/frames/start",
+  required,
+  eventLimit(30),
+  async (req: any, res) => {
+    const event = await loadEvent(req.params.id);
+    if (!event) return res.status(404).json({ error: "Event not found." });
+    if (event.format !== "series")
+      return res
+        .status(409)
+        .json({ error: "This event is a shot challenge, not a series." });
+    const phase = eventPhase(event);
+    if (!eventIsOpen(event))
+      return res.status(409).json({
+        error:
+          phase === "registration" || phase === "waiting"
+            ? `Play opens ${new Date(event.startsAt).toLocaleString("en-GB", { timeZone: "UTC" })} UTC.`
+            : "This series has finished.",
+      });
+    const mine = await entries.findOne({
+      playerId: req.player._id,
+      eventId: event.id,
+    });
+    if (!mine) return res.status(403).json({ error: "Join the event first." });
+    if (mine.done)
+      return res.status(409).json({
+        error: `Your series is complete: ${mine.wins}–${mine.losses}.`,
+        series: publicSeries(mine),
+      });
+    if (mine.activeFrame)
+      return res.status(409).json({
+        error:
+          "You have an unfinished frame. Forfeit it to start another; it counts as a loss.",
+        series: publicSeries(mine),
+      });
+    const frame = {
+      id: randomUUID(),
+      seed: randomBytes(4).readUInt32BE(),
+      startedAt: new Date(),
+    };
+    const claimed = await entries.findOneAndUpdate(
+      {
+        _id: mine._id,
+        done: { $ne: true },
+        activeFrame: { $in: [null, undefined] },
+      },
+      { $push: { frames: frame } as any, $set: { activeFrame: frame.id } },
+      { returnDocument: "after" },
+    );
+    if (!claimed)
+      return res
+        .status(409)
+        .json({ error: "Your series changed. Refresh and try again." });
+    res.status(201).json({
+      frame,
+      number: (claimed.frames || []).length,
+      series: publicSeries(claimed),
+    });
+  },
+);
+app.post(
+  "/tournaments/:id/frames/:frameId/finish",
+  required,
+  eventLimit(30),
+  async (req: any, res) => {
+    const { outcome } = z
+      .object({ outcome: z.enum(["won", "lost", "forfeit"]) })
+      .strict()
+      .parse(req.body);
+    const event = await loadEvent(req.params.id);
+    if (!event) return res.status(404).json({ error: "Event not found." });
+    if (!["open"].includes(event.status))
+      return res
+        .status(409)
+        .json({ error: "This event has closed; the frame no longer counts." });
+    const mine = await entries.findOne({
+      playerId: req.player._id,
+      eventId: event.id,
+      activeFrame: req.params.frameId,
+    });
+    if (!mine) return res.status(404).json({ error: "Frame not found." });
+    const frame = (mine.frames || []).find(
+      (f: any) => f.id === req.params.frameId,
+    );
+    const elapsed = Date.now() - new Date(frame.startedAt).getTime();
+    let recorded: "won" | "lost" | "forfeit" = outcome,
+      flag: string | null = null;
+    if (outcome === "won" && elapsed < frameMinimumMs()) {
+      recorded = "lost";
+      flag = "fast";
+    }
+    const won = recorded === "won";
+    const target = seriesTarget(mine.bestOf || event.bestOf);
+    const wins = (mine.wins || 0) + (won ? 1 : 0),
+      losses = (mine.losses || 0) + (won ? 0 : 1),
+      done = wins >= target || losses >= target;
+    const playedMs =
+      (mine.frames || []).reduce(
+        (sum: number, f: any) =>
+          f.endedAt && f.id !== frame.id
+            ? sum +
+              (new Date(f.endedAt).getTime() - new Date(f.startedAt).getTime())
+            : sum,
+        0,
+      ) + elapsed;
+    const updated = await entries.findOneAndUpdate(
+      { _id: mine._id, activeFrame: frame.id, "frames.id": frame.id },
+      {
+        $set: {
+          "frames.$.outcome": recorded,
+          "frames.$.endedAt": new Date(),
+          ...(flag ? { "frames.$.flag": flag } : {}),
+          activeFrame: null,
+          wins,
+          losses,
+          done,
+          playedMs,
+          score: seriesScore(
+            mine.bestOf || event.bestOf,
+            wins,
+            losses,
+            playedMs,
+          ),
+          submittedAt: new Date(),
+        },
+      },
+      { returnDocument: "after" },
+    );
+    if (!updated)
+      return res
+        .status(409)
+        .json({ error: "This frame was already recorded." });
+    await users.updateOne(
+      { _id: req.player._id },
+      {
+        $inc: {
+          "stats.eventFrames": 1,
+          ...(won ? { "stats.eventFrameWins": 1 } : {}),
+        },
+      },
+    );
+    // The completion reward, if the administrator set one, is paid when the series is decided.
+    let rewarded: any = null;
+    if (done && event.reward > 0) {
+      const key = `event:${event.id}`;
+      rewarded = await users.findOneAndUpdate(
+        { _id: req.player._id, completed: { $ne: key } },
+        { $addToSet: { completed: key }, $inc: { coins: event.reward } },
+        { returnDocument: "after" },
+      );
+    }
+    res.json({
+      recorded,
+      flag,
+      series: publicSeries(updated),
+      reward: { xp: 0, coins: rewarded ? event.reward : 0 },
+      player: publicUser(
+        rewarded || (await users.findOne({ _id: req.player._id })),
+      ),
+    });
+  },
+);
 app.use((err: any, _req: any, res: any, _next: any) => {
-  if (err instanceof z.ZodError)
-    return res.status(400).json({ error: "Please check the supplied fields." });
+  if (err instanceof z.ZodError) {
+    // Name the first failing field so an administrator can correct a draft without guessing.
+    const issue = err.issues[0],
+      field = issue?.path?.filter((p) => typeof p === "string").join(".");
+    return res.status(400).json({
+      error: `Please check the supplied fields.${issue ? ` ${field ? field + ": " : ""}${issue.message}` : ""}`,
+      field: field || undefined,
+    });
+  }
   if (err?.code === 11000)
     return res
       .status(409)

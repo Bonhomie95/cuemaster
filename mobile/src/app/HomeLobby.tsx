@@ -5,6 +5,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import type { LobbyProps } from "./Lobby";
 import IconButton from "./IconButton";
 import { Press, Enter, Pulse } from "./motion";
+import { eventState } from "./events";
 type Icon = React.ComponentProps<typeof Feather>["name"];
 
 /**
@@ -32,6 +33,7 @@ export default function HomeLobby(p: LobbyProps) {
     "daily:" + new Date().toISOString().slice(0, 10),
   );
   const open = p.catalog.tournaments.find((t) => t.status === "open");
+  const live = open ? eventState(open) : null;
   const modes: {
     title: string;
     caption: string;
@@ -62,7 +64,14 @@ export default function HomeLobby(p: LobbyProps) {
     },
     {
       title: "Compete",
-      caption: "PRESEASON OPEN",
+      caption:
+        live?.key === "registration"
+          ? "ENTRIES OPEN"
+          : live?.key === "play"
+            ? "EVENT IN PLAY"
+            : live?.key === "waiting"
+              ? "STARTING SOON"
+              : "TOURNAMENTS",
       icon: "award",
       accent: "#b98cff",
       action: () => p.onPage("events"),
@@ -188,7 +197,13 @@ export default function HomeLobby(p: LobbyProps) {
         />
         <Quick
           icon="award"
-          label={open ? "Event open" : "Events"}
+          label={
+            live?.key === "registration"
+              ? "Enter event"
+              : live?.key === "play"
+                ? "Event live"
+                : "Events"
+          }
           badge={!!open}
           onPress={() => p.onPage("events")}
         />

@@ -357,6 +357,7 @@ export default function TableGame({
   onExit,
   paidMatch = false,
   entryFee = 0,
+  exitLabel,
   exitBusy = false,
   exitError = "",
   playerName = "YOU",
@@ -367,6 +368,8 @@ export default function TableGame({
   onExit?: () => void;
   paidMatch?: boolean;
   entryFee?: number;
+  /** Text of the finish-screen exit button; defaults by mode. */
+  exitLabel?: string;
   exitBusy?: boolean;
   exitError?: string;
   playerName?: string;
@@ -380,6 +383,7 @@ export default function TableGame({
         onExit={onExit}
         paidMatch={paidMatch}
         entryFee={entryFee}
+        exitLabel={exitLabel}
         exitBusy={exitBusy}
         exitError={exitError}
         playerName={playerName}
@@ -700,6 +704,7 @@ function Game({
   onExit,
   paidMatch = false,
   entryFee = 0,
+  exitLabel,
   exitBusy = false,
   exitError = "",
   playerName,
@@ -710,6 +715,7 @@ function Game({
   onExit?: () => void;
   paidMatch?: boolean;
   entryFee?: number;
+  exitLabel?: string;
   exitBusy?: boolean;
   exitError?: string;
   playerName: string;
@@ -1013,9 +1019,8 @@ function Game({
                   label={
                     exitBusy
                       ? "Saving…"
-                      : paidMatch
-                        ? "Choose another venue"
-                        : "Return to club"
+                      : exitLabel ||
+                        (paidMatch ? "Choose another venue" : "Return to club")
                   }
                   onPress={() => {
                     if (!exitBusy) onExit();

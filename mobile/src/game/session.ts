@@ -78,6 +78,8 @@ skins.push(
 );
 export class Session {
   cpu: CpuOpponent | null = null;
+  /** The rival's randomness. Math.random for casual play; a seeded generator for tournament frames. */
+  cpuRandom: () => number = Math.random;
   cpuWait = 0;
   cpuPlan: CpuShot | null = null;
   cpuSerial = -1;
@@ -115,6 +117,7 @@ export class Session {
         this.progress,
         this.cpu!.skill,
         this.shots === 0,
+        this.cpuRandom,
       );
       this.side = this.cpuPlan.side;
       this.top = this.cpuPlan.top;

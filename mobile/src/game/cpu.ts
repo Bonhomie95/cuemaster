@@ -51,6 +51,20 @@ export function makeCpu(
     tier: skill < 0.35 ? "Relaxed" : skill > 0.7 ? "Expert" : "Club",
   };
 }
+/**
+ * mulberry32: a small deterministic generator. A tournament frame is played with the seed the
+ * server issued for it, so the rival's choices for that frame can be reproduced later.
+ */
+export function seededRandom(seed: number) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 export type CpuShot = {
   angle: number;
   power: number;

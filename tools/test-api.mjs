@@ -51,6 +51,8 @@ try {
       ADS_PROVIDER: "admob-test",
       STORE_BILLING: "",
       NODE_ENV: "test",
+      EVENT_TICK_MS: "0",
+      EVENT_MIN_FRAME_MS: "400",
     };
     server = spawn(process.execPath, ["--import", "tsx", "src/index.ts"], {
       cwd,

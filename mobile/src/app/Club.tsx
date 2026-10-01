@@ -3,7 +3,14 @@ import Rewards from "./Rewards";
 import { Press, Enter, CountUp, PageFade, Pulse } from "./motion";
 import { celebrate } from "./feedback";
 import MatchSearch from "./MatchSearch";
-import { CpuOpponent } from "../game/cpu";
+import { CpuOpponent, seededRandom } from "../game/cpu";
+import {
+  eventState,
+  formatLabel,
+  framesToWin,
+  countdown,
+  whenLocal,
+} from "./events";
 import CueShop from "./CueShop";
 import * as Crypto from "expo-crypto";
 import Constants from "expo-constants";
@@ -44,6 +51,7 @@ import {
   Venue,
   Challenge,
   Tournament,
+  EventDetail,
   ProviderConfig,
 } from "./api";
 import { signInProvider } from "./identity";
@@ -71,10 +79,49 @@ type Launch = {
   ticket?: string;
   challenge?: Challenge;
   eventId?: string;
+  /** Series events: the frame the server opened, its seed and its number in the series. */
+  format?: "drill" | "series";
+  event?: Tournament;
+  frameId?: string;
+  frameNumber?: number;
+  seed?: number;
   matchId?: string;
   opponent?: CpuOpponent;
   venue?: Venue;
 };
+/** A live clock towards a server timestamp, corrected by the server/device skew. */
+function Countdown({
+  to,
+  skew,
+  label,
+  expired,
+}: {
+  to: string;
+  skew: number;
+  label: string;
+  expired: string;
+}) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const left = Date.parse(to) - (Date.now() + skew);
+  const urgent = left > 0 && left < 5 * 60000;
+  return (
+    <View style={u.countdown}>
+      <Text style={[u.fieldLabel, { marginTop: 0 }]}>
+        {left > 0 ? label : expired}
+      </Text>
+      <Pulse active={urgent}>
+        <Text style={[u.countdownValue, urgent && { color: "#ffb36b" }]}>
+          {countdown(left)}
+        </Text>
+      </Pulse>
+      <Text style={[u.fine, { marginTop: 2 }]}>{whenLocal(to)}</Text>
+    </View>
+  );
+}
 const money = (n: number) => n.toLocaleString();
 function flag(code: string) {
   return /^[A-Z]{2}$/.test(code)
@@ -224,7 +271,9 @@ function ClubBody() {
     [toast, setToast] = useState(""),
     [reward, setReward] = useState<{ xp: number; coins: number } | null>(null),
     [event, setEvent] = useState<Tournament | null>(null),
-    [eventDetail, setEventDetail] = useState<any>(null),
+    [eventDetail, setEventDetail] = useState<EventDetail | null>(null),
+    [skew, setSkew] = useState(0),
+    [forfeitPrompt, setForfeitPrompt] = useState(false),
     [rules, setRules] = useState(false),
     [locked, setLocked] = useState<Venue | null>(null),
     [deleting, setDeleting] = useState(false),
@@ -302,6 +351,7 @@ function ClubBody() {
           !l ||
           l.kind === "free" ||
           l.kind === "local" ||
+          l.format === "series" ||
           session.running ||
           !session.shots ||
           submitted.current ||
@@ -404,7 +454,9 @@ function ClubBody() {
     setToast("");
     retryVerification.current = null;
     session.cpu = l.opponent || null;
-    session.matchRules = l.kind === "local";
+    session.matchRules = l.kind === "local" || l.format === "series";
+    session.cpuRandom =
+      l.seed === undefined ? Math.random : seededRandom(l.seed);
     session.cueIds = [player?.selectedCue || "club", "club"];
     session.skin = v.skin;
     session.reset(l.drill);
@@ -491,23 +543,134 @@ function ClubBody() {
         ticket: result.ticket,
       });
     });
+  const loadEvent = async (id: string) => {
+    const detail = await api<EventDetail>(`/tournaments/${id}`);
+    setSkew(Date.parse(detail.now) - Date.now());
+    setEventDetail(detail);
+    setEvent(detail.event);
+    return detail;
+  };
   const viewEvent = (t: Tournament) => {
     setEvent(t);
     setEventDetail(null);
+    setForfeitPrompt(false);
     setRules(false);
-    void api(`/tournaments/${t.id}`)
-      .then(setEventDetail)
-      .catch((e) => setToast(e.message));
+    void loadEvent(t.id).catch((e) => setToast(e.message));
   };
   const enterEvent = () =>
     work(async () => {
       if (!event) return;
-      await api(`/tournaments/${event.id}/enter`, "POST", {
+      const result = await api(`/tournaments/${event.id}/enter`, "POST", {
         acceptRules: rules,
       });
-      const id = event.id;
-      setEvent(null);
-      openGame({ kind: "event", drill: "pocket", eventId: id });
+      setPlayer(result.player);
+      const detail = await loadEvent(event.id);
+      if (detail.phase === "play") {
+        if (detail.event.format === "drill") return playDrill(detail);
+        setToast("You're in. Your rival is waiting: play your first frame.");
+        return;
+      }
+      celebrate();
+      setToast(
+        detail.event.entry
+          ? `You're in. ${detail.event.entry.toLocaleString()} coins entered. Play opens ${whenLocal(detail.event.startsAt)}.`
+          : `You're in. Play opens ${whenLocal(detail.event.startsAt)}.`,
+      );
+    });
+  const playDrill = (detail: EventDetail) => {
+    const t = detail.event;
+    setEvent(null);
+    openGame({
+      kind: "event",
+      drill: "pocket",
+      eventId: t.id,
+      event: t,
+      format: "drill",
+    });
+  };
+  /** Open a frame on the server, then rack up against the rival it fixed at entry. */
+  const playFrame = () =>
+    work(async () => {
+      if (!event) return;
+      try {
+        const result = await api(
+          `/tournaments/${event.id}/frames/start`,
+          "POST",
+          {},
+        );
+        const detail = eventDetail;
+        setEvent(null);
+        setForfeitPrompt(false);
+        openGame({
+          kind: "event",
+          drill: "break",
+          eventId: event.id,
+          event,
+          format: "series",
+          frameId: result.frame.id,
+          frameNumber: result.number,
+          seed: result.frame.seed,
+          opponent:
+            result.series.opponent || detail?.series?.opponent || undefined,
+        });
+      } catch (e) {
+        if (
+          e instanceof ApiError &&
+          e.status === 409 &&
+          e.body?.series?.activeFrame
+        ) {
+          setEventDetail((d) => (d ? { ...d, series: e.body.series } : d));
+          setForfeitPrompt(true);
+          return;
+        }
+        throw e;
+      }
+    });
+  const forfeitFrame = () =>
+    work(async () => {
+      const frame = eventDetail?.series?.activeFrame;
+      if (!event || !frame) return;
+      await api(`/tournaments/${event.id}/frames/${frame.id}/finish`, "POST", {
+        outcome: "forfeit",
+      });
+      setForfeitPrompt(false);
+      await loadEvent(event.id);
+      setToast("Frame forfeited and recorded as a loss.");
+    });
+  /** The rack is over: report the result, then bring the player back to the event sheet. */
+  const finishEventFrame = () =>
+    work(async () => {
+      const l = launch;
+      if (!l?.eventId || !l.frameId || !l.event) return;
+      const winner = localWinner(session.progress);
+      const outcome =
+        winner === null ? "forfeit" : winner === 0 ? "won" : "lost";
+      const result = await api(
+        `/tournaments/${l.eventId}/frames/${l.frameId}/finish`,
+        "POST",
+        { outcome },
+      );
+      setPlayer(result.player);
+      const series = result.series;
+      const record = `${series.wins}–${series.losses}`;
+      setToast(
+        result.flag === "fast"
+          ? "That frame ended faster than a frame can be played, so the referee recorded it as a loss."
+          : series.done
+            ? series.wins > series.losses
+              ? `Series won ${record}. ${result.reward.coins ? `${result.reward.coins} coins added. ` : ""}Prizes are paid when the event closes.`
+              : `Series lost ${record}. Thanks for playing; the board settles when the event closes.`
+            : outcome === "won"
+              ? `Frame won. You lead ${record}; first to ${framesToWin(series.bestOf)}.`
+              : outcome === "lost"
+                ? `Frame lost. ${record}; first to ${framesToWin(series.bestOf)}.`
+                : `Frame forfeited. ${record}.`,
+      );
+      if (series.done && series.wins > series.losses) celebrate();
+      const t = l.event;
+      leaveGame();
+      setPage("events");
+      viewEvent(t);
     });
   const leaveGame = () => {
     session.cpu = null;
@@ -636,9 +799,18 @@ function ClubBody() {
     return (
       <View style={{ flex: 1 }}>
         <TableGame
-          onExit={launch.kind === "local" ? finishLocal : leaveGame}
-          paidMatch={launch.kind === "local"}
+          onExit={
+            launch.kind === "local"
+              ? finishLocal
+              : launch.format === "series"
+                ? finishEventFrame
+                : leaveGame
+          }
+          paidMatch={launch.kind === "local" || launch.format === "series"}
           entryFee={launch.venue?.entry || 0}
+          exitLabel={
+            launch.format === "series" ? "Record frame & continue" : undefined
+          }
           exitBusy={busy}
           exitError={toast}
           playerName={player.name}
@@ -647,7 +819,9 @@ function ClubBody() {
             launch.kind === "local"
               ? `${launch.venue?.name} · ${launch.venue?.entry} coins`
               : launch.kind === "event"
-                ? "PRECISION OPEN"
+                ? launch.format === "series"
+                  ? `${launch.event?.name || "EVENT"} · FRAME ${launch.frameNumber || 1} OF ${launch.event?.bestOf || 1}`
+                  : launch.event?.name || "PRECISION OPEN"
                 : launch.challenge?.name || "LOCAL PRACTICE"
           }
           allowedSkins={catalog!.venues
@@ -1377,83 +1551,370 @@ function ClubBody() {
           onRequestClose={() => setEvent(null)}
         >
           <View style={u.scrim}>
-            <ScrollView
-              style={u.eventModal}
-              contentContainerStyle={{ padding: 26, gap: 14 }}
-            >
-              <View style={u.between}>
-                <Tag gold={event?.kind === "crypto"}>
-                  {event?.status === "open"
-                    ? "OPEN · PRESEASON"
-                    : "ANNOUNCED · ENTRIES CLOSED"}
-                </Tag>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Close event"
-                  onPress={() => setEvent(null)}
-                  style={u.close}
-                >
-                  <Text style={{ color: "#fff", fontSize: 24 }}>×</Text>
-                </Pressable>
-              </View>
-              <Text style={u.modalTitle}>{event?.name}</Text>
-              <Text style={u.rewardText}>{event?.prize}</Text>
-              <Text style={u.body}>{event?.description}</Text>
-              <Text style={u.fieldLabel}>EVENT RULES</Text>
-              {event?.rules.map((r, i) => (
-                <Text key={r} style={u.body}>
-                  {i + 1}. {r}
-                </Text>
-              ))}
-              {event?.status === "open" ? (
-                <>
-                  <Pressable
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: rules }}
-                    accessibilityLabel="Accept event rules"
-                    onPress={() => setRules(!rules)}
-                    style={u.checkRow}
+            {event &&
+              (() => {
+                const t = eventDetail?.event || event;
+                const phase =
+                  eventDetail?.phase || eventState(t, Date.now() + skew).key;
+                const series = eventDetail?.series || null;
+                const entered = !!eventDetail?.entry;
+                const seats = eventDetail
+                  ? `${eventDetail.entrants.toLocaleString()} / ${t.maxPlayers.toLocaleString()}`
+                  : `up to ${t.maxPlayers.toLocaleString()}`;
+                const full =
+                  !!eventDetail && eventDetail.entrants >= t.maxPlayers;
+                const canEnter = eventDetail
+                  ? eventDetail.canEnter || (full && !entered)
+                  : phase === "registration";
+                const underLevel = (player?.level || 1) < t.level;
+                const target = framesToWin(t.bestOf);
+                const label =
+                  phase === "registration"
+                    ? "ENTRIES OPEN"
+                    : phase === "waiting"
+                      ? "STARTING SOON"
+                      : phase === "play"
+                        ? "IN PLAY"
+                        : phase === "closed"
+                          ? "FINISHED"
+                          : phase === "cancelled"
+                            ? "CANCELLED"
+                            : "ANNOUNCED";
+                return (
+                  <ScrollView
+                    style={u.eventModal}
+                    contentContainerStyle={{ padding: 26, gap: 14 }}
                   >
-                    <Text style={u.checkbox}>{rules ? "☑" : "□"}</Text>
-                    <Text style={u.body}>
-                      I’ve read and accept these event rules.
-                    </Text>
-                  </Pressable>
-                  <Action
-                    label="Enter free challenge"
-                    disabled={busy || !rules}
-                    onPress={enterEvent}
-                  />
-                  <Text style={u.fieldLabel}>VERIFIED LEADERBOARD</Text>
-                  {!eventDetail ? (
-                    <ActivityIndicator color="#d6b675" />
-                  ) : eventDetail.leaderboard.length ? (
-                    eventDetail.leaderboard.map((r: any, i: number) => (
-                      <View key={i} style={u.leaderRow}>
-                        <Text style={u.name}>
-                          {i + 1}. {r.name} {flag(r.country)}
-                        </Text>
+                    <View style={u.between}>
+                      <Tag
+                        gold={
+                          t.kind === "crypto" ||
+                          phase === "play" ||
+                          phase === "registration"
+                        }
+                      >
+                        {label}
+                        {entered ? " · YOU'RE IN" : ""}
+                      </Tag>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Close event"
+                        onPress={() => setEvent(null)}
+                        style={u.close}
+                      >
+                        <Text style={{ color: "#fff", fontSize: 24 }}>×</Text>
+                      </Pressable>
+                    </View>
+                    <Text style={u.modalTitle}>{t.name}</Text>
+                    <Text style={u.rewardText}>{t.prize}</Text>
+                    <Text style={u.body}>{t.description}</Text>
+                    <View style={u.infoGrid}>
+                      {[
+                        ["FORMAT", formatLabel(t)],
+                        ["PLAYERS", `${seats}${full ? " · FULL" : ""}`],
+                        ["ENTRY", t.entry ? `${money(t.entry)} coins` : "Free"],
+                        [
+                          "PRIZES",
+                          t.placements?.length
+                            ? t.placements
+                                .slice()
+                                .sort((a, b) => a.position - b.position)
+                                .slice(0, 3)
+                                .map((p) => `#${p.position} ${money(p.amount)}`)
+                                .join(" · ")
+                            : t.reward
+                              ? `${money(t.reward)} coins each`
+                              : "—",
+                        ],
+                        ["MIN LEVEL", `${t.level}`],
+                        ["MIN PLAYERS", `${t.minPlayers}`],
+                      ].map(([k, v]) => (
+                        <View key={k} style={u.infoCell}>
+                          <Text style={u.infoLabel}>{k}</Text>
+                          <Text style={u.infoValue} numberOfLines={2}>
+                            {v}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                    {phase === "registration" && t.joinDeadline && (
+                      <Countdown
+                        to={t.joinDeadline}
+                        skew={skew}
+                        label="ENTRIES CLOSE IN"
+                        expired="ENTRIES CLOSED"
+                      />
+                    )}
+                    {phase === "waiting" && t.startsAt && (
+                      <Countdown
+                        to={t.startsAt}
+                        skew={skew}
+                        label="PLAY OPENS IN"
+                        expired="PLAY IS OPENING"
+                      />
+                    )}
+                    {phase === "play" && t.endsAt && (
+                      <Countdown
+                        to={t.endsAt}
+                        skew={skew}
+                        label="EVENT CLOSES IN"
+                        expired="EVENT CLOSING"
+                      />
+                    )}
+                    {phase === "registration" && t.startsAt && (
+                      <Text style={u.fine}>
+                        Play runs {whenLocal(t.startsAt)} →{" "}
+                        {whenLocal(t.endsAt)}
+                        {t.minPlayers > 1
+                          ? `. Fewer than ${t.minPlayers} entrants at the start cancels the event and refunds every entry.`
+                          : "."}
+                      </Text>
+                    )}
+                    {phase === "cancelled" && (
+                      <View style={u.announcement}>
                         <Text style={u.body}>
-                          {r.shots} shot{r.shots === 1 ? "" : "s"}
+                          {t.cancelReason || "This event was cancelled."}{" "}
+                          {entered && t.entry
+                            ? "Your entry coins were returned."
+                            : ""}
                         </Text>
                       </View>
-                    ))
-                  ) : (
-                    <Text style={u.body}>
-                      No verified scores yet. Set the first mark.
-                    </Text>
-                  )}
-                </>
-              ) : (
-                <View style={u.announcement}>
-                  <Text style={u.body}>
-                    Registration, entry payments and payouts are not active.
-                    We’ll publish the funded pool and confirmed dates before
-                    this event opens.
-                  </Text>
-                </View>
-              )}
-            </ScrollView>
+                    )}
+                    {phase === "announced" && (
+                      <View style={u.announcement}>
+                        <Text style={u.body}>
+                          Registration, entry payments and payouts are not
+                          active yet. The funded pool and confirmed dates are
+                          published before this event opens.
+                        </Text>
+                      </View>
+                    )}
+                    {series && entered && (
+                      <View style={u.seriesCard}>
+                        <View style={u.between}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={u.fieldLabel}>YOUR RIVAL</Text>
+                            <Text style={u.name}>
+                              {series.opponent?.name || "Club rival"}
+                              {series.opponent
+                                ? ` · ${series.opponent.tier.toUpperCase()}`
+                                : ""}
+                            </Text>
+                          </View>
+                          <View style={{ alignItems: "flex-end" }}>
+                            <Text style={u.fieldLabel}>SERIES</Text>
+                            <Text style={u.record}>
+                              {series.wins}–{series.losses}
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={u.frameDots}>
+                          {Array.from({ length: t.bestOf }, (_, i) => {
+                            const f = series.frames[i];
+                            const tone = !f
+                              ? u.dotEmpty
+                              : f.outcome === "won"
+                                ? u.dotWin
+                                : f.outcome === null
+                                  ? u.dotLive
+                                  : u.dotLoss;
+                            return (
+                              <View key={i} style={[u.dot, tone]}>
+                                <Text style={u.dotText}>
+                                  {!f
+                                    ? i + 1
+                                    : f.outcome === "won"
+                                      ? "W"
+                                      : f.outcome === "lost"
+                                        ? "L"
+                                        : f.outcome === "forfeit"
+                                          ? "F"
+                                          : "•"}
+                                </Text>
+                              </View>
+                            );
+                          })}
+                          <Text style={u.fine}>first to {target}</Text>
+                        </View>
+                        {forfeitPrompt && series.activeFrame ? (
+                          <>
+                            <Text style={u.body}>
+                              A frame you started was never finished. Forfeit it
+                              (a loss) to play the next one.
+                            </Text>
+                            <Action
+                              label="Forfeit unfinished frame"
+                              disabled={busy}
+                              onPress={forfeitFrame}
+                            />
+                            <Action
+                              secondary
+                              label="Keep it for now"
+                              onPress={() => setForfeitPrompt(false)}
+                            />
+                          </>
+                        ) : series.done ? (
+                          <Text style={u.body}>
+                            {series.wins > series.losses
+                              ? "Series won. Your place on the board is set; prizes are paid when the event closes."
+                              : "Series over. The board settles when the event closes."}
+                          </Text>
+                        ) : phase === "play" ? (
+                          <Action
+                            label={
+                              series.activeFrame
+                                ? "Resume: forfeit & play next frame"
+                                : `Play frame ${series.frames.length + 1} of ${t.bestOf}`
+                            }
+                            disabled={busy}
+                            onPress={
+                              series.activeFrame
+                                ? () => setForfeitPrompt(true)
+                                : playFrame
+                            }
+                          />
+                        ) : (
+                          <Text style={u.body}>
+                            {phase === "closed"
+                              ? "The event has closed."
+                              : "Your frames unlock when play opens."}
+                          </Text>
+                        )}
+                      </View>
+                    )}
+                    {!entered && canEnter && (
+                      <>
+                        {underLevel ? (
+                          <View style={u.announcement}>
+                            <Text style={u.body}>
+                              Reach level {t.level} to enter. You are level{" "}
+                              {player?.level}.
+                            </Text>
+                          </View>
+                        ) : full ? (
+                          <View style={u.announcement}>
+                            <Text style={u.body}>
+                              Every place is taken. Watch the board, or catch
+                              the next event.
+                            </Text>
+                          </View>
+                        ) : (
+                          <>
+                            <Pressable
+                              accessibilityRole="checkbox"
+                              accessibilityState={{ checked: rules }}
+                              accessibilityLabel="Accept event rules"
+                              onPress={() => setRules(!rules)}
+                              style={u.checkRow}
+                            >
+                              <Text style={u.checkbox}>
+                                {rules ? "☑" : "□"}
+                              </Text>
+                              <Text style={u.body}>
+                                I’ve read and accept these event rules.
+                              </Text>
+                            </Pressable>
+                            <Action
+                              label={
+                                t.entry
+                                  ? `Enter · ${money(t.entry)} coins`
+                                  : "Enter free"
+                              }
+                              disabled={busy || !rules}
+                              onPress={enterEvent}
+                            />
+                            {!!t.entry && (
+                              <Text style={u.fine}>
+                                Balance {money(player?.coins || 0)} coins. The
+                                fee is refunded if the event is cancelled.
+                              </Text>
+                            )}
+                          </>
+                        )}
+                      </>
+                    )}
+                    {!entered &&
+                      !canEnter &&
+                      (phase === "waiting" || phase === "play") && (
+                        <View style={u.announcement}>
+                          <Text style={u.body}>
+                            Entries closed{" "}
+                            {t.joinDeadline
+                              ? whenLocal(t.joinDeadline)
+                              : "before play"}
+                            . Follow the board below.
+                          </Text>
+                        </View>
+                      )}
+                    {entered && t.format === "drill" && (
+                      <>
+                        {phase === "play" ? (
+                          <Action
+                            label={
+                              eventDetail?.entry?.shots
+                                ? `Beat your ${eventDetail.entry.shots}-shot best`
+                                : "Play the challenge"
+                            }
+                            disabled={busy}
+                            onPress={() =>
+                              eventDetail && playDrill(eventDetail)
+                            }
+                          />
+                        ) : phase === "waiting" || phase === "registration" ? (
+                          <Text style={u.body}>
+                            You're in. The challenge unlocks when play opens.
+                          </Text>
+                        ) : null}
+                      </>
+                    )}
+                    <Text style={u.fieldLabel}>EVENT RULES</Text>
+                    {t.rules.map((r, i) => (
+                      <Text key={r} style={u.body}>
+                        {i + 1}. {r}
+                      </Text>
+                    ))}
+                    {phase !== "announced" && (
+                      <>
+                        <Text style={u.fieldLabel}>
+                          {t.format === "series"
+                            ? "SERIES STANDINGS"
+                            : "VERIFIED LEADERBOARD"}
+                        </Text>
+                        {!eventDetail ? (
+                          <ActivityIndicator color="#d6b675" />
+                        ) : eventDetail.leaderboard.length ? (
+                          eventDetail.leaderboard.map((r, i) => (
+                            <View
+                              key={r.playerId}
+                              style={[
+                                u.leaderRow,
+                                r.playerId === player?.id && u.leaderMine,
+                              ]}
+                            >
+                              <Text style={u.name}>
+                                {i + 1}. {r.name} {flag(r.country)}
+                              </Text>
+                              <Text style={u.body}>
+                                {t.format === "series"
+                                  ? `${r.wins || 0}–${r.losses || 0}${r.done ? " ✓" : ""}`
+                                  : `${r.shots} shot${r.shots === 1 ? "" : "s"}`}
+                              </Text>
+                            </View>
+                          ))
+                        ) : (
+                          <Text style={u.body}>
+                            {phase === "registration" || phase === "waiting"
+                              ? `No results until play opens${eventDetail.entrants ? ` · ${eventDetail.entrants} entered so far` : ""}.`
+                              : t.format === "series"
+                                ? "No frames recorded yet. Play the first."
+                                : "No verified scores yet. Set the first mark."}
+                          </Text>
+                        )}
+                      </>
+                    )}
+                  </ScrollView>
+                );
+              })()}
           </View>
         </Modal>
         <Modal
@@ -1924,5 +2385,73 @@ const u = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: "#d4b06b15",
     marginVertical: 8,
+  },
+  infoGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  infoCell: {
+    flexGrow: 1,
+    flexBasis: "30%",
+    minWidth: 120,
+    padding: 12,
+    borderRadius: 12,
+    backgroundColor: "#ffffff0a",
+    borderWidth: 1,
+    borderColor: "#ffffff12",
+    gap: 4,
+  },
+  infoLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 1,
+    color: "#8fa8bb",
+  },
+  infoValue: { fontSize: 13, fontWeight: "700", color: "#ecf1f6" },
+  countdown: {
+    alignItems: "center",
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: "#0b1a24",
+    borderWidth: 1,
+    borderColor: "#2f4756",
+    gap: 4,
+  },
+  countdownValue: {
+    fontSize: 34,
+    fontWeight: "800",
+    letterSpacing: 2,
+    color: "#e8d3a4",
+    fontVariant: ["tabular-nums"],
+  },
+  seriesCard: {
+    padding: 16,
+    borderRadius: 14,
+    backgroundColor: "#0f2a2a",
+    borderWidth: 1,
+    borderColor: "#2f5a55",
+    gap: 12,
+  },
+  record: {
+    fontSize: 26,
+    fontWeight: "800",
+    color: "#e8d3a4",
+    fontVariant: ["tabular-nums"],
+  },
+  frameDots: { flexDirection: "row", alignItems: "center", gap: 8 },
+  dot: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+  },
+  dotEmpty: { borderColor: "#3c5a66", backgroundColor: "transparent" },
+  dotWin: { borderColor: "#3fd0a8", backgroundColor: "#1f8f74" },
+  dotLoss: { borderColor: "#c96c6c", backgroundColor: "#7a2e2e" },
+  dotLive: { borderColor: "#e8c98f", backgroundColor: "#8a6b2a" },
+  dotText: { fontSize: 12, fontWeight: "800", color: "#f3f6f4" },
+  leaderMine: {
+    backgroundColor: "#d4b06b12",
+    borderRadius: 8,
+    paddingHorizontal: 8,
   },
 });

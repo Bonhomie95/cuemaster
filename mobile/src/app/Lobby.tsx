@@ -16,6 +16,7 @@ import { Press, Enter } from "./motion";
 export { default as IconButton } from "./IconButton";
 import HomeLobby from "./HomeLobby";
 import { venueArt } from "./art";
+import { eventState, formatLabel } from "./events";
 type Icon = React.ComponentProps<typeof Feather>["name"];
 type Page = "home" | "tables" | "practice" | "events";
 export type LobbyProps = {
@@ -257,49 +258,76 @@ export default function Lobby(p: LobbyProps) {
           </>
         )}
         {p.page === "events" &&
-          p.catalog.tournaments.map((t, i) => (
-            <Enter
-              key={t.id}
-              index={i}
-              style={[
-                s.card,
-                frame,
-                s.padded,
-                t.kind === "crypto" && { borderColor: "#88724c" },
-              ]}
-            >
-              <View style={s.between}>
-                <Feather
-                  name={t.kind === "crypto" ? "star" : "award"}
-                  size={short ? 24 : 35}
-                  color="#e4c48c"
-                />
-                <Badge
-                  icon={t.status === "open" ? "zap" : "clock"}
-                  text={t.status === "open" ? "OPEN" : "COMING SOON"}
-                />
-              </View>
-              <View style={s.bottom}>
-                <Text
-                  style={[s.title, short && { fontSize: 18 }]}
-                  numberOfLines={1}
-                >
-                  {t.name}
-                </Text>
-                <Text style={s.copy} numberOfLines={short ? 1 : 2}>
-                  {t.subtitle}
-                </Text>
-                <Text style={s.reward} numberOfLines={short ? 1 : 2}>
-                  {t.prize}
-                </Text>
-                <CardAction
-                  icon="arrow-right"
-                  label="View event"
-                  onPress={() => p.onEvent(t)}
-                />
-              </View>
-            </Enter>
-          ))}
+          p.catalog.tournaments.map((t, i) => {
+            const state = eventState(t);
+            return (
+              <Enter
+                key={t.id}
+                index={i}
+                style={[
+                  s.card,
+                  frame,
+                  s.padded,
+                  t.kind === "crypto" && { borderColor: "#88724c" },
+                  state.key === "registration" && { borderColor: "#3f9f86" },
+                  state.key === "play" && { borderColor: "#b08a3e" },
+                ]}
+              >
+                <View style={s.between}>
+                  <Feather
+                    name={
+                      t.kind === "crypto"
+                        ? "star"
+                        : t.format === "series"
+                          ? "users"
+                          : "award"
+                    }
+                    size={short ? 24 : 35}
+                    color="#e4c48c"
+                  />
+                  <Badge icon={state.icon as Icon} text={state.text} />
+                </View>
+                <View style={s.bottom}>
+                  <Text
+                    style={[s.title, short && { fontSize: 18 }]}
+                    numberOfLines={1}
+                  >
+                    {t.name}
+                  </Text>
+                  <Text style={s.copy} numberOfLines={1}>
+                    {formatLabel(t)}
+                  </Text>
+                  {!short && (
+                    <Text style={s.copy} numberOfLines={1}>
+                      {t.entry
+                        ? `${t.entry.toLocaleString()} coin entry`
+                        : "Free entry"}{" "}
+                      · up to {t.maxPlayers.toLocaleString()} players
+                    </Text>
+                  )}
+                  <Text style={s.reward} numberOfLines={short ? 1 : 2}>
+                    {t.prize}
+                  </Text>
+                  <CardAction
+                    icon="arrow-right"
+                    label={
+                      state.key === "registration"
+                        ? "Enter event"
+                        : state.key === "play"
+                          ? "Play now"
+                          : "View event"
+                    }
+                    tone={
+                      state.key === "registration" || state.key === "play"
+                        ? "primary"
+                        : "muted"
+                    }
+                    onPress={() => p.onEvent(t)}
+                  />
+                </View>
+              </Enter>
+            );
+          })}
       </ScrollView>
       <View style={s.footer}>
         <Text style={s.hint}>SWIPE TO EXPLORE</Text>

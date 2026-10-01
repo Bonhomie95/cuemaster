@@ -137,6 +137,7 @@ function edit(event) {
     for (const [key, value] of Object.entries(event)) {
       const field = f.elements.namedItem(key);
       if (!field) continue;
+      if (value === null || value === undefined) continue;
       field.value =
         key === "rules"
           ? value.join("\n")
@@ -144,7 +145,7 @@ function edit(event) {
             ? (value || []).map((p) => `${p.position}:${p.amount}`).join("\n")
             : key === "countries"
               ? (value || []).join(",")
-              : ["startsAt", "endsAt"].includes(key)
+              : ["startsAt", "endsAt", "registrationClosesAt"].includes(key)
                 ? new Date(
                     new Date(value) -
                       new Date(value).getTimezoneOffset() * 60000,
@@ -161,51 +162,184 @@ $("cancel-edit").onclick = () => {
   $("event-form").hidden = true;
   editing = null;
 };
+const PHASE_LABEL = {
+  draft: "Draft",
+  announced: "Announced",
+  registration: "Registration open",
+  waiting: "Waiting to start",
+  play: "In play",
+  closed: "Closed",
+  cancelled: "Cancelled",
+};
+const when = (iso) => (iso ? new Date(iso).toLocaleString() : "—");
+function formatLabel(event) {
+  return event.format === "series"
+    ? event.bestOf === 1
+      ? "Game of 1 vs club rival"
+      : `Best of ${event.bestOf} vs club rival`
+    : "Straight-pot score attack";
+}
 async function loadEvents() {
   rows = await call("/tournaments");
   $("event-list").replaceChildren(
     ...rows.map((event) => {
       const card = node("article", "");
-      card.append(
-        node("h3", event.name),
+      const phase = node("span", PHASE_LABEL[event.phase] || event.status);
+      phase.className = `phase ${event.phase}`;
+      const title = node("h3", "");
+      title.append(phase, document.createTextNode(event.name));
+      const meta = node("div", "");
+      meta.className = "meta";
+      meta.append(
         node(
-          "p",
-          `${event.status.toUpperCase()} · ${event.currency} · level ${event.level} · ${event.entry} coin entry`,
+          "div",
+          `${formatLabel(event)} · ${event.entrants}/${event.maxPlayers} players (min ${event.minPlayers}) · level ${event.level}+`,
         ),
-        node("p", event.prize),
+        node(
+          "div",
+          `${event.entry ? `${event.entry} coin entry` : "Free entry"} · ${event.currency} · ${event.prize}` +
+            (event.placements?.length
+              ? ` · places: ${event.placements.map((p) => `#${p.position} ${p.amount}`).join(", ")}`
+              : ""),
+        ),
+        node(
+          "div",
+          `Join by ${when(event.joinDeadline)} · play ${when(event.startsAt)} → ${when(event.endsAt)}`,
+        ),
       );
+      if (event.payouts)
+        meta.append(
+          node(
+            "div",
+            `Settled ${when(event.settledAt)}: ${event.payouts.length ? event.payouts.map((p) => `#${p.position} ${p.coins} coins`).join(", ") : "no prizes owed"}`,
+          ),
+        );
+      if (event.cancelReason)
+        meta.append(node("div", `Cancelled: ${event.cancelReason}`));
+      card.append(title, meta);
       const actions = node("div", "");
       actions.className = "actions";
       if (event.status === "draft")
         actions.append(button("Edit draft", () => edit(event)));
-      for (const status of event.status === "closed"
-        ? []
-        : event.status === "open"
-          ? ["closed"]
-          : ["announced", "open", "closed"])
+      const transitions =
+        {
+          draft: ["announced", "open"],
+          announced: ["open", "cancelled"],
+          open: ["closed", "cancelled"],
+        }[event.status] || [];
+      for (const status of transitions)
         actions.append(
           button(
-            status === "open"
-              ? "Open registration"
-              : status === "announced"
-                ? "Announce"
-                : "Close event",
+            {
+              open: "Open registration",
+              announced: "Announce",
+              closed: "Close & pay prizes now",
+              cancelled: "Cancel & refund",
+            }[status],
             async () => {
-              if (!confirm(`Set ${event.name} to ${status}?`)) return;
-              await call(`/tournaments/${event.id}/status`, "POST", {
-                status,
-                version: event.version,
-              });
+              const body = { status, version: event.version };
+              if (status === "cancelled") {
+                const reason = prompt(
+                  "Reason players will see for the cancellation (at least 5 characters)",
+                );
+                if (!reason) return;
+                body.reason = reason;
+              } else if (!confirm(`Set ${event.name} to ${status}?`)) return;
+              const r = await call(
+                `/tournaments/${event.id}/status`,
+                "POST",
+                body,
+              );
               await loadEvents();
+              if (r.settlement?.paid)
+                message(
+                  `Closed. Paid ${r.settlement.paid.length} placement(s)${r.settlement.skipped ? ` — ${r.settlement.skipped}` : ""}.`,
+                );
+              if (r.settlement?.refunded)
+                message(
+                  `Cancelled. Refunded ${r.settlement.refunded.length} entry fee(s).`,
+                );
             },
           ),
         );
+      if (event.status === "closed")
+        actions.append(
+          button("Retry payout", async () => {
+            const r = await call(`/tournaments/${event.id}/settle`, "POST");
+            message(
+              r.paid.length
+                ? `Paid ${r.paid.length} outstanding placement(s).`
+                : r.skipped || "Every placement was already paid.",
+            );
+            await loadEvents();
+          }),
+        );
       actions.append(
+        button("Entrants", async () => {
+          const list = await call(`/tournaments/${event.id}/entries`);
+          const existing = card.querySelector("table.entries");
+          if (existing) {
+            existing.remove();
+            return;
+          }
+          const table = node("table", "");
+          table.className = "entries";
+          const head = node("tr", "");
+          for (const h of [
+            "#",
+            "Player",
+            event.format === "series" ? "Frames (W–L)" : "Best (shots)",
+            "Joined",
+            "Fee",
+            "State",
+          ])
+            head.append(node("th", h));
+          table.append(head);
+          list.forEach((row, i) => {
+            const tr = node("tr", "");
+            tr.append(
+              node("td", String(i + 1)),
+              node(
+                "td",
+                `${row.name}${row.country ? ` (${row.country})` : ""}`,
+              ),
+              node(
+                "td",
+                event.format === "series"
+                  ? `${row.wins || 0}–${row.losses || 0} of ${row.frames}`
+                  : row.shots
+                    ? `${row.shots}`
+                    : "—",
+              ),
+              node("td", when(row.joinedAt)),
+              node("td", String(row.entry || 0)),
+              node(
+                "td",
+                row.suspended
+                  ? "Suspended"
+                  : row.activeFrame
+                    ? "Frame in progress"
+                    : row.done
+                      ? "Series complete"
+                      : row.score !== undefined
+                        ? "Scored"
+                        : "Entered",
+              ),
+            );
+            table.append(tr);
+          });
+          if (!list.length)
+            table.append(node("caption", "Nobody has entered yet."));
+          card.append(table);
+        }),
         button("Audit history", async () => {
           const history = await call(`/tournaments/${event.id}/audit`);
           message(
             history
-              .map((h) => `${h.at} · ${h.action} · ${h.actor}`)
+              .map(
+                (h) =>
+                  `${h.at} · ${h.action} · ${h.actor}${h.reason ? ` · ${h.reason}` : ""}`,
+              )
               .join("\n") || "No changes recorded.",
           );
         }),
@@ -235,6 +369,16 @@ async function loadEvents() {
     }),
   );
 }
+$("run-lifecycle").onclick = () =>
+  run(async () => {
+    const r = await call("/tournaments/lifecycle", "POST");
+    await loadEvents();
+    message(
+      r.acted.length
+        ? r.acted.map((a) => `${a.action}: ${a.id}`).join("\n")
+        : "Nothing due: no event has reached its start or close.",
+    );
+  }, $("run-lifecycle"));
 $("event-form").onsubmit = (e) => {
   e.preventDefault();
   run(async () => {
@@ -244,6 +388,12 @@ $("event-form").onsubmit = (e) => {
       level: Number(d.level),
       entry: Number(d.entry),
       reward: Number(d.reward),
+      bestOf: Number(d.bestOf),
+      maxPlayers: Number(d.maxPlayers),
+      minPlayers: Number(d.minPlayers),
+      registrationClosesAt: d.registrationClosesAt
+        ? new Date(d.registrationClosesAt).toISOString()
+        : undefined,
       rules: d.rules
         .split("\n")
         .map((s) => s.trim())
@@ -252,7 +402,9 @@ $("event-form").onsubmit = (e) => {
         .split("\n")
         .filter((s) => s.trim())
         .map((s) => {
-          const [position, amount] = s.split(":").map(Number);
+          const [position, amount] = s.split(":").map((v) => Number(v.trim()));
+          if (!Number.isFinite(position) || !Number.isFinite(amount))
+            throw Error(`Rewarded positions: "${s}" is not position:amount.`);
           return { position, amount };
         }),
       countries: d.countries
