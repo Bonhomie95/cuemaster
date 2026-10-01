@@ -95,18 +95,30 @@ function Countdown({
   skew,
   label,
   expired,
+  onExpire,
 }: {
   to: string;
   skew: number;
   label: string;
   expired: string;
+  /** Fires once when the clock reaches zero, so the sheet can move to its next phase itself. */
+  onExpire?: () => void;
 }) {
   const [, tick] = useState(0);
+  const fired = useRef(false);
   useEffect(() => {
     const timer = setInterval(() => tick((n) => n + 1), 1000);
     return () => clearInterval(timer);
   }, []);
   const left = Date.parse(to) - (Date.now() + skew);
+  useEffect(() => {
+    if (left <= 0 && !fired.current) {
+      fired.current = true;
+      // A second of grace so the server's own clock has certainly passed the mark too.
+      const timer = setTimeout(() => onExpire?.(), 1200);
+      return () => clearTimeout(timer);
+    }
+  }, [left <= 0]);
   const urgent = left > 0 && left < 5 * 60000;
   return (
     <View style={u.countdown}>
@@ -548,6 +560,15 @@ function ClubBody() {
     setSkew(Date.parse(detail.now) - Date.now());
     setEventDetail(detail);
     setEvent(detail.event);
+    // Prizes and refunds land on the server clock, not on a tap: a closed or cancelled event
+    // the player entered refreshes their balance so the payout shows the moment they look.
+    if (
+      detail.entry &&
+      (detail.phase === "closed" || detail.phase === "cancelled")
+    )
+      api<Player>("/me")
+        .then(setPlayer)
+        .catch(() => {});
     return detail;
   };
   const viewEvent = (t: Tournament) => {
@@ -820,7 +841,7 @@ function ClubBody() {
               ? `${launch.venue?.name} · ${launch.venue?.entry} coins`
               : launch.kind === "event"
                 ? launch.format === "series"
-                  ? `${launch.event?.name || "EVENT"} · FRAME ${launch.frameNumber || 1} OF ${launch.event?.bestOf || 1}`
+                  ? `FRAME ${launch.frameNumber || 1} OF ${launch.event?.bestOf || 1}\n${launch.event?.name || "EVENT"}`
                   : launch.event?.name || "PRECISION OPEN"
                 : launch.challenge?.name || "LOCAL PRACTICE"
           }
@@ -1643,6 +1664,7 @@ function ClubBody() {
                         skew={skew}
                         label="ENTRIES CLOSE IN"
                         expired="ENTRIES CLOSED"
+                        onExpire={() => void loadEvent(t.id).catch(() => {})}
                       />
                     )}
                     {phase === "waiting" && t.startsAt && (
@@ -1651,6 +1673,7 @@ function ClubBody() {
                         skew={skew}
                         label="PLAY OPENS IN"
                         expired="PLAY IS OPENING"
+                        onExpire={() => void loadEvent(t.id).catch(() => {})}
                       />
                     )}
                     {phase === "play" && t.endsAt && (
@@ -1659,6 +1682,7 @@ function ClubBody() {
                         skew={skew}
                         label="EVENT CLOSES IN"
                         expired="EVENT CLOSING"
+                        onExpire={() => void loadEvent(t.id).catch(() => {})}
                       />
                     )}
                     {phase === "registration" && t.startsAt && (
@@ -1905,9 +1929,13 @@ function ClubBody() {
                           <Text style={u.body}>
                             {phase === "registration" || phase === "waiting"
                               ? `No results until play opens${eventDetail.entrants ? ` · ${eventDetail.entrants} entered so far` : ""}.`
-                              : t.format === "series"
-                                ? "No frames recorded yet. Play the first."
-                                : "No verified scores yet. Set the first mark."}
+                              : phase === "cancelled"
+                                ? "The event was cancelled before any result was recorded."
+                                : phase === "closed"
+                                  ? "The event closed with no results recorded."
+                                  : t.format === "series"
+                                    ? "No frames recorded yet. Play the first."
+                                    : "No verified scores yet. Set the first mark."}
                           </Text>
                         )}
                       </>

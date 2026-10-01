@@ -939,7 +939,9 @@ function Game({
                         ? "DRAG ON / BEHIND LINE · RELEASE TO PLACE"
                         : "PLACE THE CUE BALL"
                       : session.progress.finished
-                        ? "RESET TABLE TO PLAY AGAIN"
+                        ? paidMatch
+                          ? "RACK COMPLETE · RECORD THE RESULT"
+                          : "RESET TABLE TO PLAY AGAIN"
                         : `${turn === 0 ? "YOUR" : "PLAYER 2’S"} TURN`}
             </Text>
             {!session.replaying &&

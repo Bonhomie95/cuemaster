@@ -1,0 +1,42 @@
+name: CI
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+jobs:
+  check:
+    name: Typecheck, physics tests, API suites
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      mongo:
+        image: mongo:8.0
+        ports: ["27028:27017"]
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' || mongo --quiet --eval 'db.runCommand({ping:1}).ok'"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            mobile/package-lock.json
+            server/package-lock.json
+      - name: Install
+        run: |
+          npm --prefix mobile ci --no-audit --no-fund
+          npm --prefix server ci --no-audit --no-fund
+      - name: Typecheck
+        run: |
+          npm --prefix mobile run typecheck
+          npm --prefix server run typecheck
+      - name: Format
+        run: mobile/node_modules/.bin/prettier --check "server/src/**/*.{ts,mjs}" "server/tests/**/*.ts" "mobile/src/**/*.{ts,tsx}" mobile/TableGame.tsx
+      - name: Physics, session and rule tests
+        run: npm --prefix mobile test
+      - name: API integration suites
+        env:
+          TEST_MONGODB_URI: mongodb://127.0.0.1:27028
+        run: npm --prefix server test

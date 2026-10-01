@@ -216,16 +216,33 @@ app.get("/config", (_req, res) =>
     },
   }),
 );
+const PHASE_ORDER = [
+  "registration",
+  "play",
+  "waiting",
+  "announced",
+  "closed",
+  "cancelled",
+  "draft",
+];
 app.get("/catalog", async (_req, res) =>
   res.json({
     venues,
     challenges,
+    // Live first: what a player can act on now, then what is coming, then what has ended.
     tournaments: (
       await events
         .find({ status: { $ne: "draft" } })
         .limit(100)
         .toArray()
-    ).map(publicEvent),
+    )
+      .map((e) => ({ event: publicEvent(e), phase: eventPhase(e) }))
+      .sort(
+        (a, b) =>
+          PHASE_ORDER.indexOf(a.phase) - PHASE_ORDER.indexOf(b.phase) ||
+          Date.parse(a.event.startsAt || 0) - Date.parse(b.event.startsAt || 0),
+      )
+      .map((x) => x.event),
     cues,
   }),
 );
