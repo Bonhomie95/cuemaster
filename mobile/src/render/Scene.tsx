@@ -766,6 +766,20 @@ export function Scene() {
       (__DEV__ || process.env.EXPO_PUBLIC_NATIVE_BENCHMARK === "1") &&
       ++checkFrames.current === 240
     ) {
+      // Centre pixel after the frame: proves the table reached the framebuffer, which
+      // simulator screenshots cannot show (they skip the GL layer).
+      const ctx = gl.getContext(),
+        px = new Uint8Array(4),
+        size = gl.getDrawingBufferSize(new T.Vector2());
+      ctx.readPixels(
+        Math.floor(size.x / 2),
+        Math.floor(size.y / 2),
+        1,
+        1,
+        ctx.RGBA,
+        ctx.UNSIGNED_BYTE,
+        px,
+      );
       console.info(
         "CueMaster render check",
         JSON.stringify({
@@ -774,6 +788,8 @@ export function Scene() {
           triangles: gl.info.render.triangles,
           fps: session.fps,
           p95Ms: session.p95,
+          centrePixel: Array.from(px),
+          buffer: [size.x, size.y],
         }),
       );
       if (
