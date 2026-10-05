@@ -43,3 +43,4 @@ artifacts/*.app/
 
 /artifacts/ios-release-build/
 /artifacts/release-native-export/
+/.claude/launch.json

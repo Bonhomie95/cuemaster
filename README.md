@@ -34,6 +34,16 @@ For Atlas, set `MONGODB_URI` and `MONGODB_DB` in `server/.env` using `server/.en
 - Weekly Pro and USDC Masters event pages with announced status and closed entries.
 - Native Google sign-in and iOS Apple sign-in integration, with server-side identity-token verification; provider configuration still required.
 
+- Daily Shot: one seeded layout a day, identical for everyone, scored by fewest verified shots. The leader's run plays beside you as a translucent ghost cue ball. 50 XP on the first verified run each day.
+- City trick-shot packs: two referee-verified layouts per venue. Clearing both stamps the city in the practice-lab passport.
+- XP for verified play: re-clearing any drill pays 20 XP (ten a day), event entries pay 100 XP once, so progression no longer stops at level 7.
+- Open competitions can run on any drill the referee can replay; the admin console has a drill picker.
+- CPU wins are verified: the device records the player's actions, the server replays the whole rack with the rival's shots regenerated from the match seed, and only a confirmed win seals a crate.
+- Replay codes: Table settings → The practice room shares the current run as a `CM1:` code and plays a pasted one. Shared runs never count as the viewer's own.
+- Eight rivals each have a playing style the planner uses (safe, steady, power, spin) and a motto on the match card.
+- Physics coach: after a missed practice shot the footer says what the engine saw, in degrees off the nearest pocket, with aim-fuller or aim-thinner advice.
+- Living landmarks: each city inlay carries an animated light, and London keeps its clock hand.
+
 Drag cloth to aim, pull the left power handle down and release to shoot. Returning to zero cancels. Spin opens the cue-ball picker. The menu contains camera, practice, collection, restart, replay and return-to-club controls. After an unranked shot, ▶ REPLAY re-runs it in slow motion.
 
 ## Art and implementation
