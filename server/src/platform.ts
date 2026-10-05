@@ -2,6 +2,7 @@ import { installUsdc } from "./usdc";
 import { installAdminAuth, passwordHash } from "./adminAuth";
 import { randomUUID, randomBytes } from "node:crypto";
 import { z } from "zod";
+import { drillTargets } from "./catalog";
 import type { Express, RequestHandler } from "express";
 import type { Db } from "mongodb";
 import { rateLimit } from "express-rate-limit";
@@ -15,6 +16,11 @@ export const eventInput = z
     currency: z.enum(["coins", "USDC"]),
     reward: z.number().int().min(0).max(10000),
     entry: z.number().int().min(0).max(1000000).default(0),
+    // Any drill the referee can replay; the city packs make weekly rotation free.
+    drill: z
+      .string()
+      .refine((d) => d in drillTargets, "Unknown drill")
+      .default("pocket"),
     placements: z
       .array(
         z
@@ -270,8 +276,7 @@ export function installPlatform(
         id,
         kind: data.currency === "USDC" ? "crypto" : "coins",
         status: "draft",
-        drill: "pocket",
-        targets: [1],
+        targets: drillTargets[data.drill],
         version: 1,
         createdAt: at,
         createdBy: req.player._id,
@@ -295,6 +300,7 @@ export function installPlatform(
         {
           $set: {
             ...data.data,
+            targets: drillTargets[data.data.drill],
             kind: data.data.currency === "USDC" ? "crypto" : "coins",
             updatedBy: req.player._id,
           },
@@ -345,7 +351,7 @@ export function installPlatform(
         status === "open" &&
         (event.currency !== "coins" ||
           event.countries?.length ||
-          event.drill !== "pocket")
+          !(event.drill in drillTargets))
       )
         return res.status(409).json({
           error:

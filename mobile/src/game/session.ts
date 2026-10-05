@@ -1,7 +1,56 @@
 import { CpuOpponent, CpuShot, planCpuShot, cpuPlacement } from "./cpu";
 import { cueById } from "./cues";
-import { World, drill, P, Ball, ball, R, H } from "../physics/engine";
+import { World, drill, P, Ball, ball, R, H, W } from "../physics/engine";
 import { Progress } from "./progress";
+import { localWinner } from "./localMatch";
+export type Shot = { angle: number; power: number; side: number; top: number };
+/** Everything the player decided in a match; the server replays these with the same CPU seed. */
+export type Action =
+  | ({ t: "shot" } & Shot)
+  | { t: "place"; x: number; z: number }
+  | {
+      t: "break";
+      choice: "spot" | "rerack" | "opponent-break" | "accept" | "hand";
+    }
+  | { t: "timeout" };
+/** Same LCG as the rack jitter: tiny, deterministic, identical on device and server. */
+export function seededRandom(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+/** A replay is a drill plus the shots; floats are written in full so the physics re-run exactly. */
+export function encodeReplay(drill: string, shots: Shot[]) {
+  return `CM1:${drill}:${shots
+    .map((s) => [s.angle, s.power, s.side, s.top].join(","))
+    .join(";")}`;
+}
+export function decodeReplay(code: string) {
+  const m = code.trim().match(/^CM1:([a-z0-9:-]+):(.+)$/i);
+  if (!m) return null;
+  const shots = m[2].split(";").map((p) => {
+    const [angle, power, side, top] = p.split(",").map(Number);
+    return { angle, power, side, top };
+  });
+  if (
+    !shots.length ||
+    shots.length > 12 ||
+    shots.some((s) => !Object.values(s).every(Number.isFinite))
+  )
+    return null;
+  return { drill: m[1], shots };
+}
+const pocketNames = [
+  [-H, -W, "top-left corner"],
+  [0, -W, "top middle"],
+  [H, -W, "top-right corner"],
+  [-H, W, "bottom-left corner"],
+  [0, W, "bottom middle"],
+  [H, W, "bottom-right corner"],
+] as [number, number, string][];
+const wrap = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
 export type Skin = {
   id: string;
   name: string;
@@ -77,6 +126,19 @@ skins.push(
   },
 );
 export class Session {
+  /** Injected so a headless replay on the server makes the same CPU decisions. */
+  rng: () => number = Math.random;
+  now: () => number = Date.now;
+  actions: Action[] = [];
+  /** A shared replay queued for playback; cleared by reset. */
+  queue: Shot[] = [];
+  queueWait = 0;
+  imported = false;
+  /** The leader's verified shots, run on a parallel table and drawn as a ghost cue ball. */
+  ghost: { shots: Shot[]; world: World } | null = null;
+  coach: string | null = null;
+  contact: { id: number; x: number; z: number; vx: number; vz: number } | null =
+    null;
   cpu: CpuOpponent | null = null;
   cpuWait = 0;
   cpuPlan: CpuShot | null = null;
@@ -115,6 +177,8 @@ export class Session {
         this.progress,
         this.cpu!.skill,
         this.shots === 0,
+        this.rng,
+        this.cpu!.style,
       );
       this.side = this.cpuPlan.side;
       this.top = this.cpuPlan.top;
@@ -149,7 +213,17 @@ export class Session {
     this.secondsLeft = this.activeCue.seconds;
     this.turnSerial++;
   }
-  updateClock(now = Date.now()) {
+  expireTurn() {
+    this.power = 0;
+    if (this.progress.turn === 0) this.actions.push({ t: "timeout" });
+    this.progress.turn = 1 - this.progress.turn;
+    this.progress.foul = "Time expired";
+    this.placement = true;
+    this.headStringPlacement = this.shots === 0;
+    this.resetTurnClock();
+    this.notify();
+  }
+  updateClock(now = this.now()) {
     if (
       !this.matchRules ||
       this.running ||
@@ -162,15 +236,8 @@ export class Session {
     if (!this.turnDeadline)
       this.turnDeadline = now + this.activeCue.seconds * 1000;
     const left = Math.max(0, Math.ceil((this.turnDeadline - now) / 1000));
-    if (left === 0) {
-      this.power = 0;
-      this.progress.turn = 1 - this.progress.turn;
-      this.progress.foul = "Time expired";
-      this.placement = true;
-      this.headStringPlacement = this.shots === 0;
-      this.resetTurnClock();
-      this.notify();
-    } else if (left !== this.secondsLeft) {
+    if (left === 0) this.expireTurn();
+    else if (left !== this.secondsLeft) {
       this.secondsLeft = left;
       this.notify();
     }
@@ -236,6 +303,13 @@ export class Session {
     this.replayShots = [];
     this.savedReplay = [];
     this.usedPlacement = false;
+    this.actions = [];
+    this.queue = [];
+    this.queueWait = 0;
+    this.imported = false;
+    this.ghost = null;
+    this.coach = null;
+    this.contact = null;
     this.progress = new Progress();
     this.progress.strict = this.matchRules;
     this.headStringPlacement = false;
@@ -268,6 +342,7 @@ export class Session {
     choice: "spot" | "rerack" | "opponent-break" | "accept" | "hand",
   ) {
     if (!this.progress.breakChoice || this.running) return;
+    if (this.progress.turn === 0) this.actions.push({ t: "break", choice });
     const owner = this.progress.turn;
     const breaker = this.progress.breakShooter;
     if (choice === "rerack" || choice === "opponent-break") {
@@ -332,6 +407,7 @@ export class Session {
       this.placement = false;
       this.headStringPlacement = false;
       this.usedPlacement = !this.matchRules;
+      if (!this.cpuTurn) this.actions.push({ t: "place", x, z });
     }
     this.previous = this.world.balls.map((b) => ({ ...b }));
     this.notify();
@@ -358,6 +434,24 @@ export class Session {
         side: this.side,
         top: this.top,
       });
+      if (!this.cpuTurn)
+        this.actions.push({
+          t: "shot",
+          angle: this.angle,
+          power: this.power,
+          side: this.side,
+          top: this.top,
+        });
+      this.coach = null;
+      this.contact = null;
+      const ghostShot = this.ghost?.shots[this.shots];
+      if (ghostShot && this.ghost)
+        this.ghost.world.strike(
+          ghostShot.angle,
+          ghostShot.power,
+          ghostShot.side,
+          ghostShot.top,
+        );
       this.progress.begin();
       this.shotStartTime = this.world.time;
       this.saved = state;
@@ -429,9 +523,75 @@ export class Session {
     ).length;
     this.shoot();
   }
+  /** Play a shared replay code on this table. Never counts towards a challenge. */
+  playCode(code: string) {
+    const replay = decodeReplay(code);
+    if (!replay || this.matchRules) return false;
+    this.reset(replay.drill);
+    this.queue = replay.shots;
+    this.imported = true;
+    this.message = "Watching a shared replay.";
+    this.notify();
+    return true;
+  }
+  setGhost(shots: Shot[]) {
+    this.ghost = shots.length
+      ? { shots, world: new World(drill(this.drill)) }
+      : null;
+    this.notify();
+  }
+  /** What the engine saw on a missed shot, in plain words. */
+  coachNote(): string | null {
+    const c = this.contact,
+      shot = this.lastShot;
+    if (!shot) return null;
+    if (!c)
+      return "The cue ball found nothing. Check the aim line before you pull back.";
+    if (c.id === 8 && !this.progress.groups[this.progress.turn])
+      return "You struck the 8 first. Pick an object ball.";
+    if (Math.hypot(c.vx, c.vz) < 0.05)
+      return `Barely touched the ${c.id} ball. Hit it fuller.`;
+    const actual = Math.atan2(c.vz, c.vx);
+    let best = pocketNames[0],
+      err = Infinity,
+      ideal = 0;
+    for (const p of pocketNames) {
+      const d = Math.atan2(p[1] - c.z, p[0] - c.x),
+        e = Math.abs(wrap(actual - d));
+      if (e < err) {
+        err = e;
+        best = p;
+        ideal = d;
+      }
+    }
+    const deg = (err * 180) / Math.PI;
+    if (deg < 0.8)
+      return `The ${c.id} ball was on line for the ${best[2]} but ran out of pace. Add power.`;
+    if (deg > 25)
+      return `The ${c.id} ball left ${deg.toFixed(0)}° wide of every pocket. Choose a different pocket.`;
+    const cutActual = Math.abs(wrap(actual - shot.angle)),
+      cutNeeded = Math.abs(wrap(ideal - shot.angle));
+    return `The ${c.id} ball ran ${deg.toFixed(1)}° off the ${best[2]}. ${
+      cutActual > cutNeeded ? "Aim fuller." : "Aim thinner."
+    }`;
+  }
   update(dt: number) {
     this.updateClock();
     this.updateCpu(dt);
+    if (
+      this.queue.length &&
+      !this.running &&
+      !this.placement &&
+      !this.progress.finished &&
+      !this.progress.breakChoice
+    ) {
+      this.queueWait += Math.min(0.1, Math.max(0, dt));
+      if (this.queueWait > 1.2) {
+        this.queueWait = 0;
+        Object.assign(this, this.queue.shift());
+        this.shoot();
+      }
+    }
     // Ignore suspension gaps; never advance minutes of simulation on resume.
     if (dt > 1) {
       this.accumulator = 0;
@@ -478,11 +638,19 @@ export class Session {
     while (this.accumulator >= P.tick && steps < 24) {
       this.previous = this.world.balls.map((b) => ({ ...b }));
       this.world.tick();
+      if (this.ghost?.world.active) {
+        this.ghost.world.tick();
+        this.ghost.world.events.length = 0;
+      }
       this.accumulator -= P.tick;
       steps++;
       for (const e of this.world.events) {
         this.onEvent?.(e);
         this.progress.contact(e);
+        if (e.type === "ball" && !this.contact && (e.a === 0 || e.b === 0)) {
+          const o = this.world.balls.find((b) => b.id === (e.a || e.b))!;
+          this.contact = { id: o.id, x: o.x, z: o.z, vx: o.vx, vz: o.vz };
+        }
         if (e.type === "pocket") {
           this.progress.pocket(e.a);
           if (e.a !== 0) {
@@ -507,6 +675,8 @@ export class Session {
           this.progress.finished = true;
         this.running = false;
         this.resetTurnClock();
+        if (!this.matchRules && !this.progress.shotPots.length && !this.cpu)
+          this.coach = this.coachNote();
         this.placement =
           !this.progress.finished &&
           !this.progress.breakChoice &&
@@ -525,6 +695,55 @@ export class Session {
   }
 }
 export const session = new Session();
+/**
+ * Re-run a CPU match from the player's recorded actions. The rival's shots are regenerated from
+ * the match seed, so a device cannot invent a rival that misses. Throws on any action the rules
+ * would not have allowed.
+ */
+export function replayMatch(
+  opponent: CpuOpponent,
+  seed: number,
+  actions: Action[],
+) {
+  const s = new Session();
+  s.cpu = opponent;
+  s.matchRules = true;
+  s.rng = seededRandom(seed);
+  s.now = () => 0;
+  s.reset("break");
+  const settle = () => {
+    let n = 0;
+    while ((s.running || s.cpuTurn) && n++ < 20000) s.update(0.1);
+    if (s.running || s.cpuTurn) throw new Error("Match did not settle.");
+  };
+  for (const a of actions) {
+    settle();
+    if (s.progress.finished)
+      throw new Error("Play continued after the rack ended.");
+    if (a.t === "shot") {
+      Object.assign(s, {
+        angle: a.angle,
+        power: a.power,
+        side: a.side,
+        top: a.top,
+      });
+      s.shoot();
+      if (!s.running) throw new Error("A recorded shot could not be played.");
+    } else if (a.t === "place") {
+      if (!s.placement || !s.placeCue(a.x, a.z))
+        throw new Error("A recorded placement was not allowed.");
+    } else if (a.t === "break") {
+      if (!s.progress.breakChoice)
+        throw new Error("No break decision was due.");
+      s.resolveBreak(a.choice);
+    } else if (a.t === "timeout") {
+      if (s.progress.turn !== 0)
+        throw new Error("Only the player can time out.");
+      s.expireTurn();
+    }
+  }
+  settle();
+  return { finished: s.progress.finished, winner: localWinner(s.progress) };
+}
 // Dev-only handle for inspecting and scripting shots from a browser console.
-if (typeof __DEV__ !== "undefined" && __DEV__)
-  (globalThis as any).__cm = session;
+if ((globalThis as any).__DEV__) (globalThis as any).__cm = session;

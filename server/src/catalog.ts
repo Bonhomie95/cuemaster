@@ -116,6 +116,140 @@ export const challenges = [
     difficulty: "POWER",
   },
 ];
+const venueByCity: Record<string, string> = {
+  lagos: "heritage",
+  london: "riviera",
+  paris: "regent",
+  tokyo: "midnight",
+  dubai: "jade",
+  newyork: "champion",
+};
+/** Two trick shots per venue. Clearing both stamps the city in the player's passport. */
+const city = (
+  venue: string,
+  label: string,
+  n: number,
+  name: string,
+  description: string,
+  targets: number[],
+) => ({
+  id: `${venue}-${n}`,
+  name,
+  drill: `${venue}-${n}`,
+  description,
+  targets,
+  xp: 50,
+  coins: 75,
+  difficulty: label.toUpperCase(),
+  city: venueByCity[venue],
+});
+export const cityChallenges = [
+  city(
+    "lagos",
+    "Lagos",
+    1,
+    "Bridge crossing",
+    "A long straight pot across the lagoon. Keep it smooth.",
+    [1],
+  ),
+  city(
+    "lagos",
+    "Lagos",
+    2,
+    "Lagoon kick",
+    "The 9 blocks the line. Kick off a cushion into the 1.",
+    [1],
+  ),
+  city(
+    "london",
+    "London",
+    1,
+    "Rail runner",
+    "A thin cut along the rail into the corner.",
+    [1],
+  ),
+  city(
+    "london",
+    "London",
+    2,
+    "Clock-face combo",
+    "Play the 2 into the 1. Only the 1 needs to drop.",
+    [1],
+  ),
+  city(
+    "paris",
+    "Paris",
+    1,
+    "Tower cut",
+    "A steep cut on the 1 into the side pocket.",
+    [1],
+  ),
+  city(
+    "paris",
+    "Paris",
+    2,
+    "Evening run",
+    "Pocket the 1, 2 and 3 in one visit.",
+    [1, 2, 3],
+  ),
+  city(
+    "tokyo",
+    "Tokyo",
+    1,
+    "Lantern draw",
+    "Pot the 1, then draw the cue ball back for the 8.",
+    [1, 8],
+  ),
+  city(
+    "tokyo",
+    "Tokyo",
+    2,
+    "Torii gate",
+    "Thread the cue ball between the posts to pot the 1.",
+    [1],
+  ),
+  city(
+    "dubai",
+    "Dubai",
+    1,
+    "Desert length",
+    "The longest pot on the table, corner to corner.",
+    [1],
+  ),
+  city(
+    "dubai",
+    "Dubai",
+    2,
+    "Skyline run",
+    "Two pots, one visit, no scratch.",
+    [1, 2],
+  ),
+  city(
+    "newyork",
+    "New York",
+    1,
+    "Manhattan cut",
+    "The thinnest cut in the packs. Commit to it.",
+    [1],
+  ),
+  city(
+    "newyork",
+    "New York",
+    2,
+    "City lights",
+    "The 8 sits in the middle. Pot the 1, 2 and 3 around it.",
+    [1, 2, 3],
+  ),
+];
+/** Drill name to target balls, for everything the referee can replay. */
+export const drillTargets: Record<string, number[]> = Object.fromEntries(
+  [...challenges, ...cityChallenges].map((c) => [c.drill, c.targets]),
+);
+/** XP for verified play after the first clear, bounded per day so grinding cannot run away. */
+export const REPLAY_XP = 20;
+export const DAILY_REPLAY_XP_LIMIT = 10;
+export const DAILY_SHOT_XP = 50;
+export const EVENT_XP = 100;
 export const tournaments = [
   {
     id: "precision-preseason",
@@ -177,3 +311,4 @@ export const tournaments = [
   },
 ];
 export const levelOf = (xp: number) => 1 + Math.floor(xp / 100);
+export const dailyKey = (d = new Date()) => d.toISOString().slice(0, 10);

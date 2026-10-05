@@ -76,8 +76,10 @@ test("MongoDB account, locks, rewards, event scores and account lifecycle", asyn
     assert.equal(result.body.player.level, 2);
     assert.equal(result.body.reward.xp, 100);
     const duplicate = await call("/practice/complete", "POST", body);
-    assert.equal(duplicate.body.reward.xp, 0);
-    assert.equal(duplicate.body.player.xp, 100);
+    // Re-clears keep paying bounded XP; coins stay first-clear only.
+    assert.equal(duplicate.body.reward.xp, 20);
+    assert.equal(duplicate.body.reward.coins, 0);
+    assert.equal(duplicate.body.player.xp, 120);
     assert.equal(
       (await call("/me/table", "POST", { tableId: "riviera" })).body
         .selectedTable,
@@ -114,6 +116,7 @@ test("MongoDB account, locks, rewards, event scores and account lifecycle", asyn
     );
     assert.equal(score.status, 200, JSON.stringify(score.body));
     assert.equal(score.body.reward.coins, 150);
+    assert.equal(score.body.reward.xp, 100);
     const score2 = await call(
       "/tournaments/precision-preseason/submit",
       "POST",
@@ -126,7 +129,7 @@ test("MongoDB account, locks, rewards, event scores and account lifecycle", asyn
         (r: any) => r.name === "Integration Tester",
       ),
     );
-    assert.equal((await call("/me")).body.xp, 100);
+    assert.equal((await call("/me")).body.xp, 220);
   } finally {
     assert.equal(
       (await call("/me", "DELETE", { confirm: "DELETE" })).status,

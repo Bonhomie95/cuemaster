@@ -120,7 +120,7 @@ test("concurrent signed redemptions cannot race past the daily video limit", asy
     const started = await call("/local-matches/start", "POST", {
       venueId: "heritage",
       requestId: id,
-      mode: "cpu",
+      mode: "local",
     });
     if (started.status !== 201) break;
     const finished = await call(`/local-matches/${id}/finish`, "POST", {

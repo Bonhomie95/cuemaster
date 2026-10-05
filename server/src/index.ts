@@ -21,7 +21,20 @@ import { MongoClient } from "mongodb";
 import { randomBytes, randomUUID, createHash } from "node:crypto";
 import { Worker } from "node:worker_threads";
 import { z } from "zod";
-import { venues, challenges, tournaments, levelOf } from "./catalog";
+import {
+  venues,
+  challenges,
+  cityChallenges,
+  drillTargets,
+  tournaments,
+  levelOf,
+  dailyKey,
+  REPLAY_XP,
+  DAILY_REPLAY_XP_LIMIT,
+  DAILY_SHOT_XP,
+  EVENT_XP,
+} from "./catalog";
+import { replayMatch } from "../../mobile/src/game/session";
 import { verifyIdentity } from "./auth";
 assertProductionConfig(process.env);
 const port = Number(process.env.PORT || 4000);
@@ -209,6 +222,7 @@ app.get("/catalog", async (_req, res) =>
   res.json({
     venues,
     challenges,
+    cityChallenges,
     tournaments: (
       await events
         .find({ status: { $ne: "draft" } })
@@ -251,6 +265,13 @@ app.post("/me/cue", required, async (req: any, res) => {
     return res.json(publicUser(current));
   return res.status(409).json({ error: "Not enough coins for this cue." });
 });
+const shotInput = z.object({
+  angle: z.number().finite().min(-1000).max(1000),
+  power: z.number().min(0.001).max(1),
+  side: z.number().min(-1).max(1),
+  top: z.number().min(-1).max(1),
+});
+const shot = shotInput.strict();
 // Embedded match state makes charging and retry protection a single atomic write.
 app.post("/local-matches/start", required, async (req: any, res) => {
   const { venueId, requestId, mode } = z
@@ -281,6 +302,8 @@ app.post("/local-matches/start", required, async (req: any, res) => {
       mode === "cpu"
         ? makeCpu(u.stats || {}, randomBytes(4).readUInt32BE())
         : null,
+    // The rival's every decision is drawn from this seed, on the device and again here.
+    seed: randomBytes(4).readUInt32BE(),
     status: "active",
     startedAt: new Date(),
   };
@@ -312,16 +335,48 @@ app.get("/local-matches/active", required, async (req: any, res) =>
     req.player.localMatch?.status === "active" ? req.player.localMatch : null,
   ),
 );
+const action = z.discriminatedUnion("t", [
+  shotInput.extend({ t: z.literal("shot") }),
+  z.object({
+    t: z.literal("place"),
+    x: z.number().finite(),
+    z: z.number().finite(),
+  }),
+  z.object({
+    t: z.literal("break"),
+    choice: z.enum(["spot", "rerack", "opponent-break", "accept", "hand"]),
+  }),
+  z.object({ t: z.literal("timeout") }),
+]);
 app.post("/local-matches/:id/finish", required, async (req: any, res) => {
-  const { outcome } = z
-    .object({ outcome: z.enum(["won", "lost", "forfeit"]) })
+  const { outcome, actions } = z
+    .object({
+      outcome: z.enum(["won", "lost", "forfeit"]),
+      actions: z.array(action).max(400).optional(),
+    })
     .parse(req.body);
-  const cpu = req.player.localMatch?.mode === "cpu";
+  const match = req.player.localMatch;
+  const cpu = match?.mode === "cpu";
   const prefix = cpu ? "cpu" : "local";
-  const won = outcome === "won";
-  // A win seals a reward crate. Crates are the only thing a client-reported result can mint,
-  // and they mint nothing on their own: one crate unlocks at a time, so the coin rate is
-  // bounded by the clock rather than by how many wins a device claims.
+  let won = outcome === "won";
+  let verified = false;
+  // A CPU win is only a win once the referee has replayed the whole rack: the rival's shots
+  // are regenerated from the match seed, so the device cannot hand in a rival that missed.
+  if (won && cpu && match?.id === req.params.id && match.status === "active") {
+    if (!actions)
+      return res
+        .status(422)
+        .json({ error: "This match has no shot record to verify." });
+    try {
+      const result = await replayCpuMatch(match.opponent, match.seed, actions);
+      verified = result.finished && result.winner === 0;
+    } catch (e) {
+      return res.status(422).json({ error: (e as Error).message });
+    }
+    if (!verified) won = false;
+  }
+  // A win seals a reward crate. Crates mint nothing on their own: one crate unlocks at a time,
+  // so the coin rate is bounded by the clock rather than by how many wins a device claims.
   const award = won ? crateAwardStage() : null;
   const updated = await users.findOneAndUpdate(
     {
@@ -332,7 +387,12 @@ app.post("/local-matches/:id/finish", required, async (req: any, res) => {
     [
       {
         $set: {
-          "localMatch.status": outcome,
+          "localMatch.status": won
+            ? "won"
+            : outcome === "won"
+              ? "lost"
+              : outcome,
+          "localMatch.verified": verified,
           "localMatch.endedAt": new Date(),
           [`stats.${prefix}Matches`]: {
             $add: [{ $ifNull: [`$stats.${prefix}Matches`, 0] }, 1],
@@ -374,6 +434,7 @@ app.post("/local-matches/:id/finish", required, async (req: any, res) => {
     player: publicUser(u),
     match: u.localMatch,
     crate: earned ? publicCrate(earned) : null,
+    verified,
   });
 });
 app.post("/auth/guest", authLimit, async (req, res) => {
@@ -608,7 +669,9 @@ app.post(
     const { challengeId, tableId } = z
       .object({ challengeId: z.string(), tableId: z.string() })
       .parse(req.body);
-    const challenge = challenges.find((c) => c.id === challengeId),
+    const challenge = [...challenges, ...cityChallenges].find(
+        (c) => c.id === challengeId,
+      ),
       table = venues.find((v) => v.id === tableId);
     if (!challenge || !table)
       return res.status(404).json({ error: "Challenge or table not found." });
@@ -625,13 +688,13 @@ app.post(
   },
 );
 let verifying = 0;
-function replay(drill: string, shots: any[], targets: number[]): Promise<any> {
+function referee(workerData: any, ms: number): Promise<any> {
   return new Promise((resolve, reject) => {
     if (verifying >= 2)
       return reject(new Error("The referee is busy. Please retry shortly."));
     verifying++;
     const worker = new Worker(new URL("./worker.ts", import.meta.url), {
-      workerData: { drill, shots, targets },
+      workerData,
       execArgv: ["--import", "tsx"],
     });
     let done = false;
@@ -645,7 +708,7 @@ function replay(drill: string, shots: any[], targets: number[]): Promise<any> {
     };
     const timer = setTimeout(
       () => finish(new Error("Replay took too long.")),
-      12000,
+      ms,
     );
     worker.on("message", (m) =>
       finish(m.error ? new Error(m.error) : undefined, m.result),
@@ -656,14 +719,10 @@ function replay(drill: string, shots: any[], targets: number[]): Promise<any> {
     });
   });
 }
-const shot = z
-  .object({
-    angle: z.number().finite().min(-1000).max(1000),
-    power: z.number().min(0.001).max(1),
-    side: z.number().min(-1).max(1),
-    top: z.number().min(-1).max(1),
-  })
-  .strict();
+const replay = (drill: string, shots: any[], targets: number[]) =>
+  referee({ drill, shots, targets }, 12000);
+const replayCpuMatch = (opponent: any, seed: number, actions: any[]) =>
+  referee({ match: { opponent, seed, actions } }, 40000);
 app.post(
   "/practice/complete",
   required,
@@ -689,7 +748,9 @@ app.post(
       return res
         .status(404)
         .json({ error: "Practice session expired. Start a new challenge." });
-    const challenge = challenges.find((c) => c.id === ticket.challengeId)!;
+    const challenge = [...challenges, ...cityChallenges].find(
+      (c) => c.id === ticket.challengeId,
+    )!;
     let result;
     try {
       result = await replay(challenge.drill, input.shots, challenge.targets);
@@ -714,11 +775,158 @@ app.post(
       { _id: ticket._id },
       { $set: { verified: true, result } },
     );
+    // Re-clears keep paying XP, a bounded amount per day, so progression never stalls at
+    // the six first clears. Coins stay first-clear only.
+    const again = rewarded ? null : await grantReplayXp(req.player._id);
     res.json({
       verified: true,
       reward: rewarded
         ? { xp: challenge.xp, coins: challenge.coins }
-        : { xp: 0, coins: 0 },
+        : { xp: again ? REPLAY_XP : 0, coins: 0 },
+      player: publicUser(
+        rewarded || again || (await users.findOne({ _id: req.player._id })),
+      ),
+    });
+  },
+);
+async function grantReplayXp(playerId: string) {
+  const day = dailyKey();
+  const used = {
+    $cond: [{ $eq: ["$xpDay", day] }, { $ifNull: ["$xpCount", 0] }, 0],
+  };
+  const allowed = { $lt: [used, DAILY_REPLAY_XP_LIMIT] };
+  const u = await users.findOneAndUpdate(
+    { _id: playerId },
+    [
+      {
+        $set: {
+          xp: { $cond: [allowed, { $add: ["$xp", REPLAY_XP] }, "$xp"] },
+          xpDay: day,
+          xpCount: { $cond: [allowed, { $add: [used, 1] }, used] },
+          "stats.finishes": { $add: ["$stats.finishes", 1] },
+        },
+      },
+    ],
+    { returnDocument: "after" },
+  );
+  return u && u.xpCount <= DAILY_REPLAY_XP_LIMIT && u.xpDay === day ? u : null;
+}
+/**
+ * Daily Shot: one seeded layout a day, the same for everyone, scored like an open event.
+ * Entries reuse the competition ledger under the id `daily:<date>`.
+ */
+const dailyBoard = async (eventId: string, blocked: string[]) =>
+  entries
+    .aggregate([
+      { $match: { eventId, score: { $exists: true } } },
+      { $sort: { score: 1, submittedAt: 1 } },
+      { $limit: 200 },
+      {
+        $lookup: {
+          from: "players",
+          localField: "playerId",
+          foreignField: "_id",
+          as: "player",
+        },
+      },
+      { $unwind: "$player" },
+      {
+        $match: {
+          "player.suspended": { $ne: true },
+          "player._id": { $nin: blocked },
+        },
+      },
+      { $limit: 20 },
+      {
+        $project: {
+          _id: 0,
+          playerId: "$player._id",
+          name: "$player.name",
+          country: "$player.country",
+          shots: 1,
+          score: 1,
+          replay: 1,
+        },
+      },
+    ])
+    .toArray();
+const leaderReplay = (board: any[]) =>
+  board.length && board[0].replay
+    ? { name: board[0].name, shots: board[0].replay }
+    : null;
+const publicBoard = (board: any[]) => board.map(({ replay, ...row }) => row);
+app.get("/daily", required, async (req: any, res) => {
+  const date = dailyKey(),
+    eventId = `daily:${date}`;
+  const board = await dailyBoard(eventId, req.player.blockedPlayers || []);
+  res.json({
+    date,
+    drill: eventId,
+    targets: [1],
+    xp: DAILY_SHOT_XP,
+    played: (req.player.completed || []).includes(`daily-shot:${date}`),
+    entry: await entries.findOne(
+      { playerId: req.player._id, eventId },
+      { projection: { shots: 1, score: 1 } },
+    ),
+    leaderboard: publicBoard(board),
+    leaderReplay: leaderReplay(board),
+  });
+});
+app.post(
+  "/daily/submit",
+  required,
+  rateLimit({
+    message: { error: "Too many requests. Please try again shortly." },
+    windowMs: 60000,
+    limit: 6,
+  }),
+  async (req: any, res) => {
+    const input = z
+      .object({ shots: z.array(shot).min(1).max(12) })
+      .strict()
+      .parse(req.body);
+    const date = dailyKey(),
+      eventId = `daily:${date}`;
+    let result;
+    try {
+      result = await replay(eventId, input.shots, [1]);
+    } catch (e) {
+      return res.status(422).json({ error: (e as Error).message });
+    }
+    await entries.updateOne(
+      { playerId: req.player._id, eventId },
+      {
+        $setOnInsert: { _id: randomUUID(), joinedAt: new Date(), entry: 0 },
+        $max: { attempts: 0 },
+      },
+      { upsert: true },
+    );
+    await entries.updateOne(
+      {
+        playerId: req.player._id,
+        eventId,
+        $or: [{ score: { $exists: false } }, { score: { $gt: result.score } }],
+      },
+      {
+        $set: {
+          score: result.score,
+          shots: result.shots,
+          replay: input.shots,
+          submittedAt: new Date(),
+        },
+      },
+    );
+    const key = `daily-shot:${date}`;
+    const rewarded = await users.findOneAndUpdate(
+      { _id: req.player._id, completed: { $ne: key } },
+      { $addToSet: { completed: key }, $inc: { xp: DAILY_SHOT_XP } },
+      { returnDocument: "after" },
+    );
+    res.json({
+      verified: true,
+      result: { shots: result.shots, score: result.score },
+      reward: { xp: rewarded ? DAILY_SHOT_XP : 0, coins: 0 },
       player: publicUser(
         rewarded || (await users.findOne({ _id: req.player._id })),
       ),
@@ -766,17 +974,19 @@ app.get("/tournaments/:id", required, async (req: any, res) => {
           country: "$player.country",
           shots: 1,
           score: 1,
+          replay: 1,
         },
       },
     ])
     .toArray();
   res.json({
     event: publicEvent(event),
-    entry: await entries.findOne({
-      playerId: req.player._id,
-      eventId: event.id,
-    }),
-    leaderboard: board,
+    entry: await entries.findOne(
+      { playerId: req.player._id, eventId: event.id },
+      { projection: { replay: 0 } },
+    ),
+    leaderboard: publicBoard(board),
+    leaderReplay: leaderReplay(board),
   });
 });
 app.post(
@@ -869,7 +1079,7 @@ app.post(
       result = await replay(
         event!.drill || "pocket",
         input.shots,
-        event!.targets || [1],
+        event!.targets || drillTargets[event!.drill] || [1],
       );
     } catch (e) {
       return res.status(422).json({ error: (e as Error).message });
@@ -884,6 +1094,7 @@ app.post(
         $set: {
           score: result.score,
           shots: result.shots,
+          replay: input.shots,
           submittedAt: new Date(),
         },
       },
@@ -891,12 +1102,18 @@ app.post(
     const key = `event:${event.id}`;
     const rewarded = await users.findOneAndUpdate(
       { _id: req.player._id, completed: { $ne: key } },
-      { $addToSet: { completed: key }, $inc: { coins: event.reward } },
+      {
+        $addToSet: { completed: key },
+        $inc: { coins: event.reward, xp: EVENT_XP },
+      },
       { returnDocument: "after" },
     );
     res.json({
       verified: true,
-      reward: { xp: 0, coins: rewarded ? event.reward : 0 },
+      reward: {
+        xp: rewarded ? EVENT_XP : 0,
+        coins: rewarded ? event.reward : 0,
+      },
       player: publicUser(
         rewarded || (await users.findOne({ _id: req.player._id })),
       ),

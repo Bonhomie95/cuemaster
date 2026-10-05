@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
-import { Catalog, Player, Venue, Challenge, Tournament } from "./api";
+import { Catalog, Player, Venue, Challenge, Tournament, todayKey } from "./api";
 import IconButton from "./IconButton";
 import { Press, Enter } from "./motion";
 export { default as IconButton } from "./IconButton";
@@ -31,6 +31,7 @@ export type LobbyProps = {
   onRewards: () => void;
   onEquip: (v: Venue) => void;
   onChallenge: (c: Challenge) => void;
+  onDaily: () => void;
   onEvent: (e: Tournament) => void;
   onGift: () => void;
 };
@@ -93,6 +94,14 @@ export default function Lobby(p: LobbyProps) {
   const gifted = p.player.completed.includes(
     "daily:" + new Date().toISOString().slice(0, 10),
   );
+  const dailyDone = p.player.completed.includes("daily-shot:" + todayKey());
+  const stamped = p.catalog.venues
+    .filter((v) =>
+      (p.catalog.cityChallenges || [])
+        .filter((c) => c.city === v.id)
+        .every((c) => p.player.completed.includes("practice:" + c.id)),
+    )
+    .map((v) => v.id);
   const move = (direction: number) =>
     scroll.current?.scrollTo({
       x: Math.max(
@@ -202,6 +211,39 @@ export default function Lobby(p: LobbyProps) {
           ))}
         {p.page === "practice" && (
           <>
+            <Enter index={0} style={[s.card, frame, s.padded]}>
+              <View style={s.between}>
+                <Feather name="sun" size={short ? 24 : 35} color="#ffd05b" />
+                <Badge
+                  icon={dailyDone ? "check-circle" : "zap"}
+                  text={dailyDone ? "PLAYED TODAY" : "NEW EVERY DAY"}
+                />
+              </View>
+              <View style={s.bottom}>
+                <Text
+                  style={[s.title, short && { fontSize: 18 }]}
+                  numberOfLines={1}
+                >
+                  Daily Shot
+                </Text>
+                <Text style={s.copy} numberOfLines={short ? 1 : 2}>
+                  One layout, the same for everyone. Fewest shots wins. The
+                  leader's run plays beside you as a ghost.
+                </Text>
+                <Text style={s.reward}>
+                  {dailyDone
+                    ? "Improve your score anytime"
+                    : "+50 XP · verified by the referee"}
+                </Text>
+                <CardAction
+                  icon="play"
+                  tone={dailyDone ? "muted" : "primary"}
+                  label={dailyDone ? "Play again" : "Play today's shot"}
+                  disabled={p.busy}
+                  onPress={p.onDaily}
+                />
+              </View>
+            </Enter>
             {p.catalog.challenges.map((c, i) => {
               const done = p.player.completed.includes("practice:" + c.id);
               return (
@@ -235,6 +277,90 @@ export default function Lobby(p: LobbyProps) {
                       tone={done ? "muted" : "primary"}
                       label={done ? "Play again" : "Start challenge"}
                       disabled={p.busy}
+                      onPress={() => p.onChallenge(c)}
+                    />
+                  </View>
+                </Enter>
+              );
+            })}
+            <View style={[s.card, frame, s.padded]}>
+              <Badge icon="map" text="CITY PASSPORT" />
+              <Text
+                style={[s.title, short && { fontSize: 18 }, { marginTop: 8 }]}
+                numberOfLines={1}
+              >
+                {stamped.length} of {p.catalog.venues.length} stamped
+              </Text>
+              <Text style={s.copy}>
+                Clear both trick shots in a city to stamp it.
+              </Text>
+              <View style={s.stamps}>
+                {p.catalog.venues.map((v) => (
+                  <View
+                    key={v.id}
+                    style={[s.stamp, stamped.includes(v.id) && s.stampDone]}
+                  >
+                    <Text
+                      style={[
+                        s.stampText,
+                        stamped.includes(v.id) && { color: "#142333" },
+                      ]}
+                    >
+                      {stamped.includes(v.id) ? "✓ " : ""}
+                      {v.name.toUpperCase()}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+            {(p.catalog.cityChallenges || []).map((c, i) => {
+              const done = p.player.completed.includes("practice:" + c.id);
+              const venue = p.catalog.venues.find((v) => v.id === c.city);
+              const locked = !!venue && venue.level > p.player.level;
+              return (
+                <Enter key={c.id} index={i} style={[s.card, frame, s.padded]}>
+                  <View style={s.between}>
+                    <Badge
+                      icon="map-pin"
+                      text={(venue?.name || c.difficulty).toUpperCase()}
+                    />
+                    <Badge
+                      icon={done ? "check-circle" : locked ? "lock" : "target"}
+                      text={
+                        done
+                          ? "STAMPED"
+                          : locked
+                            ? `LEVEL ${venue?.level}`
+                            : "TRICK SHOT"
+                      }
+                    />
+                  </View>
+                  <View style={s.bottom}>
+                    <Text
+                      style={[s.title, short && { fontSize: 18 }]}
+                      numberOfLines={1}
+                    >
+                      {c.name}
+                    </Text>
+                    <Text style={s.copy} numberOfLines={short ? 1 : 2}>
+                      {c.description}
+                    </Text>
+                    <Text style={s.reward}>
+                      {done
+                        ? "+20 XP per clear"
+                        : `+${c.xp} XP · ${c.coins} coins`}
+                    </Text>
+                    <CardAction
+                      icon={locked ? "lock" : "play"}
+                      tone={locked ? "locked" : done ? "muted" : "primary"}
+                      label={
+                        locked
+                          ? `Unlock ${venue?.name} first`
+                          : done
+                            ? "Play again"
+                            : "Start trick shot"
+                      }
+                      disabled={p.busy || locked}
                       onPress={() => p.onChallenge(c)}
                     />
                   </View>
@@ -404,6 +530,16 @@ const s = StyleSheet.create({
     alignItems: "center",
   },
   reward: { color: "#e2c68e", fontSize: 11, lineHeight: 16, marginTop: 6 },
+  stamps: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 8 },
+  stamp: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#ffffff2a",
+  },
+  stampDone: { backgroundColor: "#e1c18a", borderColor: "#ffd9a5" },
+  stampText: { fontSize: 10, fontWeight: "700", color: "#c3dfed" },
   footer: {
     height: 48,
     flexDirection: "row",

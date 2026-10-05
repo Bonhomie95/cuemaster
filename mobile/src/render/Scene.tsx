@@ -382,6 +382,29 @@ function Balls() {
     </group>
   );
 }
+/** The leader's cue ball, run on the parallel ghost table. Translucent so it never reads as play. */
+function GhostBall() {
+  const mesh = useRef<T.Mesh>(null);
+  useFrame(() => {
+    const m = mesh.current,
+      g = session.ghost;
+    if (!m) return;
+    const b = g?.world.balls.find((b) => b.id === 0);
+    m.visible = !!b && !b.pocketed && !session.replaying;
+    if (b) m.position.set(b.x, R, b.z);
+  });
+  return (
+    <mesh ref={mesh} visible={false} renderOrder={4}>
+      <sphereGeometry args={[R * 1.02, 24, 16]} />
+      <meshBasicMaterial
+        color="#9fe8ff"
+        transparent
+        opacity={0.38}
+        depthWrite={false}
+      />
+    </mesh>
+  );
+}
 function Rod({
   length,
   radius,
@@ -815,6 +838,7 @@ export function Scene() {
       <CityInlay city={session.skin} />
       <HeadString />
       <Balls />
+      <GhostBall />
       <Aim />
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}

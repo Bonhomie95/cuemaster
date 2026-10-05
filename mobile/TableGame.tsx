@@ -22,6 +22,8 @@ import {
   FlatList,
   AppState,
   BackHandler,
+  Share,
+  TextInput,
 } from "react-native";
 import {
   SafeAreaProvider,
@@ -34,7 +36,7 @@ import * as Haptics from "expo-haptics";
 import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
 import { Canvas } from "./src/render/Canvas";
 import { Scene } from "./src/render/Scene";
-import { session, skins } from "./src/game/session";
+import { session, skins, encodeReplay } from "./src/game/session";
 import { Press, Enter } from "./src/app/motion";
 import { groupOf } from "./src/game/progress";
 import { ballColors } from "./src/render/textures";
@@ -726,6 +728,7 @@ function Game({
   const [panel, setPanel] = useState<
     "skins" | "drills" | "spin" | "settings" | "quit" | null
   >(null);
+  const [code, setCode] = useState("");
   useEffect(() => {
     const h = BackHandler.addEventListener("hardwareBackPress", () => {
       setPanel("quit");
@@ -817,7 +820,7 @@ function Game({
               <Text
                 style={{ fontSize: 10, color: "#9fc2d6", fontWeight: "600" }}
               >
-                {cueById(session.cueIds[1]).name}
+                {session.cpu?.motto || cueById(session.cueIds[1]).name}
               </Text>
               <PlayerBalls player={1} />
             </View>
@@ -947,6 +950,15 @@ function Game({
               )}
             {session.progress.finished && (
               <Text style={s.scratchLabel}>RACK COMPLETE</Text>
+            )}
+            {!paidMatch && !session.running && !!session.coach && (
+              <Text
+                style={s.coachLabel}
+                numberOfLines={2}
+                accessibilityLiveRegion="polite"
+              >
+                COACH · {session.coach}
+              </Text>
             )}
           </View>
           {session.drill === "break" &&
@@ -1271,6 +1283,49 @@ function Game({
                     </Pressable>
                   ))}
                 </View>
+                {!paidMatch && (
+                  <>
+                    <Text style={[s.eyebrow, { marginTop: 18 }]}>
+                      SHARE A RUN
+                    </Text>
+                    <Text style={s.description}>
+                      A replay code re-runs the exact shots on anyone's table.
+                      Shared runs never count as your own.
+                    </Text>
+                    <TextInput
+                      accessibilityLabel="Replay code"
+                      value={code}
+                      onChangeText={setCode}
+                      placeholder="Paste a CM1 code"
+                      placeholderTextColor="#65758a"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      style={s.codeInput}
+                    />
+                    <View style={s.actions}>
+                      <Button
+                        label="Watch code"
+                        disabled={!code.trim()}
+                        onPress={() => {
+                          if (session.playCode(code)) setPanel(null);
+                          else setCode("");
+                        }}
+                      />
+                      <Button
+                        label="Share this run"
+                        disabled={!session.replayShots.length}
+                        onPress={() => {
+                          void Share.share({
+                            message: encodeReplay(
+                              session.drill,
+                              session.replayShots,
+                            ),
+                          });
+                        }}
+                      />
+                    </View>
+                  </>
+                )}
                 <View style={s.actions}>
                   {!paidMatch && (
                     <Button
@@ -1638,6 +1693,24 @@ const s = StyleSheet.create({
     gap: 8,
   },
   shotStatus: { color: "#9eafc3", fontSize: 10, letterSpacing: 1 },
+  coachLabel: {
+    color: "#ffd98a",
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+    marginTop: 2,
+    maxWidth: 330,
+  },
+  codeInput: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: "#ffffff2a",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: "#f4f1e8",
+    fontSize: 12,
+  },
   replayPill: {
     marginLeft: 12,
     paddingHorizontal: 12,

@@ -48,6 +48,8 @@ export type Challenge = {
   xp: number;
   coins: number;
   difficulty: string;
+  /** Venue id for city trick-shot packs. */
+  city?: string;
 };
 export type Tournament = {
   id: string;
@@ -62,12 +64,20 @@ export type Tournament = {
   currency: string;
   prize: string;
   rules: string[];
+  drill?: string;
+  targets?: number[];
 };
 export type Catalog = {
   venues: Venue[];
   challenges: Challenge[];
+  cityChallenges: Challenge[];
   tournaments: Tournament[];
 };
+export type LeaderReplay = {
+  name: string;
+  shots: { angle: number; power: number; side: number; top: number }[];
+};
+export const todayKey = () => new Date().toISOString().slice(0, 10);
 export type ProviderConfig = {
   google: boolean;
   googleWebClientId: string;

@@ -1,13 +1,27 @@
 import { Ball, H, W, R, World } from "../physics/engine";
 import { Progress } from "./progress";
 
+export type CpuStyle = "safe" | "power" | "spin" | "steady";
 export type CpuOpponent = {
   name: string;
   avatar: number;
   skill: number;
   tier: string;
   kind: "cpu";
+  style?: CpuStyle;
+  motto?: string;
 };
+/** Eight rivals, each with a playing style the planner actually uses. */
+export const personas: { name: string; style: CpuStyle; motto: string }[] = [
+  { name: "Maya", style: "safe", motto: "Plays the percentages" },
+  { name: "Theo", style: "steady", motto: "Never rushes a shot" },
+  { name: "Amara", style: "spin", motto: "Lives on the cue ball" },
+  { name: "Kai", style: "power", motto: "Breaks like a hammer" },
+  { name: "Zara", style: "spin", motto: "Draw, follow, repeat" },
+  { name: "Luca", style: "safe", motto: "Short balls, long games" },
+  { name: "Imani", style: "steady", motto: "One ball at a time" },
+  { name: "Rio", style: "power", motto: "Hits everything hard" },
+];
 export function cpuSkill(stats: {
   cpuWins?: number;
   cpuLosses?: number;
@@ -31,24 +45,16 @@ export function makeCpu(
   stats: Parameters<typeof cpuSkill>[0],
   seed: number,
 ): CpuOpponent {
-  const names = [
-    "Maya",
-    "Theo",
-    "Amara",
-    "Kai",
-    "Zara",
-    "Luca",
-    "Imani",
-    "Rio",
-  ];
   const skill = cpuSkill(stats),
-    i = Math.abs(seed) % names.length;
+    i = Math.abs(seed) % personas.length;
   return {
-    name: names[i],
+    name: personas[i].name,
     avatar: i % 2,
     kind: "cpu",
     skill,
     tier: skill < 0.35 ? "Relaxed" : skill > 0.7 ? "Expert" : "Club",
+    style: personas[i].style,
+    motto: personas[i].motto,
   };
 }
 export type CpuShot = {
@@ -91,12 +97,13 @@ export function planCpuShot(
   skill: number,
   isBreak: boolean,
   random = Math.random,
+  style: CpuStyle = "steady",
 ): CpuShot {
   const cue = balls.find((b) => b.id === 0)!;
   if (isBreak)
     return {
       angle: Math.atan2(-cue.z, H / 2 - cue.x) + (random() - 0.5) * 0.018,
-      power: 0.78 + skill * 0.18,
+      power: Math.min(1, (0.78 + skill * 0.18) * (style === "power" ? 1.1 : 1)),
       side: 0,
       top: 0,
     };
@@ -137,7 +144,8 @@ export function planCpuShot(
       candidates.push({
         angle: Math.atan2(gz - cue.z, gx - cue.x),
         power,
-        score: cut * 3 - travel - d * 0.5,
+        // Safe players weight distance heavily and take the short ball; the rest prefer the cut.
+        score: cut * 3 - travel * (style === "safe" ? 2 : 1) - d * 0.5,
       });
     }
   candidates.sort((a, b) => b.score - a.score);
@@ -162,11 +170,15 @@ export function planCpuShot(
       0.1,
       Math.min(
         0.65,
-        (best?.power || 0.32) * (1 + (random() - 0.5) * (1 - skill) * 0.5),
+        (best?.power || 0.32) *
+          (style === "power" ? 1.25 : style === "safe" ? 0.9 : 1) *
+          (1 + (random() - 0.5) * (1 - skill) * 0.5),
       ),
     ),
     side: 0,
-    top: 0,
+    // Spin players use follow or draw on every pot; it changes where the cue ball ends up,
+    // not whether the object ball drops, so their potting is unchanged.
+    top: style === "spin" ? (random() < 0.5 ? 0.35 : -0.35) : 0,
   };
 }
 export function cpuPlacement(

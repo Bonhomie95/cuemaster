@@ -85,7 +85,7 @@ test("crates are earned by winning, bounded by slots, and paid out exactly once"
     const started = await call("/local-matches/start", "POST", {
       venueId: "heritage",
       requestId,
-      mode: "cpu",
+      mode: "local",
     });
     assert.equal(started.status, 201);
     return call(`/local-matches/${requestId}/finish`, "POST", {
@@ -101,7 +101,7 @@ test("crates are earned by winning, bounded by slots, and paid out exactly once"
   await call("/local-matches/start", "POST", {
     venueId: "heritage",
     requestId,
-    mode: "cpu",
+    mode: "local",
   });
   const lost = await call(`/local-matches/${requestId}/finish`, "POST", {
     outcome: "lost",

@@ -233,10 +233,31 @@ const colors = [
   "#b8d4b7",
   "#dfc484",
 ];
+/**
+ * One living light per city, in landmark coordinates: Lagos bridge lamps, Paris beacon,
+ * Tokyo lantern, Dubai spire, New York windows. London keeps its clock hand.
+ */
+const beacons: Record<number, { at: [number, number]; period: number }[]> = {
+  0: [
+    { at: [-0.8, 0.35], period: 1.1 },
+    { at: [-0.3, 0.4], period: 1.3 },
+    { at: [0.3, 0.4], period: 1.7 },
+    { at: [0.8, 0.35], period: 1.9 },
+  ],
+  2: [{ at: [0, 1.35], period: 2.4 }],
+  3: [{ at: [0, 0.64], period: 3.2 }],
+  4: [{ at: [0, 1.4], period: 1.6 }],
+  5: [
+    { at: [-0.65, 0.3], period: 2.1 },
+    { at: [0, 0.6], period: 2.9 },
+    { at: [0.65, 0.4], period: 2.5 },
+  ],
+};
 export default function CityInlay({ city }: { city: number }) {
   const orbit = useRef<T.Group>(null);
   const hand = useRef<T.Group>(null);
-  const geometry = useMemo(() => {
+  const lights = useRef<(T.Mesh | null)[]>([]);
+  const { geometry, center } = useMemo(() => {
     const pieces: T.BufferGeometry[] = [];
     for (const path of landmarks[city] || landmarks[0]) {
       for (let i = 1; i < path.length; i++) {
@@ -271,12 +292,20 @@ export default function CityInlay({ city }: { city: number }) {
     result.computeBoundingBox();
     const center = result.boundingBox!.getCenter(new T.Vector3());
     result.translate(-center.x, 0, -center.z);
-    return result;
+    return { geometry: result, center };
   }, [city]);
   useEffect(() => () => geometry.dispose(), [geometry]);
   useFrame(({ clock }) => {
     if (orbit.current) orbit.current.rotation.y = clock.elapsedTime * 0.06;
     if (hand.current) hand.current.rotation.y = clock.elapsedTime * 0.18;
+    (beacons[city] || []).forEach((b, i) => {
+      const m = lights.current[i];
+      if (!m) return;
+      const glow =
+        0.55 + 0.45 * Math.sin((clock.elapsedTime * Math.PI * 2) / b.period);
+      m.scale.setScalar(0.8 + glow * 0.5);
+      (m.material as T.MeshBasicMaterial).opacity = 0.35 + glow * 0.6;
+    });
   });
   const color = colors[city] || colors[0];
   return (
@@ -319,6 +348,28 @@ export default function CityInlay({ city }: { city: number }) {
           />
         </mesh>
       </group>
+      {(beacons[city] || []).map((b, i) => (
+        <mesh
+          key={i}
+          ref={(m) => {
+            lights.current[i] = m;
+          }}
+          position={[
+            b.at[0] * 0.24 - center.x,
+            0.004,
+            -b.at[1] * 0.24 - center.z,
+          ]}
+        >
+          <sphereGeometry args={[0.0045, 10, 8]} />
+          <meshBasicMaterial
+            color="#fff2c4"
+            transparent
+            opacity={0.8}
+            toneMapped={false}
+            depthWrite={false}
+          />
+        </mesh>
+      ))}
       {city === 1 && (
         <group ref={hand} position={[0, 0.006, -0.053]}>
           <mesh position={[0.014, 0, 0]}>

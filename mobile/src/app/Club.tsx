@@ -52,6 +52,7 @@ import ProviderButton from "./ProviderButton";
 import Lobby, { IconButton } from "./Lobby";
 import TableGame from "../../TableGame";
 import { session } from "../game/session";
+import type { LeaderReplay } from "./api";
 void SplashScreen.preventAutoHideAsync().catch(() => {});
 type Page =
   | "home"
@@ -66,11 +67,14 @@ type Page =
   | "leaderboard"
   | "blocked";
 type Launch = {
-  kind: "free" | "practice" | "event" | "local";
+  kind: "free" | "practice" | "event" | "local" | "daily";
   drill: string;
   ticket?: string;
   challenge?: Challenge;
   eventId?: string;
+  /** Target balls for event and daily launches. */
+  targets?: number[];
+  label?: string;
   matchId?: string;
   opponent?: CpuOpponent;
   venue?: Venue;
@@ -310,9 +314,11 @@ function ClubBody() {
           session.drill !== l.drill
         )
           return;
-        if (session.usedPlacement) {
+        if (session.usedPlacement || session.imported) {
           setToast(
-            "Ball placement is for free practice. Restart this challenge to earn its reward.",
+            session.imported
+              ? "A shared replay never counts as your own. Restart the challenge to play it yourself."
+              : "Ball placement is for free practice. Restart this challenge to earn its reward.",
           );
           submitted.current = true;
           return;
@@ -320,22 +326,24 @@ function ClubBody() {
         const ids = session.world.balls
             .filter((b) => b.id !== 0 && b.pocketed)
             .map((b) => b.id),
-          targets = l.challenge?.targets || [1];
+          targets = l.challenge?.targets || l.targets || [1];
         const complete = targets.length
           ? targets.every((id) => ids.includes(id))
           : ids.some((id) => id !== 8);
         if (!complete || session.progress.scratch) return;
         const body =
-          l.kind === "event"
-            ? { shots: [...session.replayShots] }
-            : { ticket: l.ticket, shots: [...session.replayShots] };
+          l.kind === "practice"
+            ? { ticket: l.ticket, shots: [...session.replayShots] }
+            : { shots: [...session.replayShots] };
         const submit = () => {
           verifying.current = l;
           setVerificationError("");
           api(
             l.kind === "event"
               ? `/tournaments/${l.eventId}/submit`
-              : "/practice/complete",
+              : l.kind === "daily"
+                ? "/daily/submit"
+                : "/practice/complete",
             "POST",
             body,
           )
@@ -453,6 +461,8 @@ function ClubBody() {
         "POST",
         {
           outcome: winner === null ? "forfeit" : winner === 0 ? "won" : "lost",
+          // The referee replays these against the same rival seed before a win counts.
+          actions: launch.opponent ? session.actions : undefined,
         },
       );
       setPlayer(result.player);
@@ -460,9 +470,11 @@ function ClubBody() {
         winner === null
           ? "Match forfeited. Entry fee was not refunded."
           : winner === 0
-            ? result.crate
-              ? `You won the match. A ${result.crate.name.toLowerCase()} is waiting in Rewards.`
-              : "You won the match. Your crate slots are full — open one to make room."
+            ? launch.opponent && !result.verified
+              ? "The referee could not confirm this win, so no crate was sealed."
+              : result.crate
+                ? `You won the match. A ${result.crate.name.toLowerCase()} is waiting in Rewards.`
+                : "You won the match. Your crate slots are full — open one to make room."
             : `${launch.opponent?.name || "Player 2"} won the match.`,
       );
       leaveGame();
@@ -505,9 +517,35 @@ function ClubBody() {
       await api(`/tournaments/${event.id}/enter`, "POST", {
         acceptRules: rules,
       });
-      const id = event.id;
+      const id = event.id,
+        ghost = eventDetail?.leaderReplay as LeaderReplay | null;
       setEvent(null);
-      openGame({ kind: "event", drill: "pocket", eventId: id });
+      openGame({
+        kind: "event",
+        drill: event.drill || "pocket",
+        targets: event.targets,
+        eventId: id,
+        label: event.name,
+      });
+      if (ghost) {
+        session.setGhost(ghost.shots);
+        setToast(`${ghost.name}'s best run plays alongside you as a ghost.`);
+      }
+    });
+  const startDaily = () =>
+    work(async () => {
+      const daily = await api("/daily");
+      openGame({
+        kind: "daily",
+        drill: daily.drill,
+        targets: daily.targets,
+        label: `DAILY SHOT · ${daily.date}`,
+      });
+      const ghost = daily.leaderReplay as LeaderReplay | null;
+      if (ghost) {
+        session.setGhost(ghost.shots);
+        setToast(`${ghost.name} leads today. Their run plays as a ghost.`);
+      }
     });
   const leaveGame = () => {
     session.cpu = null;
@@ -646,9 +684,7 @@ function ClubBody() {
           modeLabel={
             launch.kind === "local"
               ? `${launch.venue?.name} · ${launch.venue?.entry} coins`
-              : launch.kind === "event"
-                ? "PRECISION OPEN"
-                : launch.challenge?.name || "LOCAL PRACTICE"
+              : launch.label || launch.challenge?.name || "LOCAL PRACTICE"
           }
           allowedSkins={catalog!.venues
             .filter((v) => v.level <= player.level)
@@ -1014,6 +1050,7 @@ function ClubBody() {
               onRewards={() => setPage("rewards")}
               onEquip={equip}
               onChallenge={startChallenge}
+              onDaily={startDaily}
               onEvent={viewEvent}
               onGift={() =>
                 work(async () => {

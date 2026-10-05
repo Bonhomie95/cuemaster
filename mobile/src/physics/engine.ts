@@ -477,7 +477,87 @@ export function simulate(world: World, limit = 40) {
   }
   return ticks;
 }
+/** Seeded layout from a date string: cue ball left, 1 ball right, two blockers. Same for everyone. */
+function dailyLayout(key: string): Ball[] {
+  let s = 2166136261;
+  for (const c of key) s = Math.imul(s ^ c.charCodeAt(0), 16777619) >>> 0;
+  const rand = () => {
+    s = (Math.imul(s, 1664525) + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+  const balls: Ball[] = [];
+  const place = (id: number, x0: number, x1: number) => {
+    for (let i = 0; i < 200; i++) {
+      const x = x0 + rand() * (x1 - x0),
+        z = (rand() - 0.5) * (2 * W - 6 * R);
+      if (balls.every((b) => Math.hypot(b.x - x, b.z - z) > 5 * R)) {
+        balls.push(ball(id, x, z));
+        return;
+      }
+    }
+    balls.push(ball(id, (x0 + x1) / 2, 0));
+  };
+  place(0, -H + 4 * R, -H / 4);
+  place(1, 0, H - 4 * R);
+  place(8, -H / 2, H / 2);
+  place(9, -H / 2, H / 2);
+  return balls;
+}
+/** Venue trick-shot packs: two layouts per city, built around the city's table. */
+const cityDrills: Record<string, Ball[]> = {
+  // Lagos: bridge crossing — the 1 sits across the table, a long straight pot.
+  "lagos-1": [ball(0, -H + 5 * R, -W / 2), ball(1, H / 2, W / 4)],
+  // Lagos: lagoon kick — a blocker forces a one-cushion kick onto the 1.
+  "lagos-2": [ball(0, -H / 2, 0), ball(9, -H / 4, 0), ball(1, H / 3, 0)],
+  // London: thin cut along the rail to the corner.
+  "london-1": [ball(0, -H / 3, W - 6 * R), ball(1, H - 7 * R, W - 2.2 * R)],
+  // London: clock-face combo — cue on the 2, the 2 pots the 1.
+  "london-2": [
+    ball(0, -H / 2, 0.1),
+    ball(2, 0, 0.1),
+    ball(1, H / 2 - 2 * R, W / 2 + 0.05),
+  ],
+  // Paris: tower cut — a steep cut on the 1 into the side pocket.
+  "paris-1": [ball(0, -H / 2, -W / 2), ball(1, R * 1.5, -W + 4 * R)],
+  // Paris: evening run — three balls near three pockets.
+  "paris-2": [
+    ball(0, 0, 0),
+    ball(1, H - 6 * R, W - 5 * R),
+    ball(2, -H + 6 * R, -W + 5 * R),
+    ball(3, 2 * R, W - 4 * R),
+  ],
+  // Tokyo: lantern draw — pot the 1 past the 8 by drawing back.
+  "tokyo-1": [ball(0, -H / 4, 0), ball(1, H / 4, 0), ball(8, H / 4, -W / 2)],
+  // Tokyo: gate shot — thread between two posts.
+  "tokyo-2": [
+    ball(0, -H / 2, 0),
+    ball(10, 0, 5 * R),
+    ball(11, 0, -5 * R),
+    ball(1, H / 2, 0),
+  ],
+  // Dubai: desert length — the longest pot on the table.
+  "dubai-1": [ball(0, -H + 3 * R, -W + 3 * R), ball(1, H - 5 * R, W - 5 * R)],
+  // Dubai: skyline run — two pots in one visit.
+  "dubai-2": [
+    ball(0, -H / 3, 0),
+    ball(1, H / 3, W / 3),
+    ball(2, H / 2, -W / 2),
+  ],
+  // New York: Manhattan cut — the thinnest cut in the packs.
+  "newyork-1": [ball(0, -H / 2, W / 2), ball(1, H - 4 * R, W - 2.3 * R)],
+  // New York: city lights — pot the 1, 2 and 3 with the 8 in the way.
+  "newyork-2": [
+    ball(0, -H / 2, 0),
+    ball(8, 0, 0),
+    ball(1, H / 2, W / 2),
+    ball(2, H / 2, -W / 2),
+    ball(3, -H / 2, W / 2),
+  ],
+};
+export const cityDrillNames = Object.keys(cityDrills);
 export function drill(name: string): Ball[] {
+  if (name.startsWith("daily:")) return dailyLayout(name.slice(6));
+  if (cityDrills[name]) return cityDrills[name].map((b) => ({ ...b }));
   if (name === "break") return rack(41);
   if (name === "finish") return [ball(0, 0, 0.36), ball(8, 0, 0.05)];
   if (name === "pocket")
