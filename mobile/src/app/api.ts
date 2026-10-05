@@ -25,6 +25,7 @@ export type Player = {
     cpuWins?: number;
     cpuLosses?: number;
     cpuStreak?: number;
+    bestStreak?: number;
     localMatches?: number;
     localWins?: number;
     localLosses?: number;

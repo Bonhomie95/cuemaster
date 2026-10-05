@@ -378,6 +378,15 @@ app.post("/local-matches/:id/finish", required, async (req: any, res) => {
   // A win seals a reward crate. Crates mint nothing on their own: one crate unlocks at a time,
   // so the coin rate is bounded by the clock rather than by how many wins a device claims.
   const award = won ? crateAwardStage() : null;
+  const streak = {
+    $cond: [
+      {
+        [won ? "$gt" : "$lt"]: [{ $ifNull: ["$stats.cpuStreak", 0] }, 0],
+      },
+      { $add: ["$stats.cpuStreak", won ? 1 : -1] },
+      won ? 1 : -1,
+    ],
+  };
   const updated = await users.findOneAndUpdate(
     {
       _id: req.player._id,
@@ -405,17 +414,10 @@ app.post("/local-matches/:id/finish", required, async (req: any, res) => {
           },
           ...(cpu
             ? {
-                "stats.cpuStreak": {
-                  $cond: [
-                    {
-                      [won ? "$gt" : "$lt"]: [
-                        { $ifNull: ["$stats.cpuStreak", 0] },
-                        0,
-                      ],
-                    },
-                    { $add: ["$stats.cpuStreak", won ? 1 : -1] },
-                    won ? 1 : -1,
-                  ],
+                "stats.cpuStreak": streak,
+                // The longest run of verified wins, kept for the profile and the leaderboard.
+                "stats.bestStreak": {
+                  $max: [{ $ifNull: ["$stats.bestStreak", 0] }, streak],
                 },
               }
             : {}),

@@ -381,6 +381,7 @@ export default function Rewards({
       )}
 
       <Modal
+        supportedOrientations={["landscape"]}
         transparent
         visible={!!opened}
         animationType="fade"

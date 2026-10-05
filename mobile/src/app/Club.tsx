@@ -570,6 +570,7 @@ function ClubBody() {
   ) : null;
   const verificationModal = (
     <Modal
+      supportedOrientations={["landscape"]}
       visible={!!verificationError}
       transparent
       animationType="fade"
@@ -597,6 +598,7 @@ function ClubBody() {
   );
   const levelModal = (
     <Modal
+      supportedOrientations={["landscape"]}
       visible={levelUp !== null}
       transparent
       animationType="fade"
@@ -619,7 +621,12 @@ function ClubBody() {
     </Modal>
   );
   const rewardModal = (
-    <Modal visible={reward !== null} transparent animationType="fade">
+    <Modal
+      supportedOrientations={["landscape"]}
+      visible={reward !== null}
+      transparent
+      animationType="fade"
+    >
       <View style={u.scrim}>
         <ScrollView
           style={[u.eventModal, { maxWidth: 470 }]}
@@ -1146,6 +1153,11 @@ function ClubBody() {
                         {(player.stats.cpuStreak || 0) < 0 ? "losses" : "wins"}{" "}
                         in a row
                       </Text>
+                      <Text style={u.rewardText}>
+                        🔥 Winning streak ·{" "}
+                        {Math.max(0, player.stats.cpuStreak || 0)} now · best{" "}
+                        {player.stats.bestStreak || 0}
+                      </Text>
                       <Text style={u.body}>
                         Pass & play · {player.stats.localWins || 0} wins ·{" "}
                         {player.stats.localLosses || 0} losses
@@ -1336,6 +1348,7 @@ function ClubBody() {
         </PageFade>
         {topMessage}
         <Modal
+          supportedOrientations={["landscape"]}
           visible={!!abandoned}
           transparent
           animationType="fade"
@@ -1375,6 +1388,7 @@ function ClubBody() {
         {rewardModal}
         {levelModal}
         <Modal
+          supportedOrientations={["landscape"]}
           transparent
           visible={locked !== null}
           animationType="fade"
@@ -1408,6 +1422,7 @@ function ClubBody() {
           </View>
         </Modal>
         <Modal
+          supportedOrientations={["landscape"]}
           transparent
           visible={event !== null}
           animationType="fade"
@@ -1494,6 +1509,7 @@ function ClubBody() {
           </View>
         </Modal>
         <Modal
+          supportedOrientations={["landscape"]}
           transparent
           visible={deleting}
           animationType="fade"

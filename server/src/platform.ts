@@ -153,6 +153,8 @@ export function installPlatform(
             country: 1,
             xp: 1,
             "stats.finishes": 1,
+            "stats.cpuStreak": 1,
+            "stats.bestStreak": 1,
           },
         },
       )
@@ -170,6 +172,8 @@ export function installPlatform(
         country: u.country,
         xp: u.xp,
         finishes: u.stats?.finishes || 0,
+        streak: Math.max(0, u.stats?.cpuStreak || 0),
+        bestStreak: u.stats?.bestStreak || 0,
       })),
     });
   });

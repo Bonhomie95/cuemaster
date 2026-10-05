@@ -67,7 +67,10 @@ test("CPU entries preserve rivals on retry and update separate adaptive records 
     assert.ok(won, "the planner beat the rival within six racks");
     p = await call("/me");
     assert.equal(p.stats.cpuStreak, 1);
+    assert.equal(p.stats.bestStreak, 1);
     assert.equal(p.stats.cpuWins, 1);
+    const board = await call("/leaderboard");
+    assert.ok(board.players.some((r: any) => r.bestStreak === 1));
     assert.equal(p.coins, 1000 - spent);
   } finally {
     await call("/me", "DELETE", { confirm: "DELETE" });

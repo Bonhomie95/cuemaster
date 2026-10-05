@@ -414,6 +414,9 @@ export default function AccountCenter({
                     </Text>
                     <Text style={s.copy}>
                       {p.country || "Worldwide"} · {p.finishes} challenges
+                      {p.bestStreak
+                        ? ` · 🔥 ${p.streak} streak · best ${p.bestStreak}`
+                        : ""}
                     </Text>
                   </View>
                   <Text style={s.score}>{p.xp} XP</Text>

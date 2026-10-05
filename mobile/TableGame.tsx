@@ -1051,6 +1051,7 @@ function Game({
         )}
       </View>
       <Modal
+        supportedOrientations={["landscape"]}
         transparent
         visible={
           !!session.progress.breakChoice && !session.running && !session.cpuTurn
@@ -1117,6 +1118,7 @@ function Game({
         </View>
       </Modal>
       <Modal
+        supportedOrientations={["landscape"]}
         transparent
         visible={panel === "spin"}
         animationType="fade"
@@ -1136,6 +1138,7 @@ function Game({
         </Pressable>
       </Modal>
       <Modal
+        supportedOrientations={["landscape"]}
         transparent
         visible={panel !== null && panel !== "spin"}
         animationType="fade"
