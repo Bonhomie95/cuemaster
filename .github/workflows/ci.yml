@@ -1,0 +1,15 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 24 }
+      - run: npm --prefix mobile ci
+      - run: npm --prefix server ci
+      - run: npm --prefix mobile run typecheck
+      - run: npm --prefix server run typecheck
+      - run: npm --prefix mobile test
+      - run: cd mobile && npx prettier --check "**/*.{ts,tsx}" "../server/src/**/*.ts" "../tests/*.ts" "../tools/*.mjs"

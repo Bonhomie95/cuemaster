@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx src/index.ts",
+    "start": "tsx src/index.ts",
     "test": "node ../tools/test-api.mjs",
     "typecheck": "tsc --noEmit",
     "admin:bootstrap": "tsx scripts/bootstrap-admin.ts"
