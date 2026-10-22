@@ -1,5 +1,6 @@
 import AccountCenter from "./AccountCenter";
 import { warmTextures } from "../render/textures";
+import { TableHost } from "../render/TableHost";
 import Rewards from "./Rewards";
 import { Press, Enter, CountUp, PageFade, Pulse } from "./motion";
 import { celebrate } from "./feedback";
@@ -197,7 +198,12 @@ function Tag({
 export default function Club() {
   return (
     <SafeAreaProvider>
-      <ClubBody />
+      <View style={{ flex: 1, backgroundColor: "#080c15" }}>
+        {/* The 3D table lives here for the whole session, under every page, so a match opens
+            on a scene that is already drawn. */}
+        <TableHost />
+        <ClubBody />
+      </View>
     </SafeAreaProvider>
   );
 }

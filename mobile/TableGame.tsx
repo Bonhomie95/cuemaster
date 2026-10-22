@@ -35,8 +35,7 @@ import Feather from "@expo/vector-icons/Feather";
 import { StatusBar } from "expo-status-bar";
 import * as Haptics from "expo-haptics";
 import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
-import { Canvas } from "./src/render/Canvas";
-import { Scene } from "./src/render/Scene";
+import { tableHost, useTableHost, stageHeight } from "./src/render/TableHost";
 import CompatibilityTable from "./src/render/CompatibilityTable";
 import { session, skins, encodeReplay } from "./src/game/session";
 import { Press, Enter } from "./src/app/motion";
@@ -338,25 +337,6 @@ function Audio() {
   }, []);
   return null;
 }
-class SceneBoundary extends React.Component<
-  { children: React.ReactNode; onError: (message: string) => void },
-  { error: string | null }
-> {
-  state = { error: null as string | null };
-  static getDerivedStateFromError(e: Error) {
-    return { error: e.message };
-  }
-  componentDidCatch(e: Error) {
-    console.error("CueMaster table failed", e);
-    this.props.onError(
-      "The graphics could not start. Try loading the table again.",
-    );
-  }
-  render() {
-    if (this.state.error) return null;
-    return this.props.children;
-  }
-}
 export default function TableGame({
   onExit,
   paidMatch = false,
@@ -469,7 +449,21 @@ function BallBadge({
     </Animated.View>
   );
 }
-function PlayerBalls({ player }: { player: number }) {
+function groupText(player: number) {
+  const group = session.progress.groups[player];
+  if (!group) return "OPEN TABLE";
+  const left = session.world.balls.filter(
+    (b) => groupOf(b.id) === group && !b.pocketed,
+  ).length;
+  return `${group.toUpperCase()} · ${left ? `${left} LEFT` : "ON THE 8"}`;
+}
+function PlayerBalls({
+  player,
+  compact = false,
+}: {
+  player: number;
+  compact?: boolean;
+}) {
   const group = session.progress.groups[player];
   const balls = session.world.balls
     .filter((b) => groupOf(b.id) === group && group !== null)
@@ -477,11 +471,7 @@ function PlayerBalls({ player }: { player: number }) {
   const left = balls.filter((b) => !b.pocketed).length;
   return (
     <View style={{ gap: 4, alignItems: player ? "flex-end" : "flex-start" }}>
-      <Text style={s.groupLabel}>
-        {group
-          ? `${group.toUpperCase()} · ${left ? `${left} LEFT` : "ON THE 8"}`
-          : "OPEN TABLE"}
-      </Text>
+      {!compact && <Text style={s.groupLabel}>{groupText(player)}</Text>}
       <View style={s.ballRow}>
         {group
           ? balls.map((b) => (
@@ -747,184 +737,217 @@ function Game({
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
   }, [paidMatch]);
-  const [loaded, setLoaded] = useState(false);
-  const openedAt = React.useRef(Date.now());
-  const [renderError, setRenderError] = useState("");
-  const [renderAttempt, setRenderAttempt] = useState(0);
-  const [compatibility, setCompatibility] = useState(false);
+  const host = useTableHost();
+  const compatibility = host.compatibility,
+    renderError = host.error;
   useEffect(() => {
-    if (loaded || renderError || compatibility) return;
-    const timer = setTimeout(
-      () => {
-        if (Platform.OS !== "web") {
-          setCompatibility(true);
-          setLoaded(true);
-          return;
-        }
-        setRenderError(
-          "The graphics did not start. Try again, and check that the simulator has graphics acceleration enabled.",
-        );
-      },
-      Platform.OS === "web" ? 30000 : 12000,
-    );
-    return () => clearTimeout(timer);
-  }, [loaded, renderError, renderAttempt, compatibility]);
+    tableHost.setActive(true);
+    return () => tableHost.setActive(false);
+  }, []);
   const turn = session.progress.turn;
   const compact = height < 560;
-  const skin = skins[session.skin];
-  const tableHeight =
-    Platform.OS === "web" ? Math.min(height, width * 0.5625) : height;
+  const tableHeight = stageHeight(width, height);
   // The table is full bleed to the glass; only the HUD keeps clear of the notch and the home
   // indicator. Scene fits the rack inside these margins, so widening them here moves the table,
   // it never crops it.
   // Measured, not assumed: Android's taller text made the player cards cover the top pockets.
-  const [bands, setBands] = useState({ top: 48, bottom: 44 });
-  const measure = (edge: "top" | "bottom") => (e: LayoutChangeEvent) => {
-    const h = Math.round(e.nativeEvent.layout.height);
-    setBands((b) => (b[edge] === h ? b : { ...b, [edge]: h }));
+  // Everything the player needs sits in two side columns, so the table takes the full height
+  // and only the measured column widths come off its length.
+  const [bands, setBands] = useState({ top: 54 });
+  const measure = (edge: "top") => (e: LayoutChangeEvent) => {
+    const v = Math.round(e.nativeEvent.layout.height);
+    setBands((b) => (b[edge] === v ? b : { ...b, [edge]: v }));
   };
+  // Both players share one slim bar above the table and the shot controls ride the side rails,
+  // the reference game's layout, so the table keeps as much of the screen as its shape allows.
   session.hud = {
-    top: 4 + insets.top + bands.top + 6,
-    bottom: 6 + insets.bottom + bands.bottom + 6,
-    left: 46 + insets.left,
-    right: 56 + insets.right,
+    top: 6 + insets.top + bands.top + 4,
+    bottom: 8 + insets.bottom,
+    left: 12 + insets.left + 52,
+    right: 10 + insets.right + 60,
   };
   return (
-    <View style={s.root}>
+    <View style={s.root} pointerEvents="box-none">
       <StatusBar hidden />
       <Audio />
-      <View style={[s.stage, { height: tableHeight, maxWidth: 1700 }]}>
+      <View
+        style={[s.stage, { height: tableHeight, maxWidth: 1700 }]}
+        pointerEvents="box-none"
+      >
         <GroupAnnouncement />
         <View
           style={[
-            s.matchHeader,
+            s.topBar,
             {
-              top: 4 + insets.top,
-              left: 12 + insets.left,
-              right: 12 + insets.right,
+              top: 6 + insets.top,
+              left: 8 + insets.left,
+              right: 8 + insets.right,
             },
           ]}
           onLayout={measure("top")}
         >
-          <Button label="Table settings" onPress={() => setPanel("settings")}>
-            <Feather name="menu" size={20} color={C.ink} />
-          </Button>
-          <View style={[s.playerCard, turn === 0 && s.activePlayerCard]}>
-            {paidMatch ? <ClockBall player={0} /> : null}
-            <Avatar variant={playerAvatar} />
-            <View>
-              <Text numberOfLines={1} style={[s.playerName, { maxWidth: 110 }]}>
-                {playerName.toUpperCase()} {turn === 0 ? " ◂" : ""}
-              </Text>
-              <Text
-                style={{ fontSize: 10, color: "#9fc2d6", fontWeight: "600" }}
-              >
-                {cueById(session.cueIds[0]).name}
-              </Text>
-              <PlayerBalls player={0} />
+          <View style={s.barSide}>
+            <Button label="Table settings" onPress={() => setPanel("settings")}>
+              <Feather name="menu" size={20} color={C.ink} />
+            </Button>
+            <View style={[s.playerStrip, turn === 0 && s.activePlayerCard]}>
+              {paidMatch ? <ClockBall player={0} /> : null}
+              <Avatar variant={playerAvatar} />
+              <View style={s.stripText}>
+                <Text numberOfLines={1} style={s.playerName}>
+                  {playerName.toUpperCase()}
+                  {turn === 0 ? " ◂ " : " · "}
+                  <Text style={s.groupInline}>{groupText(0)}</Text>
+                </Text>
+                <PlayerBalls player={0} compact />
+              </View>
             </View>
           </View>
-          <View style={s.matchCenter}>
-            <Text style={s.matchBrand}>CUEMASTER</Text>
-            <Text numberOfLines={2} style={s.matchMode}>
-              {modeLabel.toUpperCase()}
-            </Text>
-          </View>
-          <View
-            style={[
-              s.playerCard,
-              { flexDirection: "row-reverse" },
-              turn === 1 && s.activePlayerCard,
-              // Drills and practice have no second player; keep the slot so the title stays centred.
-              !paidMatch && !session.cpu && { opacity: 0 },
-            ]}
-            pointerEvents={!paidMatch && !session.cpu ? "none" : "auto"}
-          >
-            {paidMatch ? <ClockBall player={1} /> : null}
-            <Avatar
-              opponent
-              variant={session.cpu?.avatar ?? (playerAvatar === 0 ? 1 : 0)}
-            />
-            <View style={{ alignItems: "flex-end" }}>
-              <Text numberOfLines={1} style={[s.playerName, { maxWidth: 135 }]}>
-                {turn === 1 ? "▸ " : ""}
-                {session.cpu ? session.cpu.name.toUpperCase() : "PLAYER 2"}
-              </Text>
+          <View style={s.barCentre} pointerEvents="box-none">
+            <View style={s.barStatus} pointerEvents="none">
               <Text
-                style={{ fontSize: 10, color: "#9fc2d6", fontWeight: "600" }}
+                style={[s.shotStatus, session.replaying && { color: C.gold }]}
               >
-                {session.cpu?.motto || cueById(session.cueIds[1]).name}
+                {session.replaying
+                  ? "▶ INSTANT REPLAY · SLOW MOTION"
+                  : session.running
+                    ? session.progress.shotPots.length
+                      ? `POTTED: ${session.progress.shotPots.join(", ")}`
+                      : "BALLS IN PLAY"
+                    : session.cpuTurn
+                      ? `${session.cpu!.name.toUpperCase()} IS AIMING…`
+                      : session.placement
+                        ? session.headStringPlacement
+                          ? "DRAG ON / BEHIND LINE · RELEASE TO PLACE"
+                          : "PLACE THE CUE BALL"
+                        : session.progress.finished
+                          ? "RESET TABLE TO PLAY AGAIN"
+                          : `${turn === 0 ? "YOUR" : "PLAYER 2’S"} TURN`}
               </Text>
-              <PlayerBalls player={1} />
-            </View>
-          </View>
-          <Button
-            label="Switch camera"
-            disabled={compatibility}
-            active={session.camera === "aim"}
-            onPress={() => {
-              session.camera = session.camera === "table" ? "aim" : "table";
-              session.notify();
-            }}
-          >
-            <Feather
-              name="video"
-              size={19}
-              color={session.camera === "aim" ? C.gold : C.ink}
-            />
-          </Button>
-        </View>
-        <View
-          style={[
-            s.canvas,
-            // Full-bleed table, as in the reference game: the playfield is the interface.
-            // The HUD bands are reserved through session.hud so the table never sits under them.
-            { top: 0, bottom: 0, left: 0, right: 0 },
-          ]}
-        >
-          {compatibility ? (
-            <CompatibilityTable />
-          ) : (
-            !renderError && (
-              <SceneBoundary key={renderAttempt} onError={setRenderError}>
-                <Canvas
-                  camera={{
-                    position: [0, 3, 0.001],
-                    fov: 19,
-                    near: 0.05,
-                    far: 40,
-                  }}
-                  dpr={[1, 1.7]}
-                  gl={{
-                    antialias: Platform.OS === "web",
-                    alpha: true,
-                    powerPreference: "high-performance",
-                  }}
+              {!session.replaying &&
+                (session.progress.scratch ||
+                  (paidMatch && !!session.progress.foul)) && (
+                  <Text style={s.scratchLabel}>
+                    {session.placement || session.running
+                      ? `${session.progress.foul || "SCRATCH"} · BALL IN HAND`
+                      : `LAST SHOT · ${session.progress.foul || "SCRATCH"}`}
+                  </Text>
+                )}
+              {session.progress.finished && (
+                <Text style={s.scratchLabel}>RACK COMPLETE</Text>
+              )}
+              {!paidMatch && !session.running && !!session.coach && (
+                <Text
+                  style={s.coachLabel}
+                  numberOfLines={2}
+                  accessibilityLiveRegion="polite"
                 >
-                  <Scene
-                    onReady={() => {
-                      if (__DEV__)
-                        console.log(
-                          `CueMaster table ready ${Date.now() - openedAt.current} ms after open`,
-                        );
-                      setLoaded(true);
-                    }}
-                  />
-                </Canvas>
-              </SceneBoundary>
-            )
-          )}
+                  COACH · {session.coach}
+                </Text>
+              )}
+            </View>
+            {session.drill === "break" &&
+            session.shots === 0 &&
+            !session.cpuTurn &&
+            !session.running &&
+            !session.progress.breakChoice ? (
+              <Button
+                label="Place break cue"
+                onPress={() => {
+                  session.placement = true;
+                  session.headStringPlacement = true;
+                  session.notify();
+                }}
+              />
+            ) : (
+              <FineAim />
+            )}
+            {!paidMatch &&
+              (session.canReplay || session.progress.returned.length > 0) && (
+                <View
+                  style={s.pottedRow}
+                  accessibilityLiveRegion="polite"
+                  accessibilityLabel={
+                    session.progress.returned.length
+                      ? `Potted: ${session.progress.returned.join(", ")}`
+                      : "No balls potted yet"
+                  }
+                >
+                  {!paidMatch && session.canReplay && (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Watch replay of the last shot"
+                      hitSlop={8}
+                      onPress={() => session.startReplay()}
+                      style={({ pressed }) => [
+                        s.replayPill,
+                        pressed && { opacity: 0.7 },
+                      ]}
+                    >
+                      <Text style={s.replayPillText}>▶ REPLAY</Text>
+                    </Pressable>
+                  )}
+                  {session.progress.returned.map((id) => (
+                    <BallBadge
+                      key={id}
+                      id={id}
+                      recent={session.progress.shotPots.includes(id)}
+                    />
+                  ))}
+                </View>
+              )}
+          </View>
+          <View style={[s.barSide, { justifyContent: "flex-end" }]}>
+            <View
+              style={[
+                s.playerStrip,
+                turn === 1 && s.activePlayerCard,
+                // Drills and practice have no second player.
+                !paidMatch && !session.cpu && { opacity: 0 },
+              ]}
+              pointerEvents={!paidMatch && !session.cpu ? "none" : "auto"}
+            >
+              <View style={[s.stripText, { alignItems: "flex-end" }]}>
+                <Text numberOfLines={1} style={s.playerName}>
+                  <Text style={s.groupInline}>{groupText(1)}</Text>
+                  {turn === 1 ? " ▸ " : " · "}
+                  {session.cpu ? session.cpu.name.toUpperCase() : "PLAYER 2"}
+                </Text>
+                <PlayerBalls player={1} compact />
+              </View>
+              <Avatar
+                opponent
+                variant={session.cpu?.avatar ?? (playerAvatar === 0 ? 1 : 0)}
+              />
+              {paidMatch ? <ClockBall player={1} /> : null}
+            </View>
+            <Button
+              label="Switch camera"
+              disabled={compatibility}
+              active={session.camera === "aim"}
+              onPress={() => {
+                session.camera = session.camera === "table" ? "aim" : "table";
+                session.notify();
+              }}
+            >
+              <Feather
+                name="video"
+                size={19}
+                color={session.camera === "aim" ? C.gold : C.ink}
+              />
+            </Button>
+          </View>
         </View>
+        {compatibility && (
+          <View style={[s.canvas, { top: 0, bottom: 0, left: 0, right: 0 }]}>
+            <CompatibilityTable />
+          </View>
+        )}
         {compatibility && (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Retry 3D table"
-            onPress={() => {
-              setCompatibility(false);
-              setLoaded(false);
-              setRenderError("");
-              setRenderAttempt((attempt) => attempt + 1);
-            }}
+            onPress={() => tableHost.retry()}
             style={{
               position: "absolute",
               top: 60 + insets.top,
@@ -949,32 +972,15 @@ function Game({
             <Text style={s.description}>{renderError}</Text>
             <Button
               label="Use compatibility table"
-              onPress={() => {
-                setRenderError("");
-                setCompatibility(true);
-                setLoaded(true);
-              }}
+              onPress={() => tableHost.useCompatibility()}
             />
-            <Button
-              label="Reload table"
-              onPress={() => {
-                setLoaded(false);
-                setRenderError("");
-                setRenderAttempt((attempt) => attempt + 1);
-              }}
-            />
+            <Button label="Reload table" onPress={() => tableHost.retry()} />
           </View>
-        ) : (
-          !loaded && (
-            <View style={s.loading}>
-              <Text style={s.description}>Preparing your table…</Text>
-            </View>
-          )
-        )}
-        <View style={[s.shotPower, { left: 15 + insets.left }]}>
+        ) : null}
+        <View style={[s.shotPower, { left: 12 + insets.left }]}>
           <Power compact />
         </View>
-        <View style={[s.shotSpin, { right: 6 + insets.right }]}>
+        <View style={[s.shotSpin, { right: 10 + insets.right }]}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Adjust spin"
@@ -989,115 +995,6 @@ function Game({
             <Spin size={34} />
           </Pressable>
           <Text style={s.controlCaption}>SPIN</Text>
-        </View>
-        <View
-          style={[s.pottedRack, { right: 6 + insets.right }]}
-          accessibilityLiveRegion="polite"
-          accessibilityLabel={
-            session.progress.returned.length
-              ? `Potted: ${session.progress.returned.join(", ")}`
-              : "No balls potted yet"
-          }
-        >
-          {session.progress.returned.length > 0 && (
-            <Text style={s.returnLabel}>POTTED</Text>
-          )}
-          <View style={s.pottedColumn}>
-            {session.progress.returned.map((id) => (
-              <BallBadge
-                key={id}
-                id={id}
-                recent={session.progress.shotPots.includes(id)}
-              />
-            ))}
-          </View>
-        </View>
-        <View
-          style={[
-            s.shotFooter,
-            {
-              bottom: 6 + insets.bottom,
-              left: 16 + insets.left,
-              right: 60 + insets.right,
-            },
-          ]}
-          onLayout={measure("bottom")}
-        >
-          <View style={s.footerSide}>
-            <Text
-              style={[s.shotStatus, session.replaying && { color: C.gold }]}
-            >
-              {session.replaying
-                ? "▶ INSTANT REPLAY · SLOW MOTION"
-                : session.running
-                  ? session.progress.shotPots.length
-                    ? `POTTED: ${session.progress.shotPots.join(", ")}`
-                    : "BALLS IN PLAY"
-                  : session.cpuTurn
-                    ? `${session.cpu!.name.toUpperCase()} IS AIMING…`
-                    : session.placement
-                      ? session.headStringPlacement
-                        ? "DRAG ON / BEHIND LINE · RELEASE TO PLACE"
-                        : "PLACE THE CUE BALL"
-                      : session.progress.finished
-                        ? "RESET TABLE TO PLAY AGAIN"
-                        : `${turn === 0 ? "YOUR" : "PLAYER 2’S"} TURN`}
-            </Text>
-            {!session.replaying &&
-              (session.progress.scratch ||
-                (paidMatch && !!session.progress.foul)) && (
-                <Text style={s.scratchLabel}>
-                  {session.placement || session.running
-                    ? `${session.progress.foul || "SCRATCH"} · BALL IN HAND`
-                    : `LAST SHOT · ${session.progress.foul || "SCRATCH"}`}
-                </Text>
-              )}
-            {session.progress.finished && (
-              <Text style={s.scratchLabel}>RACK COMPLETE</Text>
-            )}
-            {!paidMatch && !session.running && !!session.coach && (
-              <Text
-                style={s.coachLabel}
-                numberOfLines={2}
-                accessibilityLiveRegion="polite"
-              >
-                COACH · {session.coach}
-              </Text>
-            )}
-          </View>
-          {session.drill === "break" &&
-          session.shots === 0 &&
-          !session.cpuTurn &&
-          !session.running &&
-          !session.progress.breakChoice ? (
-            <Button
-              label="Place break cue"
-              onPress={() => {
-                session.placement = true;
-                session.headStringPlacement = true;
-                session.notify();
-              }}
-            />
-          ) : (
-            <FineAim />
-          )}
-          <View style={[s.footerSide, { justifyContent: "flex-end" }]}>
-            {!paidMatch && session.canReplay && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Watch replay of the last shot"
-                hitSlop={8}
-                onPress={() => session.startReplay()}
-                style={({ pressed }) => [
-                  s.replayPill,
-                  pressed && { opacity: 0.7 },
-                ]}
-              >
-                <Text style={s.replayPillText}>▶ REPLAY</Text>
-              </Pressable>
-            )}
-            <Text style={s.tableBadge}>{skin.name.toUpperCase()} · 9 FT</Text>
-          </View>
         </View>
         {session.progress.finished && !session.running && (
           <View style={s.finishOverlay}>
@@ -1646,10 +1543,10 @@ const s = StyleSheet.create({
   },
   pottedRack: {
     position: "absolute",
-    right: 6,
-    top: 96,
-    bottom: 40,
-    width: 48,
+    right: 8,
+    top: "64%",
+    bottom: 70,
+    width: 154,
     alignItems: "center",
     gap: 6,
   },
@@ -1673,39 +1570,33 @@ const s = StyleSheet.create({
     fontWeight: "700",
     marginLeft: 6,
   },
-  matchHeader: {
+  sideColumn: {
     position: "absolute",
-    top: 4,
-    left: 12,
-    right: 12,
-    height: 54,
-    flexDirection: "row",
+    width: 154,
     alignItems: "center",
-    justifyContent: "center",
     gap: 8,
     zIndex: 3,
   },
   playerCard: {
-    flexDirection: "row",
-    gap: 6,
+    width: 154,
     alignItems: "center",
-    flex: 1,
-    maxWidth: 300,
-    minWidth: 0,
+    gap: 3,
     paddingHorizontal: 7,
-    paddingVertical: 4,
+    paddingVertical: 6,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "#ffffff1f",
     backgroundColor: "#0a1a27d9",
-    justifyContent: "center",
   },
+  cardTop: { flexDirection: "row", alignItems: "center", gap: 6 },
+  cardSub: { fontSize: 10, color: "#9fc2d6", fontWeight: "600" },
   activePlayerCard: {
     borderColor: "#24dbb3aa",
     backgroundColor: "#0d2a2ee6",
     boxShadow: "0 2px 16px #00000055",
   },
   playerName: {
+    maxWidth: 230,
     color: "#fffdf3",
     fontSize: 13,
     fontWeight: "800",
@@ -1716,24 +1607,6 @@ const s = StyleSheet.create({
     fontSize: 10,
     letterSpacing: 1,
     marginTop: 5,
-  },
-  matchCenter: {
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    width: 108,
-  },
-  matchBrand: {
-    color: "#ffd05b",
-    fontSize: 12,
-    fontWeight: "800",
-    letterSpacing: 2,
-  },
-  matchMode: {
-    color: "#e0f3fc",
-    fontSize: 10,
-    letterSpacing: 0.8,
-    textAlign: "center",
   },
   avatar: {
     width: 40,
@@ -1773,31 +1646,59 @@ const s = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: "#24212a",
   },
-  shotPower: { position: "absolute", left: 15, top: "36%" },
+  shotPower: { position: "absolute", left: 12, top: "32%" },
   shotSpin: {
     position: "absolute",
-    right: 6,
-    top: "43%",
+    right: 10,
+    top: "42%",
     alignItems: "center",
     gap: 4,
   },
-  shotFooter: {
+  topBar: {
     position: "absolute",
-    bottom: 6,
-    left: 16,
-    right: 60,
-    height: 26,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    zIndex: 3,
+  },
+  bottomBar: {
+    position: "absolute",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
+    zIndex: 3,
   },
-  footerSide: {
+  barSide: {
     flex: 1,
     minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
+  },
+  playerStrip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: "#ffffff1f",
+    backgroundColor: "#0a1a27d9",
+  },
+  stripText: { gap: 3 },
+  barCentre: { flex: 1.2, minWidth: 0, alignItems: "center", gap: 4 },
+  barStatus: { alignItems: "center", gap: 1 },
+  groupInline: { color: "#9fc2d6", fontSize: 10, fontWeight: "700" },
+  pottedRow: { flexDirection: "row", alignItems: "center", gap: 3 },
+  statusCorner: { position: "absolute", width: 154, gap: 3 },
+  aimCorner: {
+    position: "absolute",
+    width: 154,
+    alignItems: "center",
+    gap: 6,
   },
   shotStatus: { color: "#9eafc3", fontSize: 10, letterSpacing: 1 },
   coachLabel: {
@@ -1835,13 +1736,8 @@ const s = StyleSheet.create({
     letterSpacing: 1,
   },
   tableBadge: { color: "#708198", fontSize: 10, letterSpacing: 1 },
-  root: {
-    flex: 1,
-    backgroundColor: "#080c15",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  stage: { width: "100%", backgroundColor: C.bg, overflow: "hidden" },
+  root: { flex: 1, alignItems: "center", justifyContent: "center" },
+  stage: { width: "100%", overflow: "hidden" },
   header: {
     position: "absolute",
     top: 24,
@@ -2030,7 +1926,6 @@ const s = StyleSheet.create({
     backgroundColor: "#0a1a27b3",
   },
   aimHelp: { fontSize: 6, color: "#6d8072", letterSpacing: 1.2 },
-  loading: { position: "absolute", top: "48%", alignSelf: "center" },
   pottedTray: {
     position: "absolute",
     right: 42,

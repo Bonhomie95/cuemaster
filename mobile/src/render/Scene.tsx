@@ -695,9 +695,10 @@ function Aim() {
   );
 }
 /** Outer table extents including rails and pocket jaws (from table-mesh.json). */
-// Fit to the rail top (diamonds) rather than the outer cabinet: the overhang may bleed off screen.
-const TABLE_X = 1.4,
-  TABLE_Z = 0.762,
+// Fit to just outside the cushion line: the rail diamonds stay visible and the cabinet
+// overhang may run under the HUD edges, which buys the cloth a bigger share of the screen.
+const TABLE_X = 1.36,
+  TABLE_Z = 0.74,
   // A long lens and a slight tilt: the reference reads almost orthographic, which is what keeps
   // it looking like a table seen from above rather than a 3D model on a stage.
   TILT = (7 * Math.PI) / 180;
@@ -733,8 +734,8 @@ function Camera() {
       safeH = Math.max(40, size.height - hud.top - hud.bottom),
       // Pixels per metre measured perpendicular to the view direction.
       ppm = Math.min(
-        safeW / (2 * TABLE_X * 1.02),
-        safeH / ((2 * TABLE_Z * c + 0.12 * Math.sin(TILT)) * 1.04),
+        safeW / (2 * TABLE_X * 1.01),
+        safeH / ((2 * TABLE_Z * c + 0.12 * Math.sin(TILT)) * 1.02),
       ),
       dist = size.height / 2 / (Math.tan(f / 2) * ppm),
       offsetX = (hud.left - hud.right) / 2 / ppm,
