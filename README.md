@@ -21,6 +21,46 @@ Open the printed preview URL. Guest play works without OAuth keys. The native ap
 
 For Atlas, set `MONGODB_URI` and `MONGODB_DB` in `server/.env` using `server/.env.example`. Do not put database credentials in mobile environment variables. Physical phones need a reachable API URL; see [service setup](docs/SERVICES.md).
 
+## Render and simulator troubleshooting
+
+The API is hosted at `https://cuemaster-api.onrender.com`. Its public health check is
+`https://cuemaster-api.onrender.com/health`; a healthy response is
+`{"ok":true,"database":"mongodb"}`. A free Render service sleeps when idle, so the app allows
+65 seconds for its initial catalog/config connection. Subsequent requests retain their normal
+timeout. The table models and ball textures are bundled in the app and do not download from Render.
+
+The Render CLI on this Mac is already authenticated. To inspect this service:
+
+```sh
+render whoami
+render services --output json
+render logs --resources srv-db1nu85g1s2s73b2tbt0 --limit 30 --output text
+render deploys list srv-db1nu85g1s2s73b2tbt0 --output json
+```
+
+If authentication expires, run `render login` and complete the sign-in in your browser.
+Do not paste Render API keys or database passwords into chat. The dashboard is
+[CueMaster API](https://dashboard.render.com/web/srv-db1nu85g1s2s73b2tbt0).
+
+Render settings: repository root directory empty, build `npm --prefix server ci`, start
+`npm --prefix server start`, health check `/health`. Keep the repository root available:
+the API imports shared physics and rules from `mobile/src`. Set `HOST=0.0.0.0` (the code also
+defaults to this on Render), and let Render provide `PORT`. Production requires the database,
+CORS, proxy trust and legal settings in `server/.env.example`; store them in Render's Environment
+tab. `mobile/.env` leaves `EXPO_PUBLIC_API_URL` empty so local builds use the `npm run dev` API;
+set it to `https://cuemaster-api.onrender.com` there for phone testing against the hosted API and
+in your mobile build environment, then rebuild the app after changing it.
+
+For native testing, use a development build rather than Expo Go. Regenerate/build native code
+with `npm run ios` or `npm run android`; Metro refresh cannot update native startup code.
+The iOS config plugin enables Expo's scene lifecycle, required for iOS 27. Native rendering skips
+the floating-point room-reflection bake and multisample antialiasing to avoid blocking software
+simulator graphics. The loading message waits for actual scene draws. If native graphics have
+not started after 12 seconds, the app switches to a GL-independent compatibility table with
+the same physics, aiming, placement and shooting controls. **Retry 3D** restarts the standard
+view. Native debug checks never read pixels synchronously from EXGL. Keep remote JavaScript
+debugging disabled when testing Expo GL.
+
 ## Available flows
 
 - Branded native splash, Blender opening artwork, guest entry and a club home. Offline practice remains accessible when the API is unavailable.

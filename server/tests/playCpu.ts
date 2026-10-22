@@ -1,6 +1,7 @@
 import { Session, seededRandom } from "../../mobile/src/game/session";
 import { planCpuShot, cpuPlacement } from "../../mobile/src/game/cpu";
 import { localWinner } from "../../mobile/src/game/localMatch";
+import { randomUUID } from "node:crypto";
 /**
  * Play a whole CPU match the way a device would: the player is driven by the planner at
  * near-perfect skill, the rival by the match seed. Returns the action record a client sends.
@@ -36,4 +37,34 @@ export function playCpuMatch(opponent: any, seed: number) {
     finished: s.progress.finished,
     winner: localWinner(s.progress),
   };
+}
+type Call = (
+  path: string,
+  method?: string,
+  body?: unknown,
+) => Promise<{ status: number; body: any }>;
+/** Play CPU racks at the Lagos table until the referee verifies a win; returns that finish. */
+export async function winVerifiedRack(call: Call) {
+  for (let i = 0; i < 6; i++) {
+    const started = await call("/local-matches/start", "POST", {
+      venueId: "heritage",
+      requestId: randomUUID(),
+      mode: "cpu",
+    });
+    if (started.status !== 201) break;
+    const played = playCpuMatch(
+      started.body.match.opponent,
+      started.body.match.seed,
+    );
+    const finished = await call(
+      `/local-matches/${started.body.match.id}/finish`,
+      "POST",
+      {
+        outcome: played.winner === 0 ? "won" : "lost",
+        actions: played.actions,
+      },
+    );
+    if (finished.body?.verified) return finished;
+  }
+  throw new Error("the planner could not beat the rival in six racks");
 }

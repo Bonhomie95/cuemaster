@@ -1,5 +1,6 @@
 import { installUsdc } from "./usdc";
 import { installAdminAuth, passwordHash } from "./adminAuth";
+import { revokeAppleToken } from "./appleTokens";
 import { randomUUID, randomBytes } from "node:crypto";
 import { z } from "zod";
 import { drillTargets } from "./catalog";
@@ -72,6 +73,9 @@ export function eventIsOpen(e: any, now = Date.now()) {
   return (
     !!e &&
     e.status === "open" &&
+    // An administrator can lock an open event to freeze entries and submissions without
+    // closing it, which would settle prizes.
+    !e.locked &&
     // Coins are virtual items. USDC would be a real-currency payout, which needs eligibility
     // and settlement that do not exist; country lists imply the same. Both stay closed.
     e.currency === "coins" &&
@@ -86,6 +90,31 @@ export function placementFor(event: any, position: number) {
     (p: any) => p.position === position,
   );
   return row ? Math.floor(row.amount) : 0;
+}
+/**
+ * Remove a player and everything keyed to them. Shared by self-service deletion and the admin
+ * console so the two can never drift. Financial records are unlinked, not destroyed.
+ */
+export async function deletePlayer(db: Db, id: string) {
+  await db.collection("players").deleteOne({ _id: id as any });
+  await Promise.all([
+    db.collection("sessions").deleteMany({ playerId: id }),
+    db.collection("practiceTickets").deleteMany({ playerId: id }),
+    db.collection("walletChallenges").deleteMany({ playerId: id }),
+    db.collection("entries").deleteMany({ playerId: id }),
+    db
+      .collection("reports")
+      .deleteMany({ $or: [{ playerId: id }, { reporterId: id }] }),
+    db
+      .collection("payouts")
+      .updateMany(
+        { playerId: id },
+        { $set: { playerId: null, playerDeletedAt: new Date() } },
+      ),
+    db
+      .collection("players")
+      .updateMany({}, { $pull: { blockedPlayers: id } as any }),
+  ]);
 }
 export function installPlatform(
   app: Express,
@@ -300,7 +329,7 @@ export function installPlatform(
         .strict()
         .parse(req.body);
       const updated = await events.findOneAndUpdate(
-        { id: req.params.id, status: "draft", version },
+        { id: req.params.id, status: { $in: ["draft", "announced"] }, version },
         {
           $set: {
             ...data.data,
@@ -321,7 +350,8 @@ export function installPlatform(
       );
       if (!updated)
         return res.status(409).json({
-          error: "Only current drafts can be edited. Refresh before retrying.",
+          error:
+            "Only drafts and announced events can be edited. Refresh before retrying.",
         });
       res.json(publicEvent(updated));
     },
@@ -386,6 +416,43 @@ export function installPlatform(
       const settlement =
         status === "closed" ? await settle(updated, req.staff._id) : null;
       res.json({ ...publicEvent(updated), settlement });
+    },
+  );
+  app.post(
+    "/admin/tournaments/:id/lock",
+    staffRequired,
+    admin,
+    async (req: any, res) => {
+      const { locked, version, reason } = z
+        .object({
+          locked: z.boolean(),
+          version: z.number().int().positive(),
+          reason: z.string().trim().min(5).max(300),
+        })
+        .strict()
+        .parse(req.body);
+      const updated = await events.findOneAndUpdate(
+        { id: req.params.id, status: "open", version },
+        {
+          $set: { locked, updatedBy: req.player._id },
+          $inc: { version: 1 },
+          $push: {
+            history: {
+              action: locked ? "locked" : "unlocked",
+              actor: req.player._id,
+              reason,
+              at: new Date(),
+            },
+          } as any,
+        },
+        { returnDocument: "after" },
+      );
+      if (!updated)
+        return res.status(409).json({
+          error:
+            "Only current open events can be locked. Refresh before retrying.",
+        });
+      res.json(publicEvent(updated));
     },
   );
   /**
@@ -514,6 +581,7 @@ export function installPlatform(
             name: 1,
             role: 1,
             suspended: 1,
+            banned: 1,
             xp: 1,
             coins: 1,
             createdAt: 1,
@@ -532,6 +600,11 @@ export function installPlatform(
       const input = z
         .object({
           suspended: z.boolean().optional(),
+          // A ban is a permanent suspension: it also sets `suspended`, and only an explicit
+          // unban lifts it. Suspension alone is the reversible, time-boxed tool.
+          banned: z.boolean().optional(),
+          coins: z.number().int().min(0).max(1_000_000_000).optional(),
+          xp: z.number().int().min(0).max(1_000_000_000).optional(),
           name: z
             .string()
             .trim()
@@ -552,7 +625,12 @@ export function installPlatform(
         return res
           .status(403)
           .json({ error: "Cannot modify this administrator." });
-      const { reason, ...update } = input;
+      const { reason, ...update } = input as Record<string, unknown>;
+      if (input.banned !== undefined) update.suspended = input.banned;
+      else if (input.suspended === false && target.banned)
+        return res.status(409).json({
+          error: "This account is banned. Unban it to restore access.",
+        });
       const changed = await users.updateOne(
         { _id: target._id, role: target.role ?? { $exists: false } },
         {
@@ -571,9 +649,56 @@ export function installPlatform(
         return res
           .status(409)
           .json({ error: "Player changed. Refresh before retrying." });
-      if (input.suspended)
+      if (input.suspended || input.banned)
         await db.collection("sessions").deleteMany({ playerId: target._id });
       res.json({ updated: true });
+    },
+  );
+  app.delete(
+    "/admin/players/:id",
+    staffRequired,
+    admin,
+    async (req: any, res) => {
+      const { reason } = z
+        .object({ reason: z.string().trim().min(5).max(300) })
+        .strict()
+        .parse(req.body);
+      const target = await users.findOne({ _id: req.params.id });
+      if (!target) return res.status(404).json({ error: "Player not found." });
+      if (target.role === "owner" || target.role === "admin")
+        return res
+          .status(403)
+          .json({ error: "Administrators are managed from the staff page." });
+      let appleRevoked: boolean | null = null;
+      if (target.providers?.apple) {
+        try {
+          await revokeAppleToken(
+            target.appleCredential,
+            target.providers.apple,
+          );
+          appleRevoked = true;
+        } catch {
+          appleRevoked = false;
+        }
+      }
+      // Written before the delete so the record survives even if the removal fails.
+      await audit.insertOne({
+        _id: randomUUID(),
+        action: "player.deleted",
+        actor: req.staff._id,
+        actorName: req.staff.username,
+        reason,
+        at: new Date(),
+        player: {
+          id: target._id,
+          name: target.name,
+          coins: target.coins,
+          xp: target.xp,
+        },
+        appleRevoked,
+      });
+      await deletePlayer(db, target._id);
+      res.json({ deleted: true, appleRevoked });
     },
   );
   app.get("/admin/staff", staffRequired, admin, owner, async (_req, res) =>

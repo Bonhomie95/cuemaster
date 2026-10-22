@@ -18,14 +18,16 @@ export const ballColors = [
   "#176a45",
   "#752329",
 ];
-const cache = new Map<number, T.DataTexture>();
-export function ballTexture(id: number) {
-  if (cache.has(id)) return cache.get(id)!;
-  const w = 512,
-    h = 256,
-    data = new Uint8Array(w * h * 4),
+const cache = new Map<string, T.DataTexture>();
+const BALL_W = 512,
+  BALL_H = 256,
+  CLOTH_W = 1024,
+  CLOTH_H = 512;
+function fillBall(id: number, data: Uint8Array, y0: number, y1: number) {
+  const w = BALL_W,
+    h = BALL_H,
     c = new T.Color(ballColors[id]).convertLinearToSRGB();
-  for (let y = 0; y < h; y++)
+  for (let y = y0; y < y1; y++)
     for (let x = 0; x < w; x++) {
       const theta = (Math.PI * y) / h,
         phi = (2 * Math.PI * x) / w,
@@ -59,16 +61,27 @@ export function ballTexture(id: number) {
       data[i + 2] = b;
       data[i + 3] = 255;
     }
-  const t = new T.DataTexture(data, w, h);
+}
+function finishBall(id: number, data: Uint8Array) {
+  const t = new T.DataTexture(data, BALL_W, BALL_H);
   t.colorSpace = T.SRGBColorSpace;
   t.magFilter = T.LinearFilter;
   t.minFilter = T.LinearMipmapLinearFilter;
   t.generateMipmaps = true;
   t.needsUpdate = true;
-  cache.set(id, t);
+  cache.set("ball" + id, t);
   return t;
 }
+export function ballTexture(id: number) {
+  const hit = cache.get("ball" + id);
+  if (hit) return hit;
+  const data = new Uint8Array(BALL_W * BALL_H * 4);
+  fillBall(id, data, 0, BALL_H);
+  return finishBall(id, data);
+}
 export function grain(kind: "cloth" | "wood") {
+  const hit = cache.get("grain" + kind);
+  if (hit) return hit;
   const n = 128,
     d = new Uint8Array(n * n * 4);
   let seed = 81;
@@ -92,10 +105,13 @@ export function grain(kind: "cloth" | "wood") {
   t.repeat.set(kind === "cloth" ? 54 : 3, kind === "cloth" ? 27 : 2);
   t.magFilter = T.LinearFilter;
   t.needsUpdate = true;
+  cache.set("grain" + kind, t);
   return t;
 }
 
 export function shadowTexture() {
+  const hit = cache.get("shadow");
+  if (hit) return hit;
   const n = 64,
     data = new Uint8Array(n * n * 4);
   for (let y = 0; y < n; y++)
@@ -108,6 +124,7 @@ export function shadowTexture() {
   const t = new T.DataTexture(data, n, n);
   t.magFilter = T.LinearFilter;
   t.needsUpdate = true;
+  cache.set("shadow", t);
   return t;
 }
 
@@ -116,12 +133,13 @@ export function shadowTexture() {
  * into the cushion shadow, plus the weave. Sampled at 1024x512 because from the match camera
  * the cloth covers most of the screen.
  */
-export function clothSurface() {
-  const w = 1024,
-    h = 512,
-    data = new Uint8Array(w * h * 4);
+function fillCloth(data: Uint8Array, y0: number, y1: number) {
+  const w = CLOTH_W,
+    h = CLOTH_H;
   let seed = 1337;
-  for (let y = 0; y < h; y++)
+  for (let y = y0; y < y1; y++) {
+    // Seeded per row so bands generated separately match the one-shot result exactly.
+    seed = (1337 + y * 7919) >>> 0;
     for (let x = 0; x < w; x++) {
       const px = (x / (w - 1) - 0.5) * 2.8,
         pz = (y / (h - 1) - 0.5) * 1.5;
@@ -167,17 +185,30 @@ export function clothSurface() {
       data[i] = data[i + 1] = data[i + 2] = v;
       data[i + 3] = 255;
     }
-  const t = new T.DataTexture(data, w, h);
+  }
+}
+function finishCloth(data: Uint8Array) {
+  const t = new T.DataTexture(data, CLOTH_W, CLOTH_H);
   t.magFilter = T.LinearFilter;
   t.minFilter = T.LinearMipmapLinearFilter;
   t.generateMipmaps = true;
   t.anisotropy = 4;
   t.needsUpdate = true;
+  cache.set("cloth", t);
   return t;
+}
+export function clothSurface() {
+  const hit = cache.get("cloth");
+  if (hit) return hit;
+  const data = new Uint8Array(CLOTH_W * CLOTH_H * 4);
+  fillCloth(data, 0, CLOTH_H);
+  return finishCloth(data);
 }
 
 /** Club floor: dark navy carpet with a fine weave and the lamp pool under the table. */
 export function floorTexture() {
+  const hit = cache.get("floor");
+  if (hit) return hit;
   const n = 256,
     data = new Uint8Array(n * n * 4);
   let seed = 99;
@@ -201,5 +232,43 @@ export function floorTexture() {
   t.minFilter = T.LinearMipmapLinearFilter;
   t.generateMipmaps = true;
   t.needsUpdate = true;
+  cache.set("floor", t);
   return t;
+}
+
+/**
+ * Generate every table texture in the background, in bands small enough to sit between frames,
+ * so the first table open finds them cached. Hermes has no JIT: the cloth alone takes seconds
+ * there when generated in one go, which is what "Preparing your table…" used to wait for.
+ */
+let warming: Promise<void> | null = null;
+export function warmTextures() {
+  if (warming) return warming;
+  const idle = () => new Promise<void>((r) => setTimeout(r, 0));
+  const jobs: (() => void)[] = [];
+  const clothData = new Uint8Array(CLOTH_W * CLOTH_H * 4);
+  for (let y = 0; y < CLOTH_H; y += 16)
+    jobs.push(() => fillCloth(clothData, y, Math.min(CLOTH_H, y + 16)));
+  jobs.push(() => void (cache.has("cloth") || finishCloth(clothData)));
+  for (let id = 0; id < 16; id++) {
+    const data = new Uint8Array(BALL_W * BALL_H * 4);
+    for (let y = 0; y < BALL_H; y += 32)
+      jobs.push(() => fillBall(id, data, y, Math.min(BALL_H, y + 32)));
+    jobs.push(() => void (cache.has("ball" + id) || finishBall(id, data)));
+  }
+  jobs.push(
+    () => void grain("cloth"),
+    () => void grain("wood"),
+  );
+  jobs.push(
+    () => void shadowTexture(),
+    () => void floorTexture(),
+  );
+  warming = (async () => {
+    for (const job of jobs) {
+      job();
+      await idle();
+    }
+  })();
+  return warming;
 }

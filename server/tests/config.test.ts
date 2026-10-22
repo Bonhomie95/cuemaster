@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { assertProductionConfig } from "../src/config";
+import { assertProductionConfig, listenHost } from "../src/config";
+test("Render binds its public interface while local development stays on loopback", () => {
+  assert.equal(listenHost({}), "127.0.0.1");
+  assert.equal(listenHost({ RENDER: "true" }), "0.0.0.0");
+  assert.equal(listenHost({ RENDER: "true", HOST: "0.0.0.0" }), "0.0.0.0");
+  assert.equal(listenHost({ HOST: " 127.0.0.1 " }), "127.0.0.1");
+});
 test("production rejects local defaults, unauthenticated databases, insecure TLS, wildcard proxy trust and missing public policy URLs", () => {
   assert.doesNotThrow(() =>
     assertProductionConfig({ NODE_ENV: "development" }),

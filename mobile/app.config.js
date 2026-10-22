@@ -17,6 +17,7 @@ module.exports = ({ config }) => {
     },
     plugins: [
       ...(config.plugins || []),
+      "./plugins/withSceneLifecycle.cjs",
       [
         "react-native-google-mobile-ads",
         {

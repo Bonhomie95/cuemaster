@@ -396,6 +396,25 @@ export class Session {
       : "Table open. Continue play.";
     this.notify();
   }
+  /**
+   * Point the cue at the nearest ball the rules allow as first contact, so a turn never starts
+   * aimed at empty cloth. The break keeps its rack aim; CPU turns plan their own.
+   */
+  aimAtTarget() {
+    if (this.cpuTurn || this.progress.finished || this.placement) return;
+    if (this.drill === "break" && this.shots === 0) return;
+    const cue = this.world.balls.find((b) => b.id === 0)!,
+      rack = this.world.balls.map((b) => b.id);
+    let best: { d: number; a: number } | null = null;
+    for (const b of this.world.balls) {
+      if (!b.id || b.pocketed || this.progress.targetWarning(b.id, false, rack))
+        continue;
+      const d = Math.hypot(b.x - cue.x, b.z - cue.z);
+      if (!best || d < best.d)
+        best = { d, a: Math.atan2(b.z - cue.z, b.x - cue.x) };
+    }
+    if (best) this.angle = best.a;
+  }
   placeCue(x: number, z: number, commit = true) {
     if (this.headStringPlacement && x > -H / 2 + 1e-9) {
       this.message = "Place on or behind the head string, on the left side.";
@@ -408,6 +427,7 @@ export class Session {
       this.headStringPlacement = false;
       this.usedPlacement = !this.matchRules;
       if (!this.cpuTurn) this.actions.push({ t: "place", x, z });
+      this.aimAtTarget();
     }
     this.previous = this.world.balls.map((b) => ({ ...b }));
     this.notify();
@@ -687,6 +707,7 @@ export class Session {
           : this.potted === this.world.balls.length - 1
             ? "Table cleared. A fine finish."
             : "Your table. Your next shot.";
+        this.aimAtTarget();
         this.notify();
         break;
       }

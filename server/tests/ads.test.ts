@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { createSign, generateKeyPairSync, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import { signedPortion } from "../src/ads";
+import { winVerifiedRack } from "./playCpu";
 
 test("only AdMob's own signature over the exact query string is accepted", async () => {
   // A throwaway EC key stands in for Google's; the server fetches the key set by URL, so
@@ -113,22 +114,9 @@ test("concurrent signed redemptions cannot race past the daily video limit", asy
       body: res.status === 204 ? null : await res.json(),
     }));
 
-  // Win matches until a crate lands, then start its timer so speed-ups apply to it.
-  let crate: any = null;
-  for (let i = 0; i < 6 && !crate; i++) {
-    const id = randomUUID();
-    const started = await call("/local-matches/start", "POST", {
-      venueId: "heritage",
-      requestId: id,
-      mode: "local",
-    });
-    if (started.status !== 201) break;
-    const finished = await call(`/local-matches/${id}/finish`, "POST", {
-      outcome: "won",
-    });
-    crate = finished.body?.crate;
-  }
-  assert.ok(crate, "a win seals a crate");
+  // Win a verified rack so a crate lands, then start its timer so speed-ups apply to it.
+  const crate = (await winVerifiedRack(call)).body.crate;
+  assert.ok(crate, "a verified win seals a crate");
   assert.equal(
     (await call(`/me/crates/${crate.id}/start`, "POST", {})).status,
     200,

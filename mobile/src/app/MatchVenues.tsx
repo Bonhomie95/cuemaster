@@ -50,7 +50,9 @@ export default function MatchVenues({
               key={m}
               accessibilityRole="button"
               accessibilityLabel={
-                m === "cpu" ? "Find opponent" : "Pass and play on one device"
+                m === "cpu"
+                  ? "Play a computer rival"
+                  : "Pass and play on one device"
               }
               accessibilityState={{ selected: mode === m }}
               onPress={() => setMode(m)}
@@ -61,7 +63,7 @@ export default function MatchVenues({
               ]}
             >
               <Text style={[s.buttonText, mode !== m && { color: "#cfe0ee" }]}>
-                {m === "cpu" ? "Find opponent" : "Pass & play"}
+                {m === "cpu" ? "Play a rival" : "Pass & play"}
               </Text>
             </Pressable>
           ))}
@@ -119,7 +121,7 @@ export default function MatchVenues({
                       : busy
                         ? "Starting…"
                         : mode === "cpu"
-                          ? "Find opponent"
+                          ? "Play a rival"
                           : "Enter match"}
                 </Text>
               </Press>

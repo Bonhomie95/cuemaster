@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { winVerifiedRack } from "./playCpu";
 import {
   CRATES,
   SLOTS,
@@ -80,18 +81,8 @@ test("crates are earned by winning, bounded by slots, and paid out exactly once"
   };
   token = (await call("/auth/guest", "POST", { adultConfirmed: true })).body
     .token;
-  const win = async () => {
-    const requestId = randomUUID();
-    const started = await call("/local-matches/start", "POST", {
-      venueId: "heritage",
-      requestId,
-      mode: "local",
-    });
-    assert.equal(started.status, 201);
-    return call(`/local-matches/${requestId}/finish`, "POST", {
-      outcome: "won",
-    });
-  };
+  // Only a referee-verified CPU win seals a crate; pass-and-play is unranked.
+  const win = () => winVerifiedRack(call);
 
   assert.equal((await call("/me/crates")).body.crates.length, 0);
   const first = await win();

@@ -41,7 +41,7 @@ export default function HomeLobby(p: LobbyProps) {
   }[] = [
     {
       title: "Play pool",
-      caption: "FIND YOUR RIVAL",
+      caption: "PLAY A HOUSE RIVAL",
       icon: "play",
       accent: "#24dbb3",
       action: p.onPlay,

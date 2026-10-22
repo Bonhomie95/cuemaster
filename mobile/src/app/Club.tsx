@@ -1,4 +1,5 @@
 import AccountCenter from "./AccountCenter";
+import { warmTextures } from "../render/textures";
 import Rewards from "./Rewards";
 import { Press, Enter, CountUp, PageFade, Pulse } from "./motion";
 import { celebrate } from "./feedback";
@@ -222,6 +223,7 @@ function ClubBody() {
       googleWebClientId: "",
       cashPayouts: false,
     });
+  const [rewardsFrom, setRewardsFrom] = useState<Page>("profile");
   const [page, setPage] = useState<Page>("home"),
     [adult, setAdult] = useState(false),
     [launch, setLaunch] = useState<Launch | null>(null),
@@ -248,8 +250,10 @@ function ClubBody() {
     setError("");
     try {
       const [cat, cfg] = await Promise.all([
-        api<Catalog>("/catalog"),
-        api<ProviderConfig>("/config"),
+        // Render's free service can take close to a minute to wake after idle.
+        // Allow that first connection without retrying account/reward writes.
+        api<Catalog>("/catalog", "GET", undefined, 65000),
+        api<ProviderConfig>("/config", "GET", undefined, 65000),
       ]);
       setCatalog(cat);
       setConfig(cfg);
@@ -266,6 +270,14 @@ function ClubBody() {
     } finally {
       setBoot(false);
       void SplashScreen.hideAsync();
+      // Bake the table textures while the player is still in the club, so a table opens at once.
+      const warmStart = Date.now();
+      void warmTextures().then(() => {
+        if (__DEV__)
+          console.log(
+            `CueMaster textures warmed in ${Date.now() - warmStart} ms`,
+          );
+      });
     }
   };
   useEffect(() => {
@@ -470,11 +482,13 @@ function ClubBody() {
         winner === null
           ? "Match forfeited. Entry fee was not refunded."
           : winner === 0
-            ? launch.opponent && !result.verified
-              ? "The referee could not confirm this win, so no crate was sealed."
-              : result.crate
-                ? `You won the match. A ${result.crate.name.toLowerCase()} is waiting in Rewards.`
-                : "You won the match. Your crate slots are full — open one to make room."
+            ? !launch.opponent
+              ? "You won the match. Pass & play is unranked, so no crate is sealed."
+              : !result.verified
+                ? "The referee could not confirm this win, so no crate was sealed."
+                : result.crate
+                  ? `You won the match. A ${result.crate.name.toLowerCase()} is waiting in Rewards.`
+                  : "You won the match. Your crate slots are full — open one to make room."
             : `${launch.opponent?.name || "Player 2"} won the match.`,
       );
       leaveGame();
@@ -1000,14 +1014,17 @@ function ClubBody() {
             minHeight: 0,
             paddingLeft: insets.left,
             paddingRight: insets.right,
-            paddingBottom: insets.bottom,
+            paddingBottom: Math.max(insets.bottom, 14),
           }}
         >
           {page === "rewards" ? (
             <Rewards
               player={player}
               onPlayer={setPlayer}
-              onClose={() => setPage("profile")}
+              backLabel={
+                rewardsFrom === "profile" ? "Back to profile" : "Back to club"
+              }
+              onClose={() => setPage(rewardsFrom)}
             />
           ) : page === "wallet" ||
             page === "leaderboard" ||
@@ -1054,7 +1071,10 @@ function ClubBody() {
               onPlay={() => setPage("matches")}
               onCues={() => setPage("cues")}
               onFree={() => openGame({ kind: "free", drill: "open" })}
-              onRewards={() => setPage("rewards")}
+              onRewards={() => {
+                setRewardsFrom("home");
+                setPage("rewards");
+              }}
               onEquip={equip}
               onChallenge={startChallenge}
               onDaily={startDaily}
@@ -1234,7 +1254,10 @@ function ClubBody() {
                             ? `${player.crates} crate${player.crates === 1 ? "" : "s"} waiting`
                             : "Win a match to seal a crate"
                         }
-                        onPress={() => setPage("rewards")}
+                        onPress={() => {
+                          setRewardsFrom("profile");
+                          setPage("rewards");
+                        }}
                       />
                       <NavRow
                         icon="award"

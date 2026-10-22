@@ -24,6 +24,7 @@ import {
   BackHandler,
   Share,
   TextInput,
+  LayoutChangeEvent,
 } from "react-native";
 import {
   SafeAreaProvider,
@@ -36,6 +37,7 @@ import * as Haptics from "expo-haptics";
 import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
 import { Canvas } from "./src/render/Canvas";
 import { Scene } from "./src/render/Scene";
+import CompatibilityTable from "./src/render/CompatibilityTable";
 import { session, skins, encodeReplay } from "./src/game/session";
 import { Press, Enter } from "./src/app/motion";
 import { groupOf } from "./src/game/progress";
@@ -337,21 +339,21 @@ function Audio() {
   return null;
 }
 class SceneBoundary extends React.Component<
-  { children: React.ReactNode },
+  { children: React.ReactNode; onError: (message: string) => void },
   { error: string | null }
 > {
   state = { error: null as string | null };
   static getDerivedStateFromError(e: Error) {
     return { error: e.message };
   }
+  componentDidCatch(e: Error) {
+    console.error("CueMaster table failed", e);
+    this.props.onError(
+      "The graphics could not start. Try loading the table again.",
+    );
+  }
   render() {
-    if (this.state.error)
-      return (
-        <View style={s.error}>
-          <Text style={s.title}>The table couldn’t load.</Text>
-          <Text style={s.description}>{this.state.error}</Text>
-        </View>
-      );
+    if (this.state.error) return null;
     return this.props.children;
   }
 }
@@ -746,6 +748,27 @@ function Game({
     return () => window.removeEventListener("beforeunload", warn);
   }, [paidMatch]);
   const [loaded, setLoaded] = useState(false);
+  const openedAt = React.useRef(Date.now());
+  const [renderError, setRenderError] = useState("");
+  const [renderAttempt, setRenderAttempt] = useState(0);
+  const [compatibility, setCompatibility] = useState(false);
+  useEffect(() => {
+    if (loaded || renderError || compatibility) return;
+    const timer = setTimeout(
+      () => {
+        if (Platform.OS !== "web") {
+          setCompatibility(true);
+          setLoaded(true);
+          return;
+        }
+        setRenderError(
+          "The graphics did not start. Try again, and check that the simulator has graphics acceleration enabled.",
+        );
+      },
+      Platform.OS === "web" ? 30000 : 12000,
+    );
+    return () => clearTimeout(timer);
+  }, [loaded, renderError, renderAttempt, compatibility]);
   const turn = session.progress.turn;
   const compact = height < 560;
   const skin = skins[session.skin];
@@ -754,9 +777,15 @@ function Game({
   // The table is full bleed to the glass; only the HUD keeps clear of the notch and the home
   // indicator. Scene fits the rack inside these margins, so widening them here moves the table,
   // it never crops it.
+  // Measured, not assumed: Android's taller text made the player cards cover the top pockets.
+  const [bands, setBands] = useState({ top: 48, bottom: 44 });
+  const measure = (edge: "top" | "bottom") => (e: LayoutChangeEvent) => {
+    const h = Math.round(e.nativeEvent.layout.height);
+    setBands((b) => (b[edge] === h ? b : { ...b, [edge]: h }));
+  };
   session.hud = {
-    top: 52 + insets.top,
-    bottom: 50 + insets.bottom,
+    top: 4 + insets.top + bands.top + 6,
+    bottom: 6 + insets.bottom + bands.bottom + 6,
     left: 46 + insets.left,
     right: 56 + insets.right,
   };
@@ -775,6 +804,7 @@ function Game({
               right: 12 + insets.right,
             },
           ]}
+          onLayout={measure("top")}
         >
           <Button label="Table settings" onPress={() => setPanel("settings")}>
             <Feather name="menu" size={20} color={C.ink} />
@@ -805,7 +835,10 @@ function Game({
               s.playerCard,
               { flexDirection: "row-reverse" },
               turn === 1 && s.activePlayerCard,
+              // Drills and practice have no second player; keep the slot so the title stays centred.
+              !paidMatch && !session.cpu && { opacity: 0 },
             ]}
+            pointerEvents={!paidMatch && !session.cpu ? "none" : "auto"}
           >
             {paidMatch ? <ClockBall player={1} /> : null}
             <Avatar
@@ -827,6 +860,7 @@ function Game({
           </View>
           <Button
             label="Switch camera"
+            disabled={compatibility}
             active={session.camera === "aim"}
             onPress={() => {
               session.camera = session.camera === "table" ? "aim" : "table";
@@ -848,25 +882,94 @@ function Game({
             { top: 0, bottom: 0, left: 0, right: 0 },
           ]}
         >
-          <SceneBoundary>
-            <Canvas
-              camera={{ position: [0, 3, 0.001], fov: 19, near: 0.05, far: 40 }}
-              dpr={[1, 1.7]}
-              gl={{
-                antialias: true,
-                alpha: true,
-                powerPreference: "high-performance",
-              }}
-              onCreated={() => setLoaded(true)}
-            >
-              <Scene />
-            </Canvas>
-          </SceneBoundary>
+          {compatibility ? (
+            <CompatibilityTable />
+          ) : (
+            !renderError && (
+              <SceneBoundary key={renderAttempt} onError={setRenderError}>
+                <Canvas
+                  camera={{
+                    position: [0, 3, 0.001],
+                    fov: 19,
+                    near: 0.05,
+                    far: 40,
+                  }}
+                  dpr={[1, 1.7]}
+                  gl={{
+                    antialias: Platform.OS === "web",
+                    alpha: true,
+                    powerPreference: "high-performance",
+                  }}
+                >
+                  <Scene
+                    onReady={() => {
+                      if (__DEV__)
+                        console.log(
+                          `CueMaster table ready ${Date.now() - openedAt.current} ms after open`,
+                        );
+                      setLoaded(true);
+                    }}
+                  />
+                </Canvas>
+              </SceneBoundary>
+            )
+          )}
         </View>
-        {!loaded && (
-          <View style={s.loading}>
-            <Text style={s.description}>Preparing your table…</Text>
+        {compatibility && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Retry 3D table"
+            onPress={() => {
+              setCompatibility(false);
+              setLoaded(false);
+              setRenderError("");
+              setRenderAttempt((attempt) => attempt + 1);
+            }}
+            style={{
+              position: "absolute",
+              top: 60 + insets.top,
+              alignSelf: "center",
+              padding: 8,
+            }}
+          >
+            <Text style={[s.description, { fontSize: 10 }]}>
+              Compatibility view · Retry 3D
+            </Text>
+          </Pressable>
+        )}
+        {renderError ? (
+          <View
+            style={[
+              s.error,
+              StyleSheet.absoluteFill,
+              { backgroundColor: C.bg },
+            ]}
+          >
+            <Text style={s.title}>The table couldn’t load.</Text>
+            <Text style={s.description}>{renderError}</Text>
+            <Button
+              label="Use compatibility table"
+              onPress={() => {
+                setRenderError("");
+                setCompatibility(true);
+                setLoaded(true);
+              }}
+            />
+            <Button
+              label="Reload table"
+              onPress={() => {
+                setLoaded(false);
+                setRenderError("");
+                setRenderAttempt((attempt) => attempt + 1);
+              }}
+            />
           </View>
+        ) : (
+          !loaded && (
+            <View style={s.loading}>
+              <Text style={s.description}>Preparing your table…</Text>
+            </View>
+          )
         )}
         <View style={[s.shotPower, { left: 15 + insets.left }]}>
           <Power compact />
@@ -918,6 +1021,7 @@ function Game({
               right: 60 + insets.right,
             },
           ]}
+          onLayout={measure("bottom")}
         >
           <View style={s.footerSide}>
             <Text

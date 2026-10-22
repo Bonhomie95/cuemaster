@@ -1,3 +1,7 @@
+export function listenHost(env: NodeJS.ProcessEnv) {
+  return env.HOST?.trim() || (env.RENDER === "true" ? "0.0.0.0" : "127.0.0.1");
+}
+
 export function assertProductionConfig(env: NodeJS.ProcessEnv) {
   if (env.NODE_ENV !== "production") return;
   const uri = env.MONGODB_URI || "";

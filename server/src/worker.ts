@@ -1,16 +1,15 @@
-import { parentPort, workerData } from "node:worker_threads";
+import { parentPort } from "node:worker_threads";
 import { verifyReplay } from "./verify";
 import { replayMatch } from "../../mobile/src/game/session";
-try {
-  parentPort!.postMessage({
-    result: workerData.match
-      ? replayMatch(
-          workerData.match.opponent,
-          workerData.match.seed,
-          workerData.match.actions,
-        )
-      : verifyReplay(workerData.drill, workerData.shots, workerData.targets),
-  });
-} catch (e) {
-  parentPort!.postMessage({ error: (e as Error).message });
-}
+// Resident referee: one job at a time, answered on the same port it arrived on.
+parentPort!.on("message", (job) => {
+  try {
+    parentPort!.postMessage({
+      result: job.match
+        ? replayMatch(job.match.opponent, job.match.seed, job.match.actions)
+        : verifyReplay(job.drill, job.shots, job.targets),
+    });
+  } catch (e) {
+    parentPort!.postMessage({ error: (e as Error).message });
+  }
+});

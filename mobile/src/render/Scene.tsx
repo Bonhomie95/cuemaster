@@ -1,10 +1,15 @@
 import { cueElevation } from "./cuePose";
+import { aimGuide } from "./aimGuide";
 import CityInlay from "./CityInlay";
 import React, { useMemo, useRef, useEffect } from "react";
 import { Platform } from "react-native";
-import { useFrame, useThree, ThreeEvent } from "@react-three/fiber";
+import {
+  useFrame,
+  useThree,
+  ThreeEvent,
+  ThreeElements,
+} from "@react-three/fiber";
 import * as T from "three";
-import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import meshData from "../../assets/models/table-mesh.json";
 import { session, skins } from "../game/session";
 import { R, H, W } from "../physics/engine";
@@ -16,6 +21,22 @@ import {
   floorTexture,
 } from "./textures";
 const spinQ = new T.Quaternion();
+function SurfaceMaterial(props: ThreeElements["meshStandardMaterial"]) {
+  if (Platform.OS === "web") return <meshStandardMaterial {...props} />;
+  // Phong keeps wood/metal highlights without the costly PBR shader on EXGL's
+  // software simulator driver. The physics and table geometry stay identical.
+  return (
+    <meshPhongMaterial
+      color={props.color}
+      map={props.map}
+      bumpMap={props.bumpMap}
+      bumpScale={props.bumpScale}
+      side={props.side}
+      shininess={Math.max(1, (1 - Number(props.roughness ?? 0.6)) * 65)}
+      specular="#706554"
+    />
+  );
+}
 // Three shaded lamps over the table, as in a real pool hall. Their positions drive both the
 // light and the direction each ball's soft shadow falls.
 export const lamps = [-0.82, 0, 0.82].map((x) => new T.Vector3(x, 1.05, 0));
@@ -74,6 +95,10 @@ function Lighting() {
     [],
   );
   useEffect(() => {
+    // EXGL simulators can expose WebGL2 without float colour render targets.
+    // PMREM needs those targets; baking the room must not block the playable table.
+    // Native lighting uses the lamps directly, without the expensive room bake.
+    if (Platform.OS !== "web") return;
     const pm = new T.PMREMGenerator(gl);
     const room = hallEnvironment();
     const env = pm.fromScene(room, 0.02, 0.1, 100, { size: 256 });
@@ -97,11 +122,13 @@ function Lighting() {
   }, [gl, scene]);
   return (
     <>
-      <hemisphereLight args={["#fff1d8", "#0b1712", 0.34]} />
+      <hemisphereLight
+        args={["#fff1d8", "#0b1712", Platform.OS === "web" ? 0.34 : 0.65]}
+      />
       {/* Lamp spill that reaches the rails and the players' side of the table. */}
       <directionalLight
         position={[0.3, 2, 1.4]}
-        intensity={0.35}
+        intensity={Platform.OS === "web" ? 0.35 : 0.65}
         color="#ffe7c4"
       />
       {spots.map((spot, i) => (
@@ -145,7 +172,7 @@ function Table() {
       {geometries.map(({ name, g }) => (
         <mesh key={name} geometry={g}>
           {name === "cloth" || name === "cushion" || name === "leather" ? (
-            <meshStandardMaterial
+            <SurfaceMaterial
               roughness={0.95}
               envMapIntensity={0.12}
               bumpMap={
@@ -163,7 +190,7 @@ function Table() {
               side={name === "cushion" ? T.DoubleSide : T.FrontSide}
             />
           ) : (
-            <meshStandardMaterial
+            <SurfaceMaterial
               color={
                 (
                   {
@@ -255,7 +282,7 @@ function Pockets() {
             <ringGeometry
               args={[r - 0.008, r + 0.012, 32, 1, 0, Math.PI * 1.12]}
             />
-            <meshStandardMaterial
+            <SurfaceMaterial
               color={skin.metal}
               metalness={0.4}
               roughness={0.24}
@@ -333,15 +360,29 @@ function Balls() {
             position={[b.x, R, b.z]}
             rotation={[Math.PI / 2, 0.15, 0]}
           >
-            <sphereGeometry args={[R, 48, 32]} />
-            <meshPhysicalMaterial
-              map={ballTexture(b.id)}
-              roughness={0.22}
-              metalness={0}
-              clearcoat={1}
-              clearcoatRoughness={0.04}
-              envMapIntensity={1.1}
+            <sphereGeometry
+              args={[
+                R,
+                Platform.OS === "web" ? 48 : 24,
+                Platform.OS === "web" ? 32 : 16,
+              ]}
             />
+            {Platform.OS === "web" ? (
+              <meshPhysicalMaterial
+                map={ballTexture(b.id)}
+                roughness={0.22}
+                metalness={0}
+                clearcoat={1}
+                clearcoatRoughness={0.04}
+                envMapIntensity={1.1}
+              />
+            ) : (
+              <meshPhongMaterial
+                map={ballTexture(b.id)}
+                shininess={65}
+                specular="#fff4dc"
+              />
+            )}
           </mesh>
           <mesh
             ref={(m) => {
@@ -480,32 +521,7 @@ function Aim() {
       R + session.top * R * 0.5 + pull * Math.sin(elevation),
       origin.z - dz * offset + dx * lateral,
     );
-    let dist = 2.7,
-      hit: typeof b | undefined;
-    for (const o of session.world.balls) {
-      if (o.id === 0 || o.pocketed) continue;
-      const x = o.x - b.x,
-        z = o.z - b.z,
-        t = x * dx + z * dz,
-        d2 = x * x + z * z - t * t;
-      if (t > 0 && d2 < 4 * R * R) {
-        const at = t - Math.sqrt(4 * R * R - d2);
-        if (at >= 0 && at < dist) {
-          dist = at;
-          hit = o;
-        }
-      }
-    }
-    // Stop the preview at the first cushion; it is intentionally not a full solver.
-    const limits = [
-      dx > 0 ? (H - R - b.x) / dx : dx < 0 ? (-H + R - b.x) / dx : 99,
-      dz > 0 ? (W - R - b.z) / dz : dz < 0 ? (-W + R - b.z) / dz : 99,
-    ];
-    const edge = Math.min(...limits.filter((t) => t >= 0));
-    if (edge < dist) {
-      dist = edge;
-      hit = undefined;
-    }
+    const { distance: dist, hit } = aimGuide(session.world.balls, angle);
     const warning =
       hit && session.drill !== "finish"
         ? session.progress.targetWarning(
@@ -756,7 +772,15 @@ function HeadString() {
     </mesh>
   );
 }
-export function Scene() {
+export function Scene({ onReady }: { onReady?: () => void }) {
+  const ready = useRef(false);
+  useFrame(({ gl }) => {
+    // Canvas.onCreated only means a context exists. Wait for actual scene draws.
+    if (!ready.current && gl.info.render.calls > 0) {
+      ready.current = true;
+      onReady?.();
+    }
+  });
   const floorShadow = useMemo(() => shadowTexture(), []);
   const floor = useMemo(() => floorTexture(), []);
   const checkFrames = useRef(0);
@@ -766,20 +790,21 @@ export function Scene() {
       (__DEV__ || process.env.EXPO_PUBLIC_NATIVE_BENCHMARK === "1") &&
       ++checkFrames.current === 240
     ) {
-      // Centre pixel after the frame: proves the table reached the framebuffer, which
-      // simulator screenshots cannot show (they skip the GL layer).
+      // Native readPixels synchronously drains the EXGL queue and can freeze a
+      // software simulator for minutes. Keep framebuffer reads on web only.
       const ctx = gl.getContext(),
         px = new Uint8Array(4),
         size = gl.getDrawingBufferSize(new T.Vector2());
-      ctx.readPixels(
-        Math.floor(size.x / 2),
-        Math.floor(size.y / 2),
-        1,
-        1,
-        ctx.RGBA,
-        ctx.UNSIGNED_BYTE,
-        px,
-      );
+      if (Platform.OS === "web")
+        ctx.readPixels(
+          Math.floor(size.x / 2),
+          Math.floor(size.y / 2),
+          1,
+          1,
+          ctx.RGBA,
+          ctx.UNSIGNED_BYTE,
+          px,
+        );
       console.info(
         "CueMaster render check",
         JSON.stringify({
@@ -788,7 +813,7 @@ export function Scene() {
           triangles: gl.info.render.triangles,
           fps: session.fps,
           p95Ms: session.p95,
-          centrePixel: Array.from(px),
+          centrePixel: Platform.OS === "web" ? Array.from(px) : null,
           buffer: [size.x, size.y],
         }),
       );

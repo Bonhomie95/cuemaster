@@ -1,4 +1,4 @@
-import { assertProductionConfig } from "./config";
+import { assertProductionConfig, listenHost } from "./config";
 import { installLegal, legalConfigured } from "./legal";
 import { installRewards, crateAwardStage, publicCrate } from "./rewards";
 import { installStore, billingConfigured } from "./store";
@@ -9,7 +9,12 @@ import {
   revokeAppleToken,
 } from "./appleTokens";
 import { fileURLToPath } from "node:url";
-import { installPlatform, publicEvent, eventIsOpen } from "./platform";
+import {
+  installPlatform,
+  publicEvent,
+  eventIsOpen,
+  deletePlayer,
+} from "./platform";
 import { makeCpu } from "../../mobile/src/game/cpu";
 import { cues, cueById } from "../../mobile/src/game/cues";
 import "dotenv/config";
@@ -186,13 +191,14 @@ async function account(req: any) {
   req.session = s;
   return s ? await users.findOne({ _id: s.playerId }) : null;
 }
+const suspendedMessage = (u: any) =>
+  u.banned
+    ? "This account has been banned."
+    : "This account is suspended. Contact support.";
 async function required(req: any, res: any, next: any) {
   const u = await account(req);
   if (!u) return res.status(401).json({ error: "Please sign in again." });
-  if (u.suspended)
-    return res
-      .status(403)
-      .json({ error: "This account is suspended. Contact support." });
+  if (u.suspended) return res.status(403).json({ error: suspendedMessage(u) });
   req.player = u;
   next();
 }
@@ -377,7 +383,8 @@ app.post("/local-matches/:id/finish", required, async (req: any, res) => {
   }
   // A win seals a reward crate. Crates mint nothing on their own: one crate unlocks at a time,
   // so the coin rate is bounded by the clock rather than by how many wins a device claims.
-  const award = won ? crateAwardStage() : null;
+  // Pass-and-play has no rival seed to replay, so its wins cannot be verified and seal nothing.
+  const award = won && cpu ? crateAwardStage() : null;
   const streak = {
     $cond: [
       {
@@ -521,7 +528,7 @@ app.post("/auth/provider", authLimit, async (req, res) => {
   if (u?.suspended || current?.suspended)
     return res
       .status(403)
-      .json({ error: "This account is suspended. Contact support." });
+      .json({ error: suspendedMessage(u?.suspended ? u : current) });
   if (!u && current) {
     if (
       current.providers?.[input.provider] &&
@@ -639,24 +646,7 @@ app.delete("/me", required, async (req: any, res) => {
       });
     }
   }
-  await users.deleteOne({ _id: id });
-  await Promise.all([
-    sessions.deleteMany({ playerId: id }),
-    tickets.deleteMany({ playerId: id }),
-    db.collection("walletChallenges").deleteMany({ playerId: id }),
-    entries.deleteMany({ playerId: id }),
-    db
-      .collection("reports")
-      .deleteMany({ $or: [{ playerId: id }, { reporterId: id }] }),
-    // Financial records may have to be retained, so unlink rather than destroy them.
-    db
-      .collection("payouts")
-      .updateMany(
-        { playerId: id },
-        { $set: { playerId: null, playerDeletedAt: new Date() } },
-      ),
-    users.updateMany({}, { $pull: { blockedPlayers: id } as any }),
-  ]);
+  await deletePlayer(db, id);
   res.status(204).end();
 });
 app.post(
@@ -689,36 +679,60 @@ app.post(
     res.status(201).json({ ticket: ticket._id, challenge });
   },
 );
-let verifying = 0;
-function referee(workerData: any, ms: number): Promise<any> {
-  return new Promise((resolve, reject) => {
-    if (verifying >= 2)
-      return reject(new Error("The referee is busy. Please retry shortly."));
-    verifying++;
-    const worker = new Worker(new URL("./worker.ts", import.meta.url), {
-      workerData,
+/**
+ * Two long-lived referee workers. Spawning a fresh worker per verification compiled the engine
+ * through tsx every time (seconds on a small dyno); a resident worker answers in milliseconds.
+ * A worker that overruns its budget is terminated and replaced, so a stuck replay cannot wedge
+ * the pool.
+ */
+const REFEREES = 2;
+type Referee = { worker: Worker; busy: boolean };
+const referees: Referee[] = [];
+function spawnReferee(): Referee {
+  const r: Referee = {
+    worker: new Worker(new URL("./worker.ts", import.meta.url), {
       execArgv: ["--import", "tsx"],
-    });
+    }),
+    busy: false,
+  };
+  r.worker.unref();
+  return r;
+}
+function referee(job: any, ms: number): Promise<any> {
+  return new Promise((resolve, reject) => {
+    let r = referees.find((r) => !r.busy);
+    if (!r && referees.length < REFEREES) referees.push((r = spawnReferee()));
+    if (!r)
+      return reject(new Error("The referee is busy. Please retry shortly."));
+    const ref = r;
+    ref.busy = true;
     let done = false;
-    const finish = (error?: Error, value?: any) => {
+    const finish = (error?: Error, value?: any, replace = false) => {
       if (done) return;
       done = true;
       clearTimeout(timer);
-      verifying--;
-      void worker.terminate();
+      ref.worker.off("message", onMessage);
+      ref.worker.off("error", onError);
+      ref.worker.off("exit", onExit);
+      if (replace) {
+        void ref.worker.terminate();
+        referees.splice(referees.indexOf(ref), 1);
+      } else ref.busy = false;
       error ? reject(error) : resolve(value);
     };
     const timer = setTimeout(
-      () => finish(new Error("Replay took too long.")),
+      () => finish(new Error("Replay took too long."), undefined, true),
       ms,
     );
-    worker.on("message", (m) =>
-      finish(m.error ? new Error(m.error) : undefined, m.result),
-    );
-    worker.on("error", (e) => finish(e));
-    worker.on("exit", (code) => {
-      if (!done) finish(new Error(`Replay stopped (${code}).`));
-    });
+    const onMessage = (m: any) =>
+      finish(m.error ? new Error(m.error) : undefined, m.result);
+    const onError = (e: Error) => finish(e, undefined, true);
+    const onExit = (code: number) =>
+      finish(new Error(`Replay stopped (${code}).`), undefined, true);
+    ref.worker.on("message", onMessage);
+    ref.worker.on("error", onError);
+    ref.worker.on("exit", onExit);
+    ref.worker.postMessage(job);
   });
 }
 const replay = (drill: string, shots: any[], targets: number[]) =>
@@ -852,6 +866,35 @@ const dailyBoard = async (eventId: string, blocked: string[]) =>
       },
     ])
     .toArray();
+/**
+ * The leader's replay is public so it can play as a ghost, which also makes it copyable.
+ * A submission that repeats it shot for shot is refused: a tie by copy would still collect
+ * the once-per-event coins.
+ */
+async function rejectCopiedLeader(
+  res: any,
+  eventId: string,
+  playerId: string,
+  shots: any[],
+) {
+  const leader = await entries.findOne(
+    { eventId, playerId: { $ne: playerId }, score: { $exists: true } },
+    { sort: { score: 1, submittedAt: 1 }, projection: { replay: 1 } },
+  );
+  const same =
+    leader?.replay?.length === shots.length &&
+    leader.replay.every((a: any, i: number) =>
+      ["angle", "power", "side", "top"].every(
+        (k) => Math.abs(a[k] - shots[i][k]) < 1e-6,
+      ),
+    );
+  if (same)
+    res.status(409).json({
+      error:
+        "That run repeats the leader's replay shot for shot. Play your own.",
+    });
+  return same;
+}
 const leaderReplay = (board: any[]) =>
   board.length && board[0].replay
     ? { name: board[0].name, shots: board[0].replay }
@@ -890,6 +933,8 @@ app.post(
       .parse(req.body);
     const date = dailyKey(),
       eventId = `daily:${date}`;
+    if (await rejectCopiedLeader(res, eventId, req.player._id, input.shots))
+      return;
     let result;
     try {
       result = await replay(eventId, input.shots, [1]);
@@ -1076,6 +1121,8 @@ app.post(
       !(await entries.findOne({ playerId: req.player._id, eventId: event.id }))
     )
       return res.status(403).json({ error: "Join the event first." });
+    if (await rejectCopiedLeader(res, event.id, req.player._id, input.shots))
+      return;
     let result;
     try {
       result = await replay(
@@ -1136,6 +1183,7 @@ app.use((err: any, _req: any, res: any, _next: any) => {
   console.error("API error", err?.name);
   res.status(500).json({ error: "Something went wrong. Please try again." });
 });
-app.listen(port, process.env.HOST || "127.0.0.1", () =>
-  console.log(`CueMaster API http://127.0.0.1:${port} · MongoDB connected`),
+const host = listenHost(process.env);
+app.listen(port, host, () =>
+  console.log(`CueMaster API http://${host}:${port} · MongoDB connected`),
 );

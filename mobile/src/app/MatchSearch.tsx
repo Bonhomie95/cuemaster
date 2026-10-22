@@ -55,7 +55,7 @@ export default function MatchSearch({
         // Do not pretend to search a live player pool before real-time PvP is available.
         if (config.onlineMatchmaking)
           throw new Error("Online matching needs an updated client.");
-        setStatus("Preparing your opponent…");
+        setStatus("Preparing your rival…");
         setReady(true);
         launch = setTimeout(() => {
           if (alive) play.current();
@@ -87,7 +87,11 @@ export default function MatchSearch({
       <Text style={s.eyebrow}>
         {venue.name.toUpperCase()} · ◉ {venue.entry}
       </Text>
-      <Text style={s.title}>Your next challenger</Text>
+      <Text style={s.title}>Your rival tonight</Text>
+      <Text style={s.copy}>
+        A CueMaster house player, run by the game. Online opponents are not
+        available yet.
+      </Text>
       <View style={s.duel}>
         <View style={s.player}>
           <Image

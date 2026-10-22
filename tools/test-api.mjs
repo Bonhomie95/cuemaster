@@ -65,7 +65,8 @@ try {
       logs = (logs + s).slice(-4000);
     });
     let ready = false;
-    for (let i = 0; i < 80; i++) {
+    // Native builds and simulators can delay process startup on development machines.
+    for (let i = 0; i < 300; i++) {
       try {
         const r = await fetch(base + "/health");
         if (r.ok) {

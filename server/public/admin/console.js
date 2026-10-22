@@ -170,14 +170,27 @@ async function loadEvents() {
         node("h3", event.name),
         node(
           "p",
-          `${event.status.toUpperCase()} · ${event.currency} · level ${event.level} · ${event.entry} coin entry`,
+          `${event.status.toUpperCase()}${event.locked ? " · LOCKED" : ""} · ${event.currency} · level ${event.level} · ${event.entry} coin entry`,
         ),
         node("p", event.prize),
       );
       const actions = node("div", "");
       actions.className = "actions";
-      if (event.status === "draft")
-        actions.append(button("Edit draft", () => edit(event)));
+      if (event.status === "draft" || event.status === "announced")
+        actions.append(button("Edit", () => edit(event)));
+      if (event.status === "open")
+        actions.append(
+          button(event.locked ? "Unlock entries" : "Lock entries", async () => {
+            const reason = prompt("Reason (at least 5 characters)");
+            if (!reason) return;
+            await call(`/tournaments/${event.id}/lock`, "POST", {
+              locked: !event.locked,
+              version: event.version,
+              reason,
+            });
+            await loadEvents();
+          }),
+        );
       for (const status of event.status === "closed"
         ? []
         : event.status === "open"
@@ -286,20 +299,51 @@ $("player-search").onsubmit = (e) => {
           node("h3", p.name),
           node(
             "p",
-            `${p.id} · ${p.xp} XP · ${p.coins} coins · ${p.suspended ? "Suspended" : "Active"}`,
+            `${p.id} · ${p.xp} XP · ${p.coins} coins · ${p.banned ? "Banned" : p.suspended ? "Suspended" : "Active"}`,
           ),
-          button(
-            p.suspended ? "Restore account" : "Suspend account",
-            async () => {
-              const reason = prompt("Reason (at least 5 characters)");
-              if (!reason) return;
-              await call("/players/" + p.id, "PATCH", {
-                suspended: !p.suspended,
-                reason,
-              });
-              message("Player updated. Search again to refresh.");
-            },
-          ),
+        );
+        const patch = async (fields, done) => {
+          const reason = prompt("Reason (at least 5 characters)");
+          if (!reason) return;
+          await call("/players/" + p.id, "PATCH", { ...fields, reason });
+          message(done || "Player updated. Search again to refresh.");
+        };
+        if (!p.banned)
+          n.append(
+            button(p.suspended ? "Unsuspend" : "Suspend", () =>
+              patch({ suspended: !p.suspended }),
+            ),
+          );
+        n.append(
+          button(p.banned ? "Unban" : "Ban", () => {
+            if (
+              p.banned ||
+              confirm(
+                `Ban ${p.name}? This is permanent until an administrator unbans them.`,
+              )
+            )
+              void patch({ banned: !p.banned });
+          }),
+          button("Set coins / XP", () => {
+            const coins = prompt("Coins", p.coins);
+            if (coins === null) return;
+            const xp = prompt("XP", p.xp);
+            if (xp === null) return;
+            void patch({ coins: Number(coins), xp: Number(xp) });
+          }),
+        );
+        const remove = button("Delete account", async () => {
+          if (!confirm(`Permanently delete ${p.name}? This cannot be undone.`))
+            return;
+          const reason = prompt("Reason (at least 5 characters)");
+          if (!reason) return;
+          await call("/players/" + p.id, "DELETE", { reason });
+          n.remove();
+          message("Player deleted.");
+        });
+        remove.className = "danger";
+        n.append(
+          remove,
           button("Change reported name", async () => {
             const name = prompt("Replacement name");
             if (!name) return;

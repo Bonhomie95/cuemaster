@@ -101,10 +101,12 @@ function Button({
 export default function Rewards({
   player,
   onClose,
+  backLabel = "Back to profile",
   onPlayer,
 }: {
   player: Player;
   onClose: () => void;
+  backLabel?: string;
   onPlayer: (p: Player) => void;
 }) {
   const [data, setData] = useState<any>(null),
@@ -169,7 +171,7 @@ export default function Rewards({
               {data?.rubies ?? player.rubies ?? 0}
             </Text>
           </View>
-          <Button icon="arrow-left" label="Back to profile" onPress={onClose} />
+          <Button icon="arrow-left" label={backLabel} onPress={onClose} />
         </View>
       </View>
       {!!error && (

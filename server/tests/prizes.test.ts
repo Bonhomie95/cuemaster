@@ -121,9 +121,18 @@ test(
           .status,
         200,
       );
+      // A shot-for-shot copy of the leader's public replay is refused; an own stroke is not.
       assert.equal(
         (await second(`/tournaments/${eventId}/submit`, "POST", { shots: POT }))
           .status,
+        409,
+      );
+      assert.equal(
+        (
+          await second(`/tournaments/${eventId}/submit`, "POST", {
+            shots: [{ ...POT[0], power: 0.24 }],
+          })
+        ).status,
         200,
       );
 

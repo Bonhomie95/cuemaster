@@ -101,7 +101,9 @@ const host =
       : "localhost"
     : Constants.expoConfig?.hostUri?.split(":")[0] ||
       (Platform.OS === "android" ? "10.0.2.2" : "localhost");
-export const API = process.env.EXPO_PUBLIC_API_URL || `http://${host}:4000`;
+export const API = (
+  process.env.EXPO_PUBLIC_API_URL?.trim() || `http://${host}:4000`
+).replace(/\/+$/, "");
 // iOS App Transport Security blocks cleartext HTTP, and a release build pointing at a developer
 // machine is the single most common cause of a "cannot connect" review rejection. Fail loudly.
 export const insecureApi = !__DEV__ && !API.startsWith("https://");
@@ -198,7 +200,9 @@ export async function api<T = any>(
   } catch (e) {
     if (e instanceof ApiError) throw e;
     throw new Error(
-      "Unable to reach CueMaster. Check the connection and try again.",
+      controller.signal.aborted
+        ? "CueMaster is taking too long to respond. The server may be waking up; please try again."
+        : "Unable to reach CueMaster. Check the connection and try again.",
     );
   } finally {
     clearTimeout(timeout);
