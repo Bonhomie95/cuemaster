@@ -486,15 +486,15 @@ function ClubBody() {
       setPlayer(result.player);
       setToast(
         winner === null
-          ? "Match forfeited. Entry fee was not refunded."
+          ? "Match forfeited."
           : winner === 0
             ? !launch.opponent
-              ? "You won the match. Pass & play is unranked, so no crate is sealed."
+              ? "You won. Pass & play seals no crate."
               : !result.verified
-                ? "The referee could not confirm this win, so no crate was sealed."
+                ? "Win not verified. No crate."
                 : result.crate
-                  ? `You won the match. A ${result.crate.name.toLowerCase()} is waiting in Rewards.`
-                  : "You won the match. Your crate slots are full — open one to make room."
+                  ? `You won. ${result.crate.name} sealed.`
+                  : "You won. Crate slots full."
             : `${launch.opponent?.name || "Player 2"} won the match.`,
       );
       leaveGame();
@@ -649,7 +649,7 @@ function ClubBody() {
     >
       <View style={u.scrim}>
         <ScrollView
-          style={[u.eventModal, { maxWidth: 470 }]}
+          style={[u.eventModal, u.dialog]}
           contentContainerStyle={{ padding: 24, gap: 12 }}
         >
           <Tag gold>CHALLENGE VERIFIED</Tag>
@@ -1385,19 +1385,16 @@ function ClubBody() {
           onRequestClose={() => setAbandoned(null)}
         >
           <View style={u.scrim}>
-            <View style={u.eventModal}>
-              <Text style={u.modalTitle}>Unfinished local match</Text>
-              <Text style={u.body}>
-                Your previous rack was interrupted. Quit it to enter another
-                venue. This records a loss; the entry fee is not refunded.
-              </Text>
+            <View style={[u.eventModal, u.dialog]}>
+              <Text style={u.modalTitle}>Rack still open</Text>
+              <Text style={u.body}>Quitting it counts as a loss.</Text>
               <Action
                 label="Keep it open"
                 secondary
                 onPress={() => setAbandoned(null)}
               />
               <Action
-                label="Quit interrupted match"
+                label="Quit it"
                 disabled={busy}
                 onPress={() =>
                   work(async () => {
@@ -1426,7 +1423,7 @@ function ClubBody() {
         >
           <View style={u.scrim}>
             <ScrollView
-              style={[u.eventModal, { maxWidth: 470 }]}
+              style={[u.eventModal, u.dialog]}
               contentContainerStyle={{ padding: 24, gap: 12 }}
             >
               <Image
@@ -1460,7 +1457,7 @@ function ClubBody() {
         >
           <View style={u.scrim}>
             <ScrollView
-              style={u.eventModal}
+              style={[u.eventModal, u.dialog]}
               contentContainerStyle={{ padding: 26, gap: 14 }}
             >
               <View style={u.between}>
@@ -1547,7 +1544,7 @@ function ClubBody() {
         >
           <View style={u.scrim}>
             <ScrollView
-              style={[u.eventModal, { maxWidth: 470 }]}
+              style={[u.eventModal, u.dialog]}
               contentContainerStyle={{ padding: 24, gap: 12 }}
             >
               <Text style={u.modalTitle}>Delete your account?</Text>
@@ -1741,7 +1738,7 @@ const u = StyleSheet.create({
   },
   topRight: { flexDirection: "row", alignItems: "center", gap: 25 },
   currency: { flexDirection: "row", alignItems: "center", gap: 5 },
-  levelCard: { maxWidth: 420, padding: 30, gap: 14, alignItems: "center" },
+  levelCard: { maxWidth: 340, padding: 20, gap: 12, alignItems: "center" },
   levelBadge: {
     width: 104,
     height: 104,
@@ -1970,22 +1967,23 @@ const u = StyleSheet.create({
     backgroundColor: "#202b26",
     borderWidth: 1,
     borderColor: "#415868",
-    padding: 24,
-    borderRadius: 20,
+    padding: 18,
+    borderRadius: 16,
     width: "100%",
-    maxWidth: 470,
+    maxWidth: 320,
     gap: 12,
     maxHeight: "95%",
   },
-  modalTitle: { color: "#f5f2e7", fontSize: 27, fontWeight: "700" },
+  modalTitle: { color: "#f5f2e7", fontSize: 22, fontWeight: "700" },
   modalImage: { height: 130, width: "100%", borderRadius: 12 },
+  dialog: { padding: 16, gap: 10 },
   eventModal: {
     backgroundColor: "#202b26",
     borderWidth: 1,
     borderColor: "#415868",
     borderRadius: 20,
     width: "100%",
-    maxWidth: 630,
+    maxWidth: 340,
     maxHeight: "92%",
     flexGrow: 0,
   },

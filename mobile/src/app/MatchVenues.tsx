@@ -129,11 +129,7 @@ export default function MatchVenues({
           );
         })}
       </ScrollView>
-      <Text style={s.note}>
-        One entry fee per rack, charged to your account. Quitting forfeits the
-        match and fee. Clear your group, then pot the 8 without scratching.
-        Unranked play; no coin or crypto prizes.
-      </Text>
+      <Text style={s.note}>One fee per rack. Quitting forfeits it.</Text>
     </View>
   );
 }

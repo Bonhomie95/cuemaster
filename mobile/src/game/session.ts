@@ -416,6 +416,7 @@ export class Session {
     if (best) this.angle = best.a;
   }
   placeCue(x: number, z: number, commit = true) {
+    if (this.progress.finished) return false;
     if (this.headStringPlacement && x > -H / 2 + 1e-9) {
       this.message = "Place on or behind the head string, on the left side.";
       this.notify();
@@ -739,8 +740,9 @@ export function replayMatch(
   };
   for (const a of actions) {
     settle();
-    if (s.progress.finished)
-      throw new Error("Play continued after the rack ended.");
+    // The result is fixed the moment the rack ends; anything a device recorded after that
+    // (a stray tap on the cloth, say) cannot change it and must not void a real win.
+    if (s.progress.finished) break;
     if (a.t === "shot") {
       Object.assign(s, {
         angle: a.angle,

@@ -76,17 +76,17 @@ export default function CompatibilityTable() {
     [],
   );
   const hud = session.hud;
-  const safeWidth = Math.max(1, size.width - hud.left - hud.right - 32);
-  const safeHeight = Math.max(1, size.height - hud.top - hud.bottom - 64);
-  const scale = Math.min(safeWidth / (2 * H), safeHeight / (2 * W));
+  // Same fit as the 3D camera: the cabinet (1.47 x 0.84 m from centre) inside the HUD rectangle.
+  const safeWidth = Math.max(1, size.width - hud.left - hud.right);
+  const safeHeight = Math.max(1, size.height - hud.top - hud.bottom);
+  const scale = Math.min(safeWidth / (2 * 1.47), safeHeight / (2 * 0.84));
   scaleRef.current = scale;
   const width = 2 * H * scale,
     height = 2 * W * scale;
-  const left = hud.left + (size.width - hud.left - hud.right - width) / 2;
-  const top =
-    hud.top + 32 + (size.height - hud.top - 32 - hud.bottom - height) / 2;
+  const left = hud.left + (safeWidth - width) / 2;
+  const top = hud.top + (safeHeight - height) / 2;
   const skin = skins[session.skin];
-  const diameter = 2 * R * scale;
+  const diameter = 2 * R * 1.1 * scale;
   const cue = session.world.balls.find((b) => b.id === 0);
   const guide = cue && canAim() && !cue.pocketed && !session.placement;
   const ghost = session.ghost?.world.balls.find((b) => b.id === 0);

@@ -15,14 +15,24 @@ import { warmTextures } from "./textures";
  * shows a scene that is already drawn instead of "Preparing your table…". While no game is
  * active the frame loop stops, so it costs nothing to keep.
  */
-const state = {
+type HostState = {
+  ready: boolean;
+  active: boolean;
+  error: string;
+  compatibility: boolean;
+  attempt: number;
+  listeners: Set<() => void>;
+};
+// Kept on the global so a Fast Refresh of this module cannot orphan the mounted canvas from
+// the state the table screen writes to (that showed as an empty stage in development).
+const state: HostState = ((globalThis as any).__cmTableHost ??= {
   ready: false,
   active: false,
   error: "",
   compatibility: false,
   attempt: 0,
   listeners: new Set<() => void>(),
-};
+});
 const notify = () => state.listeners.forEach((l) => l());
 export const tableHost = {
   subscribe(l: () => void) {
@@ -135,6 +145,7 @@ export function TableHost() {
           }}
         >
           <Scene
+            active={host.active}
             onReady={() => {
               state.ready = true;
               notify();

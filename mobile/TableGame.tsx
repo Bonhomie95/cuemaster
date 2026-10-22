@@ -11,6 +11,7 @@ import {
   StyleSheet,
   Image,
   Animated,
+  Easing,
   Text,
   View,
   Pressable,
@@ -255,7 +256,7 @@ function Spin({
     </View>
   );
 }
-function FineAim() {
+function FineAim({ narrow = false }: { narrow?: boolean }) {
   const start = React.useRef(0);
   const pan = useMemo(
     () =>
@@ -279,7 +280,7 @@ function FineAim() {
         {...pan.panHandlers}
         accessibilityLabel="Drag horizontally to fine tune aim"
         hitSlop={14}
-        style={s.fineAim}
+        style={[s.fineAim, narrow && { width: 150 }]}
       >
         <Feather name="chevron-left" size={15} color="#9fc2d6" />
         {Array.from({ length: 17 }, (_, i) => (
@@ -407,7 +408,7 @@ function Avatar({
             ? require("./assets/avatars/opponent-natural.png")
             : require("./assets/avatars/player-natural.png")
         }
-        style={{ width: 48, height: 48 }}
+        style={{ width: 43, height: 43 }}
       />
     </Pressable>
   );
@@ -509,11 +510,17 @@ function StatsSheet({
         <Stat label="BEST STREAK" value={stats.bestStreak || 0} />
         <Stat label="WORST STREAK" value={-(stats.worstStreak || 0)} />
         <Stat label="CRATES OPENED" value={stats.cratesOpened || 0} />
-        <Stat label="DRILLS CLEARED" value={stats.finishes || 0} />
       </View>
     </>
   );
 }
+const FOULS: Record<string, string> = {
+  "No object-ball contact": "NO CONTACT",
+  "Wrong ball contacted first": "WRONG BALL FIRST",
+  "No rail after contact": "NO RAIL",
+};
+const foulShort = (foul: string) =>
+  foul ? FOULS[foul] || foul.toUpperCase() : "SCRATCH";
 function groupText(player: number) {
   const group = session.progress.groups[player];
   if (!group) return "OPEN TABLE";
@@ -560,17 +567,8 @@ function PlayerBalls({
     </View>
   );
 }
-function ClockBall({ player }: { player: number }) {
-  const active = session.progress.turn === player;
-  const total = cueById(session.cueIds[player]).seconds;
-  const seconds = active ? session.secondsLeft : total;
-  const ticking =
-    active &&
-    session.matchRules &&
-    !session.running &&
-    !session.progress.finished &&
-    !session.progress.breakChoice;
-  const urgent = clockUrgent(seconds, total, ticking);
+/** Countdown sound, haptic and pulse for the active player's clock. */
+function useClockAlerts(player: number, seconds: number, urgent: boolean) {
   const pulse = React.useRef(new Animated.Value(1)).current;
   const tick = React.useRef<ReturnType<typeof createAudioPlayer> | null>(null);
   useEffect(() => {
@@ -619,66 +617,162 @@ function ClockBall({ player }: { player: number }) {
       animation.stop();
       pulse.setValue(1);
     };
-  }, [seconds, urgent, pulse]);
-  const color = urgent ? (seconds <= 3 ? "#ff543f" : "#ffb82e") : "#24dbb3";
+  }, [seconds, urgent, pulse, player]);
+  return pulse;
+}
+const RING = 46,
+  RING_WIDTH = 3;
+/** A 180° arc piece: the top and right borders of a circle, rotated so it spans 0°..180°. */
+function Arc({
+  color,
+  rotate,
+  opacity,
+}: {
+  color: string;
+  rotate: Animated.AnimatedInterpolation<string>;
+  opacity?: Animated.AnimatedInterpolation<number>;
+}) {
   return (
     <Animated.View
-      accessibilityLabel={`Player ${player + 1} shot clock: ${seconds} seconds${ticking ? " remaining" : " · waiting"}`}
       style={{
-        width: 46,
-        height: 46,
-        borderRadius: 23,
-        overflow: "hidden",
-        borderWidth: 2,
-        borderColor: active ? color : "#819ba7",
-        backgroundColor: "#203b4e",
+        width: RING,
+        height: RING,
+        borderRadius: RING / 2,
+        borderWidth: RING_WIDTH,
+        borderTopColor: color,
+        borderRightColor: color,
+        borderBottomColor: "transparent",
+        borderLeftColor: "transparent",
+        opacity,
+        transform: [{ rotate }],
+      }}
+    />
+  );
+}
+/**
+ * The shot clock as a ring around the avatar that shrinks clockwise from the top as time runs
+ * out. Drawn with two clipped half-arcs, so it needs no SVG dependency.
+ */
+function ClockRing({
+  player,
+  enabled,
+  children,
+}: {
+  player: number;
+  enabled: boolean;
+  children: React.ReactNode;
+}) {
+  const active = session.progress.turn === player;
+  const total = cueById(session.cueIds[player]).seconds;
+  const seconds = active ? session.secondsLeft : total;
+  const ticking =
+    enabled &&
+    active &&
+    session.matchRules &&
+    !session.running &&
+    !session.progress.finished &&
+    !session.progress.breakChoice;
+  const urgent = clockUrgent(seconds, total, ticking);
+  const pulse = useClockAlerts(player, seconds, urgent && enabled);
+  const color = !enabled
+    ? "transparent"
+    : !active
+      ? "#62849b"
+      : urgent
+        ? seconds <= 3
+          ? "#ff543f"
+          : "#ffb82e"
+        : "#24dbb3";
+  // The arc sweeps continuously on the native thread: one linear animation per turn from the
+  // current remaining time to zero, restarted whenever the deadline changes.
+  const angle = React.useRef(new Animated.Value(360)).current;
+  const deadline = ticking ? session.turnDeadline : 0;
+  useEffect(() => {
+    angle.stopAnimation();
+    if (!enabled) return void angle.setValue(0);
+    if (!deadline) return void angle.setValue(360);
+    const left = Math.max(0, deadline - Date.now());
+    angle.setValue((left / (total * 1000)) * 360);
+    // A zero-length native animation throws on Android; the ring is already at its end.
+    if (left < 50) return;
+    Animated.timing(angle, {
+      toValue: 0,
+      duration: left,
+      easing: Easing.linear,
+      useNativeDriver: true,
+    }).start();
+  }, [angle, enabled, deadline, total]);
+  const rightRotate = angle.interpolate({
+    inputRange: [0, 180, 360],
+    outputRange: ["-135deg", "45deg", "45deg"],
+  });
+  const leftRotate = angle.interpolate({
+    inputRange: [180, 360],
+    outputRange: ["45deg", "225deg"],
+    extrapolate: "clamp",
+  });
+  const leftOpacity = angle.interpolate({
+    inputRange: [180, 181],
+    outputRange: [0, 1],
+    extrapolate: "clamp",
+  });
+  return (
+    <Animated.View
+      accessibilityLabel={
+        enabled
+          ? `Player ${player + 1} shot clock: ${seconds} seconds${ticking ? " remaining" : " · waiting"}`
+          : undefined
+      }
+      style={{
+        width: RING,
+        height: RING,
         alignItems: "center",
         justifyContent: "center",
         transform: [{ scale: pulse }],
       }}
     >
+      {enabled && (
+        <View
+          style={{
+            position: "absolute",
+            width: RING,
+            height: RING,
+            borderRadius: RING / 2,
+            borderWidth: RING_WIDTH,
+            borderColor: "#ffffff1c",
+          }}
+        />
+      )}
       <View
         style={{
           position: "absolute",
-          bottom: 0,
-          width: "100%",
-          height: `${(seconds / total) * 100}%`,
-          backgroundColor: active ? color : "#62849b",
-        }}
-      />
-      <View
-        style={{
-          width: 29,
-          height: 29,
-          borderRadius: 15,
-          backgroundColor: "#fffdf3",
-          alignItems: "center",
-          justifyContent: "center",
+          left: RING / 2,
+          width: RING / 2,
+          height: RING,
+          overflow: "hidden",
         }}
       >
-        <Text
-          style={{
-            color: "#10253a",
-            fontSize: 18,
-            fontWeight: "900",
-            fontVariant: ["tabular-nums"],
-          }}
-        >
-          {seconds}
-        </Text>
+        <View style={{ marginLeft: -RING / 2 }}>
+          <Arc color={color} rotate={rightRotate} />
+        </View>
       </View>
       <View
         style={{
           position: "absolute",
-          top: 5,
-          left: 8,
-          width: 12,
-          height: 4,
-          borderRadius: 4,
-          backgroundColor: "#ffffffb0",
-          transform: [{ rotate: "-30deg" }],
+          left: 0,
+          width: RING / 2,
+          height: RING,
+          overflow: "hidden",
         }}
-      />
+      >
+        <Arc color={color} rotate={leftRotate} opacity={leftOpacity} />
+      </View>
+      {children}
+      {enabled && ticking && urgent && (
+        <View style={s.ringBadge}>
+          <Text style={[s.ringBadgeText, { color }]}>{seconds}</Text>
+        </View>
+      )}
     </Animated.View>
   );
 }
@@ -788,6 +882,7 @@ function Game({
     "skins" | "drills" | "spin" | "settings" | "quit" | "you" | "rival" | null
   >(null);
   const [code, setCode] = useState("");
+  const [fineAim, setFineAim] = useState(false);
   useEffect(() => {
     const h = BackHandler.addEventListener("hardwareBackPress", () => {
       setPanel("quit");
@@ -805,7 +900,9 @@ function Game({
     return () => window.removeEventListener("beforeunload", warn);
   }, [paidMatch]);
   const host = useTableHost();
-  const compatibility = host.compatibility,
+  // Until the shared 3D scene has drawn its first frame (the first seconds after launch, or
+  // after a retry) the 2D table stands in, so a match never opens onto an empty stage.
+  const compatibility = host.compatibility || !host.ready,
     renderError = host.error;
   useEffect(() => {
     tableHost.setActive(true);
@@ -828,10 +925,11 @@ function Game({
   // Both players share one slim bar above the table and the shot controls ride the side rails,
   // the reference game's layout, so the table keeps as much of the screen as its shape allows.
   session.hud = {
-    top: 6 + insets.top + bands.top + 4,
-    bottom: 8 + insets.bottom,
-    left: 12 + insets.left + 52,
-    right: 10 + insets.right + 60,
+    // A clear band of cloth-free space under the player strips; they must never touch the rail.
+    top: 8 + insets.top + bands.top + 22,
+    bottom: 6 + insets.bottom + 10,
+    left: 26 + insets.left + 48,
+    right: 22 + insets.right + 58,
   };
   return (
     <View style={s.root} pointerEvents="box-none">
@@ -846,9 +944,9 @@ function Game({
           style={[
             s.topBar,
             {
-              top: 6 + insets.top,
-              left: 8 + insets.left,
-              right: 8 + insets.right,
+              top: 8 + insets.top,
+              left: 14 + insets.left,
+              right: 14 + insets.right,
             },
           ]}
           onLayout={measure("top")}
@@ -857,9 +955,19 @@ function Game({
             <Button label="Table settings" onPress={() => setPanel("settings")}>
               <Feather name="menu" size={20} color={C.ink} />
             </Button>
-            <View style={[s.playerStrip, turn === 0 && s.activePlayerCard]}>
-              {paidMatch ? <ClockBall player={0} /> : null}
-              <Avatar variant={playerAvatar} onPress={() => setPanel("you")} />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Your player card"
+              onPress={() => setPanel("you")}
+              style={({ pressed }) => [
+                s.playerStrip,
+                turn === 0 && s.activePlayerCard,
+                pressed && { opacity: 0.8 },
+              ]}
+            >
+              <ClockRing player={0} enabled={paidMatch}>
+                <Avatar variant={playerAvatar} />
+              </ClockRing>
               <View style={s.stripText}>
                 <Text numberOfLines={1} style={s.playerName}>
                   {playerName.toUpperCase()}
@@ -867,7 +975,7 @@ function Game({
                 </Text>
                 <PlayerBalls player={0} compact />
               </View>
-            </View>
+            </Pressable>
           </View>
           <View style={s.barCentre} pointerEvents="box-none">
             <View style={s.barStatus} pointerEvents="none">
@@ -875,33 +983,28 @@ function Game({
                 style={[s.shotStatus, session.replaying && { color: C.gold }]}
               >
                 {session.replaying
-                  ? "▶ INSTANT REPLAY · SLOW MOTION"
+                  ? "▶ REPLAY"
                   : session.running
                     ? session.progress.shotPots.length
                       ? `POTTED: ${session.progress.shotPots.join(", ")}`
-                      : "BALLS IN PLAY"
+                      : ""
                     : session.cpuTurn
-                      ? `${session.cpu!.name.toUpperCase()} IS AIMING…`
+                      ? `${session.cpu!.name.toUpperCase()}’S SHOT`
                       : session.placement
                         ? session.headStringPlacement
-                          ? "DRAG ON / BEHIND LINE · RELEASE TO PLACE"
-                          : "PLACE THE CUE BALL"
+                          ? "BEHIND THE LINE"
+                          : "BALL IN HAND"
                         : session.progress.finished
-                          ? "RESET TABLE TO PLAY AGAIN"
+                          ? "RACK OVER"
                           : `${turn === 0 ? "YOUR" : "PLAYER 2’S"} TURN`}
               </Text>
               {!session.replaying &&
                 (session.progress.scratch ||
                   (paidMatch && !!session.progress.foul)) && (
                   <Text style={s.scratchLabel}>
-                    {session.placement || session.running
-                      ? `${session.progress.foul || "SCRATCH"} · BALL IN HAND`
-                      : `LAST SHOT · ${session.progress.foul || "SCRATCH"}`}
+                    {foulShort(session.progress.foul)}
                   </Text>
                 )}
-              {session.progress.finished && (
-                <Text style={s.scratchLabel}>RACK COMPLETE</Text>
-              )}
               {!paidMatch && !session.running && !!session.coach && (
                 <Text
                   style={s.coachLabel}
@@ -912,62 +1015,17 @@ function Game({
                 </Text>
               )}
             </View>
-            {session.drill === "break" &&
-            session.shots === 0 &&
-            !session.cpuTurn &&
-            !session.running &&
-            !session.progress.breakChoice ? (
-              <Button
-                label="Place break cue"
-                onPress={() => {
-                  session.placement = true;
-                  session.headStringPlacement = true;
-                  session.notify();
-                }}
-              />
-            ) : (
-              <FineAim />
-            )}
-            {!paidMatch &&
-              (session.canReplay || session.progress.returned.length > 0) && (
-                <View
-                  style={s.pottedRow}
-                  accessibilityLiveRegion="polite"
-                  accessibilityLabel={
-                    session.progress.returned.length
-                      ? `Potted: ${session.progress.returned.join(", ")}`
-                      : "No balls potted yet"
-                  }
-                >
-                  {!paidMatch && session.canReplay && (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel="Watch replay of the last shot"
-                      hitSlop={8}
-                      onPress={() => session.startReplay()}
-                      style={({ pressed }) => [
-                        s.replayPill,
-                        pressed && { opacity: 0.7 },
-                      ]}
-                    >
-                      <Text style={s.replayPillText}>▶ REPLAY</Text>
-                    </Pressable>
-                  )}
-                  {session.progress.returned.map((id) => (
-                    <BallBadge
-                      key={id}
-                      id={id}
-                      recent={session.progress.shotPots.includes(id)}
-                    />
-                  ))}
-                </View>
-              )}
           </View>
           <View style={[s.barSide, { justifyContent: "flex-end" }]}>
-            <View
-              style={[
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Opponent player card"
+              disabled={!session.cpu}
+              onPress={() => setPanel("rival")}
+              style={({ pressed }) => [
                 s.playerStrip,
                 turn === 1 && s.activePlayerCard,
+                pressed && { opacity: 0.8 },
                 // Drills and practice have no second player.
                 !paidMatch && !session.cpu && { opacity: 0 },
               ]}
@@ -980,13 +1038,13 @@ function Game({
                 </Text>
                 <PlayerBalls player={1} compact />
               </View>
-              <Avatar
-                opponent
-                variant={session.cpu?.avatar ?? (playerAvatar === 0 ? 1 : 0)}
-                onPress={session.cpu ? () => setPanel("rival") : undefined}
-              />
-              {paidMatch ? <ClockBall player={1} /> : null}
-            </View>
+              <ClockRing player={1} enabled={paidMatch}>
+                <Avatar
+                  opponent
+                  variant={session.cpu?.avatar ?? (playerAvatar === 0 ? 1 : 0)}
+                />
+              </ClockRing>
+            </Pressable>
             <Button
               label="Switch camera"
               disabled={compatibility}
@@ -1009,7 +1067,7 @@ function Game({
             <CompatibilityTable />
           </View>
         )}
-        {compatibility && (
+        {host.compatibility && (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Retry 3D table"
@@ -1061,6 +1119,79 @@ function Game({
             <Spin size={34} />
           </Pressable>
           <Text style={s.controlCaption}>SPIN</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Toggle fine aim"
+            onPress={() => setFineAim((v) => !v)}
+            style={({ pressed }) => [
+              s.spinButtonFrame,
+              { marginTop: 14 },
+              pressed && { opacity: 0.75 },
+              fineAim && { borderColor: C.gold },
+            ]}
+          >
+            <Feather
+              name="crosshair"
+              size={20}
+              color={fineAim ? C.gold : C.ink}
+            />
+          </Pressable>
+          <Text style={s.controlCaption}>AIM</Text>
+        </View>
+        <View
+          style={[s.bottomCentre, { bottom: 6 + insets.bottom }]}
+          pointerEvents="box-none"
+        >
+          {session.drill === "break" &&
+          session.shots === 0 &&
+          !session.cpuTurn &&
+          !session.running &&
+          !session.progress.breakChoice ? (
+            <Button
+              label="Place break cue"
+              onPress={() => {
+                session.placement = true;
+                session.headStringPlacement = true;
+                session.notify();
+              }}
+            />
+          ) : (
+            fineAim && <FineAim narrow={width < 960} />
+          )}
+          {!paidMatch &&
+            (session.canReplay || session.progress.returned.length > 0) && (
+              <View
+                style={s.pottedRow}
+                accessibilityLiveRegion="polite"
+                accessibilityLabel={
+                  session.progress.returned.length
+                    ? `Potted: ${session.progress.returned.join(", ")}`
+                    : "No balls potted yet"
+                }
+              >
+                {!paidMatch && session.canReplay && (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Watch replay of the last shot"
+                    hitSlop={8}
+                    onPress={() => session.startReplay()}
+                    style={({ pressed }) => [
+                      s.replayPill,
+                      pressed && { opacity: 0.7 },
+                    ]}
+                  >
+                    <Text style={s.replayPillText}>▶ REPLAY</Text>
+                  </Pressable>
+                )}
+                {session.progress.returned.map((id) => (
+                  <BallBadge
+                    key={id}
+                    id={id}
+                    recent={session.progress.shotPots.includes(id)}
+                  />
+                ))}
+              </View>
+            )}
         </View>
         {session.progress.finished && !session.running && (
           <View style={s.finishOverlay}>
@@ -1074,7 +1205,7 @@ function Game({
               </Text>
               <Text style={s.description}>
                 {session.progress.returned.includes(8)
-                  ? "The 8 ball was pocketed."
+                  ? "8 ball down."
                   : "Every object ball is pocketed."}
               </Text>
               {!paidMatch && (
@@ -1129,24 +1260,23 @@ function Game({
         <View style={s.scrim}>
           <ScrollView style={[s.panel, { maxHeight: "90%", flexGrow: 0 }]}>
             <Text style={s.eyebrow}>
-              {session.progress.turn === 0 ? playerName : "PLAYER 2"} · YOUR
-              CHOICE
+              {session.progress.turn === 0 ? playerName : "PLAYER 2"}
             </Text>
             <Text style={s.panelTitle}>
               {session.progress.breakChoice === "eight"
-                ? "8 ball on the break"
+                ? "8 on the break"
                 : session.progress.breakChoice === "illegal"
-                  ? "Illegal break"
-                  : "Foul on the break"}
+                  ? "Dry break"
+                  : "Break foul"}
             </Text>
             <Text style={s.description}>
               {session.progress.breakChoice === "eight"
                 ? session.progress.foul
-                  ? "The break was a foul. The incoming player can spot the 8 and take the cue ball behind the head string, or break again."
-                  : "This is not a win or a loss. Spot the 8 and continue, or break again. The table remains open."
+                  ? "Spot the 8 or re-rack."
+                  : "Spot the 8 or re-rack."
                 : session.progress.breakChoice === "illegal"
-                  ? "No ball was pocketed and fewer than four object balls reached a rail. The incoming player chooses what happens next."
-                  : `${session.progress.foul}. Accept the position or take the cue ball behind the head string.`}
+                  ? "Under four balls to a rail."
+                  : foulShort(session.progress.foul)}
             </Text>
             {session.progress.breakChoice === "eight" ? (
               <Button
@@ -1165,19 +1295,19 @@ function Game({
             )}
             {session.progress.breakChoice !== "foul" && (
               <Button
-                label="Re-rack · I break"
+                label="Re-rack, I break"
                 onPress={() => session.resolveBreak("rerack")}
               />
             )}
             {session.progress.breakChoice === "illegal" && (
               <Button
-                label="Re-rack · original player breaks"
+                label="Re-rack, they break"
                 onPress={() => session.resolveBreak("opponent-break")}
               />
             )}
             {session.progress.breakChoice === "foul" && (
               <Button
-                label="Cue ball in hand · behind head string"
+                label="Ball in hand"
                 onPress={() => session.resolveBreak("hand")}
               />
             )}
@@ -1214,7 +1344,7 @@ function Game({
         <View style={s.scrim}>
           <ScrollView
             style={[s.panel, { padding: 0, maxHeight: "92%", flexGrow: 0 }]}
-            contentContainerStyle={{ padding: compact ? 20 : 30 }}
+            contentContainerStyle={{ padding: 18 }}
             showsVerticalScrollIndicator={false}
           >
             <View style={s.panelTop}>
@@ -1436,12 +1566,12 @@ function Game({
                 {!!exitError && <Text style={s.description}>{exitError}</Text>}
                 <Text style={s.description}>
                   {paidMatch
-                    ? `You will lose this game. Your ${entryFee} coin entry fee will not be refunded.`
+                    ? `Counts as a loss. ${entryFee} coins stay paid.`
                     : "You will leave this rack and lose your current progress."}
                 </Text>
                 <Button label="Keep playing" onPress={() => setPanel(null)} />
                 <Button
-                  label={exitBusy ? "Saving…" : "Quit match and leave"}
+                  label={exitBusy ? "Saving…" : "Quit"}
                   onPress={() => {
                     if (!exitBusy) onExit?.();
                   }}
@@ -1571,9 +1701,9 @@ const s = StyleSheet.create({
     backgroundColor: "#07101a66",
   },
   finishCard: {
-    width: 286,
-    padding: 20,
-    gap: 12,
+    width: 230,
+    padding: 16,
+    gap: 10,
     borderRadius: 18,
     backgroundColor: "#142334f5",
     borderWidth: 1,
@@ -1712,9 +1842,9 @@ const s = StyleSheet.create({
     marginTop: 5,
   },
   avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     borderWidth: 1,
     overflow: "hidden",
     alignItems: "center",
@@ -1749,20 +1879,20 @@ const s = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: "#24212a",
   },
-  shotPower: { position: "absolute", left: 12, top: "32%" },
+  shotPower: { position: "absolute", left: 26, top: "34%" },
   shotSpin: {
     position: "absolute",
-    right: 10,
+    right: 22,
     top: "42%",
     alignItems: "center",
-    gap: 4,
+    gap: 8,
   },
   topBar: {
     position: "absolute",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    gap: 8,
+    gap: 16,
     zIndex: 3,
   },
   bottomBar: {
@@ -1778,22 +1908,30 @@ const s = StyleSheet.create({
     minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 12,
   },
   playerStrip: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    paddingHorizontal: 6,
+    gap: 8,
+    paddingHorizontal: 10,
     paddingVertical: 3,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: "#ffffff1f",
     backgroundColor: "#0a1a27d9",
   },
-  stripText: { gap: 3 },
-  barCentre: { flex: 1.2, minWidth: 0, alignItems: "center", gap: 4 },
-  barStatus: { alignItems: "center", gap: 1 },
+  stripText: { gap: 5 },
+  barCentre: { flex: 1, minWidth: 0, alignItems: "center", gap: 2 },
+  bottomCentre: {
+    position: "absolute",
+    alignSelf: "center",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    zIndex: 3,
+  },
+  barStatus: { alignItems: "center", gap: 3 },
   groupInline: { color: "#9fc2d6", fontSize: 10, fontWeight: "700" },
   pottedRow: { flexDirection: "row", alignItems: "center", gap: 3 },
   statusCorner: { position: "absolute", width: 154, gap: 3 },
@@ -1803,7 +1941,7 @@ const s = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
-  shotStatus: { color: "#9eafc3", fontSize: 10, letterSpacing: 1 },
+  shotStatus: { color: "#b9c9d9", fontSize: 11, letterSpacing: 1.2 },
   coachLabel: {
     color: "#ffd98a",
     fontSize: 10,
@@ -1939,18 +2077,31 @@ const s = StyleSheet.create({
   powerColumn: { alignItems: "center", gap: 10 },
   eyebrow: { fontSize: 10, fontWeight: "600", letterSpacing: 2, color: C.gold },
   statHead: { flexDirection: "row", alignItems: "center", gap: 12 },
+  ringBadge: {
+    position: "absolute",
+    bottom: -4,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 8,
+    backgroundColor: "#061420",
+  },
+  ringBadgeText: {
+    fontSize: 11,
+    fontWeight: "900",
+    fontVariant: ["tabular-nums"],
+  },
   statGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
-    gap: 10,
-    marginTop: 14,
-    marginBottom: 10,
+    gap: 12,
+    marginTop: 18,
+    marginBottom: 12,
   },
   stat: {
-    minWidth: 104,
+    minWidth: 118,
     flexGrow: 1,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     borderRadius: 12,
     backgroundColor: "#0a1a27b3",
     borderWidth: 1,
@@ -2041,7 +2192,7 @@ const s = StyleSheet.create({
   chevron: { color: C.gold, fontSize: 17 },
   centerBottom: { alignItems: "center", gap: 9, flex: 1 },
   message: { color: "#bcc9bc", fontSize: 12, letterSpacing: 0.2 },
-  fineAimWrap: { alignItems: "center", gap: 3 },
+  fineAimWrap: { flexDirection: "row", alignItems: "center", gap: 8 },
   fineAim: {
     width: 196,
     height: 26,
@@ -2080,19 +2231,19 @@ const s = StyleSheet.create({
   },
   scrim: {
     flex: 1,
-    backgroundColor: "#050a07cc",
+    backgroundColor: "#050a0799",
     justifyContent: "center",
     alignItems: "center",
     padding: 16,
   },
   panel: {
     backgroundColor: C.panel,
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "#3b483b",
-    padding: 30,
+    padding: 16,
     width: "100%",
-    maxWidth: 640,
+    maxWidth: 320,
   },
   panelTop: {
     flexDirection: "row",
@@ -2104,8 +2255,8 @@ const s = StyleSheet.create({
   panelTitle: {
     fontFamily: Platform.OS === "ios" ? "Georgia" : "serif",
     color: C.ink,
-    fontSize: 26,
-    marginBottom: 8,
+    fontSize: 20,
+    marginBottom: 6,
   },
   description: { fontSize: 12, lineHeight: 20, color: C.muted },
   skinList: { flexDirection: "row", gap: 12, marginTop: 24 },

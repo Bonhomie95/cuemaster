@@ -362,7 +362,8 @@ function Balls() {
           >
             <sphereGeometry
               args={[
-                R,
+                // Drawn 10% over size for readability on a phone; the physics radius is unchanged.
+                R * BALL_DRAW,
                 Platform.OS === "web" ? 48 : 24,
                 Platform.OS === "web" ? 32 : 16,
               ]}
@@ -436,7 +437,7 @@ function GhostBall() {
   });
   return (
     <mesh ref={mesh} visible={false} renderOrder={4}>
-      <sphereGeometry args={[R * 1.02, 24, 16]} />
+      <sphereGeometry args={[R * BALL_DRAW * 1.02, 24, 16]} />
       <meshBasicMaterial
         color="#9fe8ff"
         transparent
@@ -697,8 +698,11 @@ function Aim() {
 /** Outer table extents including rails and pocket jaws (from table-mesh.json). */
 // Fit to just outside the cushion line: the rail diamonds stay visible and the cabinet
 // overhang may run under the HUD edges, which buys the cloth a bigger share of the screen.
-const TABLE_X = 1.36,
-  TABLE_Z = 0.74,
+// Vertically the pockets must stay clear of the player strips, so the short axis fits the rail.
+// Measured from table-mesh.json: the cabinet's outer edge, so the whole table sits clear of the HUD.
+const BALL_DRAW = 1.1;
+const TABLE_X = 1.47,
+  TABLE_Z = 0.84,
   // A long lens and a slight tilt: the reference reads almost orthographic, which is what keeps
   // it looking like a table seen from above rather than a 3D model on a stage.
   TILT = (7 * Math.PI) / 180;
@@ -734,8 +738,8 @@ function Camera() {
       safeH = Math.max(40, size.height - hud.top - hud.bottom),
       // Pixels per metre measured perpendicular to the view direction.
       ppm = Math.min(
-        safeW / (2 * TABLE_X * 1.01),
-        safeH / ((2 * TABLE_Z * c + 0.12 * Math.sin(TILT)) * 1.02),
+        safeW / (2 * TABLE_X),
+        safeH / (2 * TABLE_Z * c + 0.12 * Math.sin(TILT)),
       ),
       dist = size.height / 2 / (Math.tan(f / 2) * ppm),
       offsetX = (hud.left - hud.right) / 2 / ppm,
@@ -773,8 +777,20 @@ function HeadString() {
     </mesh>
   );
 }
-export function Scene({ onReady }: { onReady?: () => void }) {
+export function Scene({
+  onReady,
+  active = true,
+}: {
+  onReady?: () => void;
+  active?: boolean;
+}) {
   const ready = useRef(false);
+  const invalidate = useThree((s) => s.invalidate);
+  // Switching the frame loop from "never" back to "always" does not restart the scheduler by
+  // itself; one requested frame does, after which the loop keeps running on its own.
+  useEffect(() => {
+    if (active) invalidate();
+  }, [active, invalidate]);
   useFrame(({ gl }) => {
     // Canvas.onCreated only means a context exists. Wait for actual scene draws.
     if (!ready.current && gl.info.render.calls > 0) {
