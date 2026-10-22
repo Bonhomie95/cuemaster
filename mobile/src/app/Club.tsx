@@ -708,6 +708,7 @@ function ClubBody() {
           exitError={toast}
           playerName={player.name}
           playerAvatar={player.avatar}
+          playerStats={player.stats}
           modeLabel={
             launch.kind === "local"
               ? `${launch.venue?.name} · ${launch.venue?.entry} coins`

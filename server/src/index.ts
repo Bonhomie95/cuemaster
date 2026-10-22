@@ -426,6 +426,10 @@ app.post("/local-matches/:id/finish", required, async (req: any, res) => {
                 "stats.bestStreak": {
                   $max: [{ $ifNull: ["$stats.bestStreak", 0] }, streak],
                 },
+                // The longest run of losses, the honest half of the same record.
+                "stats.worstStreak": {
+                  $min: [{ $ifNull: ["$stats.worstStreak", 0] }, streak],
+                },
               }
             : {}),
           ...(award ? award.fields : {}),
@@ -781,6 +785,7 @@ app.post(
         $inc: {
           xp: challenge.xp,
           coins: challenge.coins,
+          "stats.coinsWon": challenge.coins,
           "stats.finishes": 1,
           "stats.shots": result.shots,
         },
@@ -1153,7 +1158,11 @@ app.post(
       { _id: req.player._id, completed: { $ne: key } },
       {
         $addToSet: { completed: key },
-        $inc: { coins: event.reward, xp: EVENT_XP },
+        $inc: {
+          coins: event.reward,
+          "stats.coinsWon": event.reward,
+          xp: EVENT_XP,
+        },
       },
       { returnDocument: "after" },
     );

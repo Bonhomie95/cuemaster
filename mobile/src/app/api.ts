@@ -29,6 +29,9 @@ export type Player = {
     localMatches?: number;
     localWins?: number;
     localLosses?: number;
+    worstStreak?: number;
+    coinsWon?: number;
+    cratesOpened?: number;
   };
 };
 export type Venue = {

@@ -258,6 +258,7 @@ export function installRewards(
             coins: reward.coins,
             rubies: reward.rubies - cost,
             "stats.cratesOpened": 1,
+            "stats.coinsWon": reward.coins,
           },
         },
         { returnDocument: "after" },

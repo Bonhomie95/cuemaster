@@ -38,6 +38,7 @@ import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
 import { tableHost, useTableHost, stageHeight } from "./src/render/TableHost";
 import CompatibilityTable from "./src/render/CompatibilityTable";
 import { session, skins, encodeReplay } from "./src/game/session";
+import type { Player } from "./src/app/api";
 import { Press, Enter } from "./src/app/motion";
 import { groupOf } from "./src/game/progress";
 import { ballColors } from "./src/render/textures";
@@ -345,6 +346,7 @@ export default function TableGame({
   exitError = "",
   playerName = "YOU",
   playerAvatar = 0,
+  playerStats,
   modeLabel = "LOCAL PRACTICE",
   allowedSkins = [0],
 }: {
@@ -355,6 +357,7 @@ export default function TableGame({
   exitError?: string;
   playerName?: string;
   playerAvatar?: number;
+  playerStats?: Player["stats"];
   modeLabel?: string;
   allowedSkins?: number[];
 }) {
@@ -368,6 +371,7 @@ export default function TableGame({
         exitError={exitError}
         playerName={playerName}
         playerAvatar={playerAvatar}
+        playerStats={playerStats}
         modeLabel={modeLabel}
         allowedSkins={allowedSkins}
       />
@@ -377,13 +381,18 @@ export default function TableGame({
 function Avatar({
   opponent = false,
   variant = 0,
+  onPress,
 }: {
   opponent?: boolean;
   variant?: number;
+  onPress?: () => void;
 }) {
   return (
-    <View
-      accessibilityLabel={opponent ? "Local opponent avatar" : "Your avatar"}
+    <Pressable
+      accessibilityRole={onPress ? "button" : undefined}
+      accessibilityLabel={opponent ? "Opponent stats" : "Your stats"}
+      hitSlop={6}
+      onPress={onPress}
       style={[
         s.avatar,
         {
@@ -400,7 +409,7 @@ function Avatar({
         }
         style={{ width: 48, height: 48 }}
       />
-    </View>
+    </Pressable>
   );
 }
 function BallBadge({
@@ -447,6 +456,62 @@ function BallBadge({
       <Text style={s.ballDigit}>{id}</Text>
       {potted && <View style={s.potSlash} />}
     </Animated.View>
+  );
+}
+function Stat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <View style={s.stat}>
+      <Text style={s.statValue}>{value}</Text>
+      <Text style={s.statLabel}>{label}</Text>
+    </View>
+  );
+}
+function StatsSheet({
+  name,
+  avatar,
+  stats = { finishes: 0, shots: 0 },
+}: {
+  name: string;
+  avatar: number;
+  stats?: Player["stats"];
+}) {
+  const wins = (stats.cpuWins || 0) + (stats.localWins || 0),
+    losses = (stats.cpuLosses || 0) + (stats.localLosses || 0),
+    played = wins + losses,
+    streak = stats.cpuStreak || 0;
+  return (
+    <>
+      <View style={s.statHead}>
+        <Avatar variant={avatar} />
+        <View>
+          <Text style={s.panelTitle}>{name}</Text>
+          <Text style={s.description}>
+            {streak > 0
+              ? `On a ${streak}-match winning streak`
+              : streak < 0
+                ? `${-streak} ${-streak === 1 ? "loss" : "losses"} in a row`
+                : "No active streak"}
+          </Text>
+        </View>
+      </View>
+      <View style={s.statGrid}>
+        <Stat
+          label="COINS WON"
+          value={(stats.coinsWon || 0).toLocaleString()}
+        />
+        <Stat label="MATCHES" value={played} />
+        <Stat label="WON" value={wins} />
+        <Stat label="LOST" value={losses} />
+        <Stat
+          label="WIN RATE"
+          value={played ? `${Math.round((wins / played) * 100)}%` : "–"}
+        />
+        <Stat label="BEST STREAK" value={stats.bestStreak || 0} />
+        <Stat label="WORST STREAK" value={-(stats.worstStreak || 0)} />
+        <Stat label="CRATES OPENED" value={stats.cratesOpened || 0} />
+        <Stat label="DRILLS CLEARED" value={stats.finishes || 0} />
+      </View>
+    </>
   );
 }
 function groupText(player: number) {
@@ -698,6 +763,7 @@ function Game({
   exitError = "",
   playerName,
   playerAvatar,
+  playerStats,
   modeLabel,
   allowedSkins,
 }: {
@@ -708,6 +774,7 @@ function Game({
   exitError?: string;
   playerName: string;
   playerAvatar: number;
+  playerStats?: Player["stats"];
   modeLabel: string;
   allowedSkins: number[];
 }) {
@@ -718,7 +785,7 @@ function Game({
   const width = Math.max(win.width, win.height),
     height = Math.min(win.width, win.height);
   const [panel, setPanel] = useState<
-    "skins" | "drills" | "spin" | "settings" | "quit" | null
+    "skins" | "drills" | "spin" | "settings" | "quit" | "you" | "rival" | null
   >(null);
   const [code, setCode] = useState("");
   useEffect(() => {
@@ -792,12 +859,11 @@ function Game({
             </Button>
             <View style={[s.playerStrip, turn === 0 && s.activePlayerCard]}>
               {paidMatch ? <ClockBall player={0} /> : null}
-              <Avatar variant={playerAvatar} />
+              <Avatar variant={playerAvatar} onPress={() => setPanel("you")} />
               <View style={s.stripText}>
                 <Text numberOfLines={1} style={s.playerName}>
                   {playerName.toUpperCase()}
-                  {turn === 0 ? " ◂ " : " · "}
-                  <Text style={s.groupInline}>{groupText(0)}</Text>
+                  {turn === 0 ? " ◂" : ""}
                 </Text>
                 <PlayerBalls player={0} compact />
               </View>
@@ -909,8 +975,7 @@ function Game({
             >
               <View style={[s.stripText, { alignItems: "flex-end" }]}>
                 <Text numberOfLines={1} style={s.playerName}>
-                  <Text style={s.groupInline}>{groupText(1)}</Text>
-                  {turn === 1 ? " ▸ " : " · "}
+                  {turn === 1 ? "▸ " : ""}
                   {session.cpu ? session.cpu.name.toUpperCase() : "PLAYER 2"}
                 </Text>
                 <PlayerBalls player={1} compact />
@@ -918,6 +983,7 @@ function Game({
               <Avatar
                 opponent
                 variant={session.cpu?.avatar ?? (playerAvatar === 0 ? 1 : 0)}
+                onPress={session.cpu ? () => setPanel("rival") : undefined}
               />
               {paidMatch ? <ClockBall player={1} /> : null}
             </View>
@@ -1159,7 +1225,9 @@ function Game({
                     ? "THE PRACTICE ROOM"
                     : panel === "spin"
                       ? "CONTROL THE CUE BALL"
-                      : "YOUR TABLE"}
+                      : panel === "you" || panel === "rival"
+                        ? "PLAYER CARD"
+                        : "YOUR TABLE"}
               </Text>
               <Button label="Close" onPress={() => setPanel(null)}>
                 <Text style={s.close}>×</Text>
@@ -1380,9 +1448,44 @@ function Game({
                 />
               </>
             )}
+            {panel === "you" && (
+              <StatsSheet
+                name={playerName}
+                avatar={playerAvatar}
+                stats={playerStats}
+              />
+            )}
+            {panel === "rival" && session.cpu && (
+              <>
+                <View style={s.statHead}>
+                  <Avatar opponent variant={session.cpu.avatar} />
+                  <View>
+                    <Text style={s.panelTitle}>{session.cpu.name}</Text>
+                    <Text style={s.description}>{session.cpu.motto}</Text>
+                  </View>
+                </View>
+                <View style={s.statGrid}>
+                  <Stat label="TIER" value={session.cpu.tier} />
+                  <Stat label="STYLE" value={session.cpu.style || "steady"} />
+                  <Stat
+                    label="SKILL"
+                    value={`${Math.round(session.cpu.skill * 100)}%`}
+                  />
+                  <Stat
+                    label="SHOT CLOCK"
+                    value={`${cueById(session.cueIds[1]).seconds}s`}
+                  />
+                </View>
+                <Text style={s.description}>
+                  A house player run by the game. Their skill follows your
+                  recent results.
+                </Text>
+              </>
+            )}
             {panel === "settings" && (
               <>
                 <Text style={s.panelTitle}>Table menu</Text>
+                <Text style={s.description}>{modeLabel}</Text>
                 {onExit && (
                   <Button label="Quit match" onPress={() => setPanel("quit")} />
                 )}
@@ -1835,6 +1938,32 @@ const s = StyleSheet.create({
   rightTools: { position: "absolute", right: 32, top: "34%" },
   powerColumn: { alignItems: "center", gap: 10 },
   eyebrow: { fontSize: 10, fontWeight: "600", letterSpacing: 2, color: C.gold },
+  statHead: { flexDirection: "row", alignItems: "center", gap: 12 },
+  statGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+    marginTop: 14,
+    marginBottom: 10,
+  },
+  stat: {
+    minWidth: 104,
+    flexGrow: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: "#0a1a27b3",
+    borderWidth: 1,
+    borderColor: "#ffffff14",
+  },
+  statValue: { color: "#fffdf3", fontSize: 18, fontWeight: "800" },
+  statLabel: {
+    color: "#89a6bb",
+    fontSize: 9,
+    letterSpacing: 1.4,
+    fontWeight: "700",
+    marginTop: 2,
+  },
   powerTrack: {
     width: 11,
     borderRadius: 7,

@@ -490,7 +490,10 @@ export function installPlatform(
       const key = `prize:${event.id}`;
       const credited = await users.findOneAndUpdate(
         { _id: entry.playerId, completed: { $ne: key } },
-        { $addToSet: { completed: key }, $inc: { coins } },
+        {
+          $addToSet: { completed: key },
+          $inc: { coins, "stats.coinsWon": coins },
+        },
       );
       if (credited)
         paid.push({ playerId: entry.playerId, position: index + 1, coins });
