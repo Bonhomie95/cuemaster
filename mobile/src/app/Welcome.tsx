@@ -14,6 +14,7 @@ import { api, flag, Player } from "./api";
 import { portraits } from "./art";
 import { Press, Enter } from "./motion";
 import { celebrate } from "./feedback";
+import { redeemInvite } from "./Invite";
 
 const COUNTRIES = ["NG", "GH", "KE", "ZA", "EG", "US", "GB", "IN", "AE", "FR"];
 const FIRST = [
@@ -60,15 +61,17 @@ export default function Welcome({
   const [avatar, setAvatar] = useState(player.avatar || 0);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [code, setCode] = useState("");
   const save = async () => {
     setBusy(true);
     setError("");
     try {
-      const p = await api<Player>("/me", "PATCH", {
+      let p = await api<Player>("/me", "PATCH", {
         name: name.trim(),
         country,
         avatar,
       });
+      if (code.length === 6) p = (await redeemInvite(code)).player;
       celebrate();
       onDone(p);
     } catch (e) {
@@ -166,6 +169,27 @@ export default function Welcome({
                 </View>
               </View>
               <View style={{ alignItems: "center", gap: 8 }}>
+                <Text style={s.label}>FRIEND'S INVITE CODE</Text>
+                <TextInput
+                  accessibilityLabel="Friend's invite code, optional"
+                  value={code}
+                  onChangeText={(v) =>
+                    setCode(
+                      v
+                        .toUpperCase()
+                        .replace(/[^A-Z0-9]/g, "")
+                        .slice(0, 6),
+                    )
+                  }
+                  placeholder="Optional"
+                  placeholderTextColor="#5d7a8d"
+                  autoCapitalize="characters"
+                  autoCorrect={false}
+                  style={[
+                    s.input,
+                    { width: 150, textAlign: "center", letterSpacing: 3 },
+                  ]}
+                />
                 <Text style={s.label}>YOUR LOOK</Text>
                 <View style={{ flexDirection: "row", gap: 10 }}>
                   {portraits.map((p, i) => (

@@ -5,6 +5,7 @@ import { installStore, billingConfigured } from "./store";
 import { installAds, adsConfigured } from "./ads";
 import { installLive } from "./live";
 import { installLinks } from "./links";
+import { installInvites, settleInvite } from "./invites";
 import {
   appleConfigured,
   exchangeAppleCode,
@@ -456,7 +457,13 @@ app.post("/local-matches/:id/finish", required, async (req: any, res) => {
     ],
     { returnDocument: "after" },
   );
-  const u = updated || (await users.findOne({ _id: req.player._id }));
+  // A third finished match can pay an invite bonus; read the player back if it did.
+  const invited =
+    !!updated &&
+    cpu &&
+    (await settleInvite(db, req.player._id).catch(() => false));
+  const u =
+    (!invited && updated) || (await users.findOne({ _id: req.player._id }));
   if (u.localMatch?.id !== req.params.id)
     return res.status(404).json({ error: "Match not found." });
   // Coins move only on a referee-verified CPU win; pass-and-play results never pay anything.
@@ -1007,6 +1014,7 @@ app.post(
   },
 );
 installRewards(app, db, required, publicUser);
+installInvites(app, db, required, publicUser);
 installStore(app, db, required, publicUser);
 installAds(app, db, required);
 installPlatform(app, db, required);
@@ -1217,4 +1225,8 @@ const host = listenHost(process.env);
 const server = app.listen(port, host, () =>
   console.log(`CueMaster API http://${host}:${port} · MongoDB connected`),
 );
-installLive(server, db, { authenticate: playerForToken, publicUser });
+installLive(server, db, {
+  authenticate: playerForToken,
+  publicUser,
+  onResult: (playerId) => void settleInvite(db, playerId).catch(() => {}),
+});

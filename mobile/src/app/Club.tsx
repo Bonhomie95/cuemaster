@@ -3,6 +3,7 @@ import { warmTextures } from "../render/textures";
 import { TableHost } from "../render/TableHost";
 import Rewards from "./Rewards";
 import Welcome from "./Welcome";
+import InviteCard from "./Invite";
 import { comeBack } from "./notify";
 import { Press, Enter, CountUp, PageFade, Pulse } from "./motion";
 import { celebrate } from "./feedback";
@@ -1385,6 +1386,7 @@ function ClubBody() {
                       />
                     </View>
                     <View style={[u.feature, { flex: 1, minWidth: 240 }]}>
+                      <InviteCard onPlayer={setPlayer} />
                       <Text style={u.cardTitle}>Club & rewards</Text>
                       <NavRow
                         icon="gift"

@@ -1139,6 +1139,9 @@ function Game({
                 <Text numberOfLines={1} style={s.playerName}>
                   {turn === 1 ? "▸ " : ""}
                   {session.opponentName.toUpperCase()}
+                  {session.cpu ? (
+                    <Text style={s.houseTag}> · HOUSE</Text>
+                  ) : null}
                 </Text>
                 <PlayerBalls player={1} compact />
               </View>
@@ -1880,6 +1883,8 @@ function Game({
   );
 }
 const s = StyleSheet.create({
+  // Computer rivals are always labelled as such, in every place their name appears.
+  houseTag: { color: "#9fc0d6", fontSize: 10, fontWeight: "800" },
   finishOverlay: {
     position: "absolute",
     top: 88,
