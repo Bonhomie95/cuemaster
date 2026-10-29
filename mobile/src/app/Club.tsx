@@ -6,10 +6,11 @@ import Welcome from "./Welcome";
 import InviteCard from "./Invite";
 import Shop from "./Shop";
 import MorePage from "./MorePage";
+import Leagues from "./Leagues";
 import HowToPlay from "./HowToPlay";
 import { setSound } from "./sound";
 import { enableReminders } from "./notify";
-import { DailyHub, DailyTab } from "./DailyRewards";
+import { DailyHub, DailyTab, LuckyCard } from "./DailyRewards";
 import { PlayerBadge, CurrencyPill } from "./TopBar";
 import { restorePending } from "./billing";
 import { comeBack } from "./notify";
@@ -64,6 +65,7 @@ import {
   Challenge,
   Tournament,
   ProviderConfig,
+  LuckyResult,
   flag,
 } from "./api";
 import { signInProvider } from "./identity";
@@ -91,9 +93,10 @@ type Page =
   | "more"
   | "settings"
   | "help"
-  | "invite";
+  | "invite"
+  | "leagues";
 type Launch = {
-  kind: "free" | "practice" | "event" | "local" | "daily" | "online";
+  kind: "free" | "practice" | "event" | "local" | "daily" | "online" | "lucky";
   drill: string;
   ticket?: string;
   challenge?: Challenge;
@@ -356,6 +359,7 @@ function ClubBody() {
           !l ||
           l.kind === "free" ||
           l.kind === "local" ||
+          l.kind === "lucky" ||
           session.running ||
           !session.shots ||
           submitted.current ||
@@ -416,6 +420,38 @@ function ClubBody() {
             });
         };
         submit();
+      }),
+    [],
+  );
+  /**
+   * The Lucky Shot goes to the server the moment it is struck, so a prize can never be chosen
+   * after watching where the ball went; the verdict card waits for the ball to stop.
+   */
+  const [lucky, setLucky] = useState<{
+    result: LuckyResult | null;
+    error: string;
+    settled: boolean;
+  } | null>(null);
+  const luckySent = useRef(false);
+  useEffect(
+    () =>
+      session.subscribe(() => {
+        if (launchRef.current?.kind !== "lucky" || !session.shots) return;
+        if (!luckySent.current) {
+          luckySent.current = true;
+          setLucky({ result: null, error: "", settled: false });
+          api<LuckyResult>("/me/lucky", "POST", {
+            shot: session.replayShots[0],
+          }).then(
+            (r) => {
+              setPlayer(r.player);
+              setLucky((v) => v && { ...v, result: r });
+            },
+            (e) => setLucky((v) => v && { ...v, error: e.message }),
+          );
+        }
+        if (!session.running)
+          setLucky((v) => (v && !v.settled ? { ...v, settled: true } : v));
       }),
     [],
   );
@@ -686,6 +722,14 @@ function ClubBody() {
         setToast(`${ghost.name} leads today. Their run plays as a ghost.`);
       }
     });
+  const startLucky = () => {
+    luckySent.current = false;
+    setLucky(null);
+    openGame({ kind: "lucky", drill: "lucky", label: "LUCKY SHOT" });
+    setToast(
+      "Stop the cue ball inside the rings: the nearer the centre, the bigger the prize.",
+    );
+  };
   const leaveGame = () => {
     session.cpu = null;
     session.endOnline();
@@ -874,6 +918,19 @@ function ClubBody() {
         {rewardModal}
         {levelModal}
         {verificationModal}
+        {launch.kind === "lucky" && lucky?.settled && (
+          <LuckyCard
+            result={lucky.result}
+            error={lucky.error}
+            onAgain={startLucky}
+            onBack={() => {
+              setLucky(null);
+              leaveGame();
+              setHubTab("lucky");
+              setPage("daily");
+            }}
+          />
+        )}
       </View>
     );
   if (offline)
@@ -1171,6 +1228,7 @@ function ClubBody() {
                 setShopTab("offers");
                 setPage("shop");
               }}
+              onLucky={startLucky}
             />
           ) : page === "shop" ? (
             <Shop
@@ -1250,6 +1308,13 @@ function ClubBody() {
               onOpen={(target) => {
                 if (target === "rewards") setRewardsFrom("more");
                 setPage(target);
+              }}
+            />
+          ) : page === "leagues" ? (
+            <Leagues
+              onPlay={() => {
+                setVenueMode("online");
+                setPage("matches");
               }}
             />
           ) : page === "help" ? (
@@ -1822,6 +1887,7 @@ const TITLES: Partial<Record<Page, string>> = {
   more: "More",
   settings: "Settings",
   help: "How to play",
+  leagues: "Leagues",
   invite: "Invite friends",
 };
 const u = StyleSheet.create({

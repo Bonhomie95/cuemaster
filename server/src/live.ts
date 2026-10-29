@@ -8,6 +8,7 @@ import { localWinner } from "../../mobile/src/game/localMatch";
 import { cueById } from "../../mobile/src/game/cues";
 import { venues, levelOf } from "./catalog";
 import { crateAwardStage, publicCrate } from "./rewards";
+import { piggyDeposit } from "./store";
 
 /**
  * Online matches: two players, one table, the server as referee.
@@ -135,7 +136,12 @@ export function installLive(
   deps: {
     authenticate: (token: string) => Promise<any | null>;
     publicUser: (u: any) => any;
-    onResult?: (playerId: string, won: boolean) => void;
+    /** Once per player per settled match; `pot` is what this player won, 0 for the loser. */
+    onResult?: (
+      playerId: string,
+      won: boolean,
+      match: { pot: number; private: boolean },
+    ) => void;
   },
 ) {
   const users = db.collection<any>("players"),
@@ -407,6 +413,7 @@ export function installLive(
               "stats.onlineMatches": inc("$stats.onlineMatches", 1),
               "stats.onlineWins": inc("$stats.onlineWins", 1),
               "stats.coinsWon": inc("$stats.coinsWon", pot),
+              piggy: piggyDeposit(true),
               ...award.fields,
             },
           },
@@ -425,6 +432,7 @@ export function installLive(
               },
               "stats.onlineMatches": inc("$stats.onlineMatches", 1),
               "stats.onlineLosses": inc("$stats.onlineLosses", 1),
+              piggy: piggyDeposit(false),
             },
           },
         ],
@@ -436,7 +444,10 @@ export function installLive(
       results[winner] = { doc: results[winner], crate };
       results[loser] = { doc: results[loser] };
       m.seats.forEach((seat, i) =>
-        deps.onResult?.(seat.profile.id, i === winner),
+        deps.onResult?.(seat.profile.id, i === winner, {
+          pot: i === winner ? pot : 0,
+          private: m.private,
+        }),
       );
     }
     await records.updateOne(

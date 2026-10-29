@@ -16,8 +16,8 @@ import { currentSeason } from "./season";
  * The store.
  *
  * Real money buys rubies, the premium currency (crates opened early), and coins, the soft
- * currency that pays entry fees, cues and tables, plus a one-time starter pack and the current
- * season's premium pass.
+ * currency that pays entry fees, cues and tables, plus a one-time starter pack, the current
+ * season's premium pass, and breaking the piggy bank.
  *
  * Both stores require digital goods to be sold through their own billing, so the app buys from
  * Apple or Google and sends the store's proof here. Nothing the device says about price,
@@ -27,9 +27,10 @@ import { currentSeason } from "./season";
  */
 export type Product = {
   id: string;
-  kind: "rubies" | "coins" | "bundle" | "pass";
+  kind: "rubies" | "coins" | "bundle" | "pass" | "piggy";
   label: string;
-  grants: { coins?: number; rubies?: number; passSeason?: true };
+  /** `piggy` pays whatever the player's piggy bank holds when the purchase is credited. */
+  grants: { coins?: number; rubies?: number; passSeason?: true; piggy?: true };
   bonus?: string;
   oneTime?: boolean;
   /** Display fallback only: the player pays the localized price their store shows. */
@@ -122,10 +123,31 @@ export const PRODUCTS: Product[] = [
     grants: { passSeason: true },
     usd: 4.99,
   },
+  {
+    id: "piggy.break",
+    kind: "piggy",
+    label: "Piggy bank",
+    grants: { piggy: true },
+    usd: 0.99,
+  },
 ];
 export const RUBY_PACKS = PRODUCTS.filter((p) => p.kind === "rubies").map(
   (p) => ({ ...p, rubies: p.grants.rubies! }),
 );
+
+/**
+ * The piggy bank: every finished online or computer match drops coins into a locked bank, up to
+ * the cap, and `piggy.break` pays out whatever it holds. The shop sells the break only from the
+ * minimum up, so nobody pays to open a near-empty bank; a paid break always pays what is there.
+ */
+export const PIGGY = { cap: 5000, minimum: 1000, won: 100, lost: 40 };
+/** The bank after one more finished match, for the match result's own atomic write. */
+export const piggyDeposit = (won: boolean) => ({
+  $min: [
+    PIGGY.cap,
+    { $add: [{ $ifNull: ["$piggy", 0] }, won ? PIGGY.won : PIGGY.lost] },
+  ],
+});
 
 type Platform = "ios" | "android";
 /**
@@ -362,6 +384,7 @@ export function installStore(
 
   app.get("/store", required, async (req: any, res) => {
     const season = currentSeason();
+    const piggy = req.player.piggy || 0;
     res.json({
       platforms: {
         ios: billingConfigured("ios"),
@@ -369,6 +392,7 @@ export function installStore(
       },
       rubies: req.player.rubies || 0,
       coins: req.player.coins || 0,
+      piggy: { coins: piggy, ...PIGGY },
       products: PRODUCTS.map((p) => {
         if (p.oneTime)
           return {
@@ -380,6 +404,7 @@ export function installStore(
           const owned = req.player.passPremiumSeason === season.id;
           return { ...p, owned, available: !owned, season };
         }
+        if (p.grants.piggy) return { ...p, available: piggy >= PIGGY.minimum };
         return p;
       }),
       accountToken: accountToken(req.player._id),
@@ -467,13 +492,34 @@ export function installStore(
       // `purchases` lookup if a player ever holds thousands.
       const updated = await users.findOneAndUpdate(
         { _id: req.player._id, purchaseKeys: { $ne: key } },
-        {
-          $inc: { coins: grants.coins || 0, rubies: grants.rubies || 0 },
-          $addToSet: { purchaseKeys: key },
-          ...(Object.keys(set).length ? { $set: set } : {}),
-        },
+        product.grants.piggy
+          ? // Breaking the bank moves what it holds right now, read inside the same write.
+            [
+              {
+                $set: {
+                  coins: {
+                    $add: [
+                      { $ifNull: ["$coins", 0] },
+                      { $ifNull: ["$piggy", 0] },
+                    ],
+                  },
+                  piggy: 0,
+                  piggyLastBreak: { $ifNull: ["$piggy", 0] },
+                  purchaseKeys: {
+                    $concatArrays: [{ $ifNull: ["$purchaseKeys", []] }, [key]],
+                  },
+                },
+              },
+            ]
+          : {
+              $inc: { coins: grants.coins || 0, rubies: grants.rubies || 0 },
+              $addToSet: { purchaseKeys: key },
+              ...(Object.keys(set).length ? { $set: set } : {}),
+            },
         { returnDocument: "after" },
       );
+      if (product.grants.piggy && updated)
+        grants.coins = updated.piggyLastBreak;
       // The record keeps the store's transaction key as its id; a replay finds the original.
       const record = await purchases.findOneAndUpdate(
         { _id: key },

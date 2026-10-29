@@ -182,9 +182,19 @@ export default function HomeLobby(p: LobbyProps) {
           icon="calendar"
           label={today ? `Day ${today.streak.day || 1}` : "Rewards"}
           a11y="Daily rewards"
-          badge={!!(ready?.daily || ready?.spin || ready?.missions)}
+          badge={
+            !!(ready?.daily || ready?.spin || ready?.lucky || ready?.missions)
+          }
           onPress={() =>
-            p.onHub(ready?.daily ? "daily" : ready?.spin ? "spin" : "missions")
+            p.onHub(
+              ready?.daily
+                ? "daily"
+                : ready?.spin
+                  ? "spin"
+                  : ready?.lucky
+                    ? "lucky"
+                    : "missions",
+            )
           }
         />
         <Side

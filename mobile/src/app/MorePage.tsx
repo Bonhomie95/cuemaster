@@ -10,6 +10,7 @@ type Icon = React.ComponentProps<typeof Feather>["name"];
 export type MoreTarget =
   | "profile"
   | "leaderboard"
+  | "leagues"
   | "invite"
   | "events"
   | "practice"
@@ -51,6 +52,13 @@ export default function MorePage({
       detail: `${player.trophies || 0} trophies · see who's on top`,
       icon: "bar-chart-2",
       accent: "#ffd05b",
+    },
+    {
+      id: "leagues",
+      title: "Leagues",
+      detail: "This week's table · top 10 move up",
+      icon: "shield",
+      accent: "#7fd0ff",
     },
     {
       id: "invite",

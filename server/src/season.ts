@@ -6,6 +6,16 @@ const EPOCH = Date.UTC(2026, 9, 5); // Monday 5 October 2026, 00:00 UTC
 export const SEASON_DAYS = 28;
 const LENGTH = SEASON_DAYS * 86400000;
 
+/** League weeks run Monday 00:00 UTC to the next Monday, numbered from the same epoch. */
+export function currentWeek(now = Date.now()) {
+  const id = Math.floor((now - EPOCH) / (7 * 86400000));
+  return {
+    id,
+    startsAt: new Date(EPOCH + id * 7 * 86400000),
+    endsAt: new Date(EPOCH + (id + 1) * 7 * 86400000),
+  };
+}
+
 export function currentSeason(now = Date.now()) {
   const index = Math.floor((now - EPOCH) / LENGTH);
   return {

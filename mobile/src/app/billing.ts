@@ -15,9 +15,10 @@ import { api, type Player } from "./api";
  */
 export type StoreProduct = {
   id: string;
-  kind: "rubies" | "coins" | "bundle" | "pass";
+  kind: "rubies" | "coins" | "bundle" | "pass" | "piggy";
   label: string;
-  grants: { coins?: number; rubies?: number; passSeason?: true };
+  /** `piggy`: pays whatever the piggy bank holds when the purchase is credited. */
+  grants: { coins?: number; rubies?: number; passSeason?: true; piggy?: true };
   bonus?: string;
   oneTime?: boolean;
   /** Display fallback only: the player pays `price`, the store's localized price. */
@@ -34,10 +35,19 @@ export type BuyResult = {
   player?: Player;
   message?: string;
 };
+/** The piggy bank: what it holds, its cap, the least it can be broken at, and what a match adds. */
+export type Piggy = {
+  coins: number;
+  cap: number;
+  minimum: number;
+  won: number;
+  lost: number;
+};
 type StoreInfo = {
   platforms: { ios: boolean; android: boolean };
   products: StoreProduct[];
   accountToken: string;
+  piggy: Piggy;
 };
 
 const os =
@@ -64,10 +74,12 @@ async function connect(): Promise<Iap | null> {
 export async function loadStore(): Promise<{
   available: boolean;
   products: StoreProduct[];
+  piggy: Piggy;
 }> {
   const info = await api<StoreInfo>("/store");
   const iap = os && info.platforms[os] ? await connect() : null;
-  if (!iap) return { available: false, products: info.products };
+  if (!iap)
+    return { available: false, products: info.products, piggy: info.piggy };
   const listed = await iap
     .fetchProducts({ skus: info.products.map((p) => p.id), type: "in-app" })
     .catch(() => null);
@@ -75,6 +87,7 @@ export async function loadStore(): Promise<{
   return {
     available: true,
     products: info.products.map((p) => ({ ...p, price: prices.get(p.id) })),
+    piggy: info.piggy,
   };
 }
 

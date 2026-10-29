@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Animated,
   Easing,
+  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,19 +18,22 @@ import {
   DailyMission,
   DailyReward,
   Granted,
+  LuckyResult,
   Player,
   SpinResult,
   Today,
   WheelSegment,
 } from "./api";
+import { H, W, LUCKY } from "../physics/engine";
+import { luckyColors } from "../render/textures";
 import { showRewardedVideo } from "./ads";
 import { celebrate, tap, warn } from "./feedback";
 import { Press, Enter, CountUp, Pulse, PageFade } from "./motion";
 import IconButton from "./IconButton";
 
 /**
- * The daily-return screens: login streak, free gift, spin wheel, missions and the CueMaster
- * Pass, plus `DailyHub`, which puts them behind four tabs.
+ * The daily-return screens: login streak, free gift, spin wheel, Lucky Shot, missions and the
+ * CueMaster Pass, plus `DailyHub`, which puts them behind five tabs.
  *
  * Nothing here decides a reward. Every claim goes to the server, which rolls and pays it and
  * answers with the new balance and the whole board (`Today`); these screens only draw that.
@@ -964,6 +968,288 @@ export function SpinWheel(props: DailyProps) {
   );
 }
 
+/** The Lucky Shot layout to scale: the cue ball on the head spot, the prize rings at the centre. */
+function LuckyTable({
+  rings,
+  width,
+}: {
+  rings: Today["lucky"]["rings"];
+  width: number;
+}) {
+  const scale = width / (2 * H),
+    height = 2 * W * scale,
+    ball = Math.max(8, 2 * 0.0425 * scale * 1.1),
+    pocket = ball * 1.5;
+  const at = (x: number, z: number, d: number) => ({
+    position: "absolute" as const,
+    left: (x + H) * scale - d / 2,
+    top: (z + W) * scale - d / 2,
+    width: d,
+    height: d,
+    borderRadius: d / 2,
+  });
+  return (
+    <View style={[s.rail, { padding: Math.round(width * 0.035) }]}>
+      <View style={[s.felt, { width, height }]}>
+        <View style={[s.headString, { left: width / 4, height }]} />
+        {[...rings].reverse().map((r, k) => {
+          const i = rings.length - 1 - k;
+          // Only the bullseye breathes.
+          return (
+            <Pulse
+              key={r.radius}
+              active={i === 0}
+              style={[
+                at(LUCKY.x, LUCKY.z, 2 * r.radius * scale),
+                {
+                  borderWidth: 1,
+                  borderColor: "#fff3cfd9",
+                  backgroundColor: luckyColors[i] + (i ? "2e" : "b0"),
+                },
+              ]}
+            >
+              {null}
+            </Pulse>
+          );
+        })}
+        {[-H, 0, H].flatMap((x) =>
+          [-W, W].map((z) => (
+            <View
+              key={`${x}:${z}`}
+              style={[at(x, z, pocket), { backgroundColor: "#03080c" }]}
+            />
+          )),
+        )}
+        <View
+          style={[
+            at(-H / 2, 0, ball),
+            {
+              backgroundColor: "#f4f0e2",
+              borderWidth: 1,
+              borderColor: "#0006",
+            },
+          ]}
+        />
+      </View>
+    </View>
+  );
+}
+
+/**
+ * The Lucky Shot: one free shot a day at a fixed layout, more for videos. The prize is the ring
+ * the cue ball stops in, judged by the server's replay of the shot; this screen shows the rings,
+ * what each pays and what is left today. `onShoot` opens the table.
+ */
+export function LuckyShot(props: DailyProps & { onShoot?: () => void }) {
+  const { today, busy, error, run, reload } = useBoard(props);
+  const win = useWindowDimensions();
+  const width = Math.round(
+    Math.max(220, Math.min(340, Math.max(win.width, win.height) * 0.36)),
+  );
+  const now = useNow(30000);
+  if (!today) return <Loading error={error} />;
+  const { free, tokens, adShotsLeft, ads, rings } = today.lucky;
+  const shots = free + tokens;
+  const watch = () =>
+    run(async () => {
+      const outcome = await showRewardedVideo({ purpose: "lucky" });
+      if (outcome === "unavailable")
+        throw new Error("No video is available right now. Try again shortly.");
+      if (outcome === "dismissed") return;
+      // The shot is granted by the ad network's signed callback, so give it a moment to land.
+      for (let i = 0; i < 5; i++) {
+        await new Promise((r) => setTimeout(r, 1200));
+        if ((await reload()).lucky.tokens > tokens) return;
+      }
+    });
+  return (
+    <View style={s.split}>
+      <Enter>
+        <LuckyTable rings={rings} width={width} />
+      </Enter>
+      <Enter index={1} style={[s.card, s.grow, { gap: 8 }]}>
+        <Text style={s.eyebrow}>LUCKY SHOT</Text>
+        <Text style={s.heading}>
+          {free
+            ? "Your free shot is ready"
+            : tokens
+              ? `${tokens} shot${tokens === 1 ? "" : "s"} ready`
+              : "No shots left today"}
+        </Text>
+        <Text style={s.copy}>
+          Stop the cue ball inside the rings. It all comes down to pace: the
+          server replays your shot and pays the ring it stops in.
+        </Text>
+        <View style={{ gap: 4 }}>
+          {rings.map((r, i) => (
+            <View key={r.radius} style={s.ringRow}>
+              <View
+                style={[
+                  s.ringDot,
+                  { backgroundColor: luckyColors[i], opacity: i ? 0.8 : 1 },
+                ]}
+              />
+              <Text style={s.missionLabel}>{r.label}</Text>
+              <Text style={[s.small, s.grow]} numberOfLines={1}>
+                {rewardText(r)}
+              </Text>
+            </View>
+          ))}
+        </View>
+        <View style={s.actions}>
+          <Pulse active={shots > 0 && !busy}>
+            <Button
+              primary
+              icon="target"
+              label="Take the shot"
+              disabled={!shots || busy}
+              onPress={() => props.onShoot?.()}
+            />
+          </Pulse>
+          {ads && (
+            <Button
+              icon="play-circle"
+              label={
+                busy
+                  ? "Loading video…"
+                  : adShotsLeft
+                    ? `Watch a video for another shot · ${adShotsLeft} left`
+                    : "Today's video shots are used"
+              }
+              disabled={busy || !adShotsLeft}
+              onPress={watch}
+            />
+          )}
+        </View>
+        {!shots && (
+          <Text style={s.small}>
+            A fresh free shot in {left(Date.parse(today.resetsAt) - now)}.
+          </Text>
+        )}
+        <FullSlots today={today} rewards={rings} />
+        <Message error={error} />
+      </Enter>
+    </View>
+  );
+}
+
+/**
+ * The Lucky Shot's verdict over the table, once the ball has stopped: the server's ring, what it
+ * paid, and how far from the centre the replay left the cue ball.
+ */
+export function LuckyCard({
+  result,
+  error,
+  onAgain,
+  onBack,
+}: {
+  result: LuckyResult | null;
+  error: string;
+  onAgain: () => void;
+  onBack: () => void;
+}) {
+  useEffect(() => {
+    if (result?.prize) celebrate();
+  }, [result]);
+  const shots = result
+    ? result.today.lucky.free + result.today.lucky.tokens
+    : 0;
+  const ring = result?.ring ?? -1;
+  const color = ring >= 0 ? luckyColors[ring] : C.dim;
+  const cm = result
+    ? Math.round(
+        100 *
+          Math.hypot(result.landing.x - LUCKY.x, result.landing.z - LUCKY.z),
+      )
+    : 0;
+  return (
+    <Modal
+      supportedOrientations={["landscape"]}
+      transparent
+      visible
+      animationType="fade"
+      onRequestClose={onBack}
+    >
+      <View style={s.scrim}>
+        <Enter
+          style={[s.card, s.verdict, ring === 0 && { borderColor: C.gold }]}
+          accessibilityLiveRegion="polite"
+        >
+          {result || error ? (
+            <Pulse
+              active={ring === 0}
+              style={[
+                s.chip,
+                s.verdictIcon,
+                { backgroundColor: `${color}22`, borderColor: `${color}88` },
+              ]}
+            >
+              <Feather
+                name={
+                  error
+                    ? "alert-circle"
+                    : ring === 0
+                      ? "star"
+                      : ring > 0
+                        ? "target"
+                        : "x"
+                }
+                size={26}
+                color={error ? "#ffb6b6" : color}
+              />
+            </Pulse>
+          ) : (
+            <ActivityIndicator color={C.gold} style={{ margin: 14 }} />
+          )}
+          <Text style={s.eyebrow}>LUCKY SHOT</Text>
+          <Text style={s.heading}>
+            {!result
+              ? error
+                ? "The shot could not be scored"
+                : "Measuring where it stopped…"
+              : ring === 0
+                ? "Bullseye!"
+                : result.prize
+                  ? `${result.prize.label}!`
+                  : result.landing.pocketed
+                    ? "In the pocket"
+                    : "Just outside the rings"}
+          </Text>
+          <Text style={[s.copy, { textAlign: "center" }]}>
+            {error
+              ? error
+              : !result
+                ? "The server is replaying your shot."
+                : result.prize
+                  ? `${grantedText(result.granted)}. The cue ball stopped ${cm ? `${cm} cm from the centre` : "dead centre"}.`
+                  : result.landing.pocketed
+                    ? "A scratch wins nothing. Keep the cue ball on the cloth."
+                    : `No prize this time: it stopped ${cm} cm from the centre. Pace is everything.`}
+          </Text>
+          {(!!result || !!error) && (
+            <View style={[s.actions, { justifyContent: "center" }]}>
+              {shots > 0 && (
+                <Button
+                  primary
+                  icon="target"
+                  label={`Shoot again · ${shots} left`}
+                  onPress={onAgain}
+                />
+              )}
+              <Button
+                primary={!shots}
+                icon="chevron-left"
+                label="Back to daily rewards"
+                onPress={onBack}
+              />
+            </View>
+          )}
+        </Enter>
+      </View>
+    </Modal>
+  );
+}
+
 const MISSION_ICON: Record<string, Icon> = {
   play3: "play",
   win1: "award",
@@ -1377,10 +1663,11 @@ export function PassTrack({
   );
 }
 
-export type DailyTab = "daily" | "spin" | "missions" | "pass";
+export type DailyTab = "daily" | "spin" | "lucky" | "missions" | "pass";
 const TABS: { id: DailyTab; label: string; icon: Icon }[] = [
   { id: "daily", label: "Daily", icon: "calendar" },
   { id: "spin", label: "Spin", icon: "disc" },
+  { id: "lucky", label: "Lucky Shot", icon: "target" },
   { id: "missions", label: "Missions", icon: "check-square" },
   { id: "pass", label: "Pass", icon: "award" },
 ];
@@ -1391,6 +1678,7 @@ export function readyToCollect(t: Today, now = Date.now()) {
     daily: !t.streak.claimedToday,
     gift: !t.gift.readyAt || Date.parse(t.gift.readyAt) <= now,
     spin: t.spin.free + t.spin.tokens > 0,
+    lucky: t.lucky.free + t.lucky.tokens > 0,
     missions:
       t.missions.list.some((m) => !m.claimed && m.progress >= m.goal) ||
       (t.missions.bonus.ready && !t.missions.bonus.claimed),
@@ -1404,7 +1692,8 @@ export function readyToCollect(t: Today, now = Date.now()) {
 }
 
 /**
- * Daily streak, wheel, missions and pass behind four tabs, with the free gift always in reach.
+ * Daily streak, wheel, Lucky Shot, missions and pass behind five tabs, with the free gift always
+ * in reach.
  * It fills its parent and draws no backdrop: place it as a club page, or inside a full-screen
  * `Modal` (with `supportedOrientations={["landscape"]}`) over the club art.
  */
@@ -1413,6 +1702,7 @@ export function DailyHub({
   onPlayer,
   onClose,
   onBuyPremium,
+  onLucky,
   initialTab = "daily",
 }: {
   player: Player;
@@ -1420,6 +1710,8 @@ export function DailyHub({
   onClose: () => void;
   /** Opens billing for the premium pass; the server reads ownership, so just reopen after. */
   onBuyPremium?: () => void;
+  /** Opens the Lucky Shot table. */
+  onLucky?: () => void;
   initialTab?: DailyTab;
 }) {
   const [tab, setTab] = useState<DailyTab>(initialTab);
@@ -1486,6 +1778,8 @@ export function DailyHub({
               <StreakCalendar {...shared} />
             ) : tab === "spin" ? (
               <SpinWheel {...shared} />
+            ) : tab === "lucky" ? (
+              <LuckyShot {...shared} onShoot={onLucky} />
             ) : tab === "missions" ? (
               <Missions {...shared} />
             ) : (
@@ -1818,4 +2112,23 @@ const s = StyleSheet.create({
     fontWeight: "900",
     letterSpacing: 1,
   },
+  rail: { borderRadius: 14, backgroundColor: "#38241b" },
+  felt: { backgroundColor: "#07845b", borderRadius: 3, overflow: "hidden" },
+  headString: {
+    position: "absolute",
+    top: 0,
+    width: 1,
+    backgroundColor: "#ffffff70",
+  },
+  ringRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  ringDot: { width: 10, height: 10, borderRadius: 5 },
+  scrim: {
+    flex: 1,
+    backgroundColor: "#020a10b3",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  verdict: { width: 380, maxWidth: "100%", alignItems: "center" },
+  verdictIcon: { width: 54, height: 54, borderRadius: 17 },
 });

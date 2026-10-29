@@ -63,6 +63,26 @@ export const clientRedeemAllowed = () => process.env.NODE_ENV !== "production";
 export function installAds(app: Express, db: Db, required: RequestHandler) {
   const tickets = db.collection<any>("adTickets"),
     users = db.collection<any>("players");
+  /** What a video can earn one more of: a wheel spin or a Lucky Shot, each capped per day. */
+  const tokens: Record<
+    string,
+    { tokens: string; day: string; count: string; cap: number; used: string }
+  > = {
+    spin: {
+      tokens: "spinTokens",
+      day: "spinAdDay",
+      count: "spinAdCount",
+      cap: DAILY.spins.adPerDay,
+      used: "Today's video spins are used. More tomorrow.",
+    },
+    lucky: {
+      tokens: "luckyTokens",
+      day: "luckyAdDay",
+      count: "luckyAdCount",
+      cap: DAILY.lucky.adPerDay,
+      used: "Today's video shots are used. More tomorrow.",
+    },
+  };
 
   app.post(
     "/ads/reward-ticket",
@@ -77,24 +97,23 @@ export function installAds(app: Express, db: Db, required: RequestHandler) {
         return res
           .status(409)
           .json({ error: "Video rewards are not available yet." });
-      // A ticket pays for one thing: an hour off a started crate, one extra wheel spin, or a
-      // handful of coins for a player who is short of an entry fee.
+      // A ticket pays for one thing: an hour off a started crate, one extra wheel spin or Lucky
+      // Shot, or a handful of coins for a player who is short of an entry fee.
       const input = z
         .union([
           z.object({ crateId: z.string().uuid() }).strict(),
-          z.object({ purpose: z.enum(["spin", "coins"]) }).strict(),
+          z.object({ purpose: z.enum(["spin", "lucky", "coins"]) }).strict(),
         ])
         .parse(req.body);
       // Refuse before the advert rather than after it: a capped day would pay nothing.
       // `redeem()` enforces the same caps again inside its own write.
       const day = new Date().toISOString().slice(0, 10);
-      if ("purpose" in input && input.purpose === "spin") {
+      const token = "purpose" in input ? tokens[input.purpose] : undefined;
+      if (token) {
         const used =
-          req.player.spinAdDay === day ? req.player.spinAdCount || 0 : 0;
-        if (used >= DAILY.spins.adPerDay)
-          return res.status(409).json({
-            error: "Today's video spins are used. More tomorrow.",
-          });
+          req.player[token.day] === day ? req.player[token.count] || 0 : 0;
+        if (used >= token.cap)
+          return res.status(409).json({ error: token.used });
       } else if ("purpose" in input) {
         const used =
           req.player.coinAdDay === day ? req.player.coinAdCount || 0 : 0;
@@ -155,7 +174,7 @@ export function installAds(app: Express, db: Db, required: RequestHandler) {
   );
 
   /**
-   * Redeem one ticket: one hour off its crate, or one extra spin of the daily wheel.
+   * Redeem one ticket: one hour off its crate, or one extra spin or Lucky Shot.
    *
    * The ticket burn is the idempotency key: one signed callback, one grant. The daily cap is
    * then applied inside a single pipeline update, because two callbacks arriving together used
@@ -169,35 +188,35 @@ export function installAds(app: Express, db: Db, required: RequestHandler) {
     );
     if (!ticket) return false;
     const day = new Date().toISOString().slice(0, 10);
-    if (ticket.purpose === "spin") {
-      // One spin token per ticket, capped per day inside a single write like the crate path
-      // below, so concurrent callbacks cannot both read the same count and grant past the cap.
-      const spins = {
+    const token = tokens[ticket.purpose];
+    if (token) {
+      // One token per ticket, capped per day inside a single write like the crate path below,
+      // so concurrent callbacks cannot both read the same count and grant past the cap.
+      const used = {
         $cond: [
-          { $eq: ["$spinAdDay", day] },
-          { $ifNull: ["$spinAdCount", 0] },
+          { $eq: [`$${token.day}`, day] },
+          { $ifNull: [`$${token.count}`, 0] },
           0,
         ],
       };
-      const allowed = { $lt: [spins, DAILY.spins.adPerDay] };
+      const allowed = { $lt: [used, token.cap] };
       const prior = await users.findOneAndUpdate({ _id: ticket.playerId }, [
         {
           $set: {
-            spinTokens: {
+            [token.tokens]: {
               $add: [
-                { $ifNull: ["$spinTokens", 0] },
+                { $ifNull: [`$${token.tokens}`, 0] },
                 { $cond: [allowed, 1, 0] },
               ],
             },
-            spinAdDay: day,
-            spinAdCount: { $cond: [allowed, { $add: [spins, 1] }, spins] },
+            [token.day]: day,
+            [token.count]: { $cond: [allowed, { $add: [used, 1] }, used] },
           },
         },
       ]);
       if (!prior) return false;
       return (
-        (prior.spinAdDay === day ? prior.spinAdCount || 0 : 0) <
-        DAILY.spins.adPerDay
+        (prior[token.day] === day ? prior[token.count] || 0 : 0) < token.cap
       );
     }
     if (ticket.purpose === "coins") {

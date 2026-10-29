@@ -7,10 +7,11 @@ import { SLOTS, crateByTier, newCrate, type Crate } from "./rewards";
 import { adsConfigured } from "./ads";
 import { currentSeason } from "./season";
 import { dailyKey } from "./catalog";
+import { LUCKY } from "../../mobile/src/physics/engine";
 
 /**
  * Daily-return systems: a seven-day login streak, a free gift every few hours, the spin wheel,
- * three daily missions and the seasonal CueMaster Pass.
+ * the Lucky Shot, three daily missions and the seasonal CueMaster Pass.
  *
  * Everything is rolled and paid here. Each claim is one atomic write whose filter *is* the claim
  * rule (not yet claimed today, gift cooled down, mission complete, tier reached), so a double tap
@@ -51,6 +52,11 @@ export const DAILY: {
   gift: { hours: number; coins: number };
   wheel: { label: string; weight: number; reward: Reward; jackpot?: boolean }[];
   spins: { freePerDay: number; adPerDay: number };
+  /**
+   * One free Lucky Shot a day, one more per rewarded video. Prizes pair with `LUCKY.rings` in
+   * the engine, innermost first; a cue ball off the rings or in a pocket wins nothing.
+   */
+  lucky: { adPerDay: number; prizes: { label: string; reward: Reward }[] };
   /** Coins for a rewarded video, for the player who is short of an entry fee. */
   videoCoins: { coins: number; perDay: number };
   missions: {
@@ -98,6 +104,15 @@ export const DAILY: {
     },
   ],
   spins: { freePerDay: 1, adPerDay: 3 },
+  lucky: {
+    adPerDay: 2,
+    prizes: [
+      { label: "Bullseye", reward: { coins: 1000, rubies: 5 } },
+      { label: "Inner ring", reward: { crate: "silver" } },
+      { label: "Middle ring", reward: { coins: 200 } },
+      { label: "Outer ring", reward: { coins: 50 } },
+    ],
+  },
   videoCoins: { coins: 150, perDay: 3 },
   missions: {
     perDay: 3,
@@ -363,7 +378,7 @@ function missionStages(event: MissionEvent, n: number, date = dailyKey()) {
  * slot count is read inside the write, never from the copy of the player the request started
  * with, so two claims landing together cannot both squeeze into the last slot.
  */
-function grant(reward: Reward, passXp = 0, now = new Date()) {
+export function grant(reward: Reward, passXp = 0, now = new Date()) {
   const crate: Crate | null = reward.crate ? newCrate(reward.crate, now) : null;
   const fallback = reward.crate ? DAILY.crateFallbackCoins[reward.crate] : 0;
   const held = { $ifNull: ["$crates", []] };
@@ -495,6 +510,21 @@ export function todayView(u: any, now = new Date()) {
         ...publicReward(w.reward),
       })),
     },
+    lucky: {
+      free: u.luckyDay === date ? 0 : 1,
+      tokens: u.luckyTokens || 0,
+      adShotsLeft: Math.max(
+        0,
+        DAILY.lucky.adPerDay -
+          (u.luckyAdDay === date ? u.luckyAdCount || 0 : 0),
+      ),
+      ads: adsConfigured(),
+      rings: LUCKY.rings.map((radius, i) => ({
+        radius,
+        label: DAILY.lucky.prizes[i].label,
+        ...publicReward(DAILY.lucky.prizes[i].reward),
+      })),
+    },
     missions: {
       list,
       bonus: {
@@ -531,6 +561,13 @@ export function installDaily(
   db: Db,
   required: RequestHandler,
   publicUser: (u: any) => any,
+  /** Replays a Lucky Shot on the referee and says where the cue ball stopped. */
+  replayLucky: (shot: object) => Promise<{
+    x: number;
+    z: number;
+    pocketed: boolean;
+    ring: number;
+  }>,
 ) {
   const users = db.collection<any>("players");
   const limit = rateLimit({
@@ -662,6 +699,66 @@ export function installDaily(
         jackpot: !!segment.jackpot,
         ...publicReward(segment.reward),
       },
+      granted: paid(updated),
+    });
+  });
+
+  /**
+   * The Lucky Shot. The app sends the shot the moment it is struck, before it has played out on
+   * screen; the referee replays it and the prize is whatever ring the cue ball stops in. Nothing
+   * is drawn at random, and the attempt and its prize land in one write, free shot first.
+   */
+  app.post("/me/lucky", required, limit, async (req: any, res) => {
+    const { shot } = z
+      .object({
+        shot: z
+          .object({
+            angle: z.number().finite().min(-1000).max(1000),
+            power: z.number().min(0.001).max(1),
+            side: z.number().min(-1).max(1),
+            top: z.number().min(-1).max(1),
+          })
+          .strict(),
+      })
+      .strict()
+      .parse(req.body);
+    const date = dailyKey();
+    const none = (u: any) =>
+      adsConfigured() && u && todayView(u).lucky.adShotsLeft > 0
+        ? "No Lucky Shots left. Watch a video for another."
+        : "No Lucky Shots left today. Your free shot is back tomorrow.";
+    // Refused before the replay when nothing is left; the write below checks again.
+    const view = todayView(req.player).lucky;
+    if (!view.free && !view.tokens) return refuse(req, res, 409, none);
+    let landing;
+    try {
+      landing = await replayLucky(shot);
+    } catch (e) {
+      return res.status(422).json({ error: (e as Error).message });
+    }
+    const prize = DAILY.lucky.prizes[landing.ring];
+    const { stages, paid } = grant(prize?.reward ?? {});
+    const updated =
+      (await users.findOneAndUpdate(
+        { _id: req.player._id, luckyDay: { $ne: date } },
+        [...stages, { $set: { luckyDay: date } }],
+        { returnDocument: "after" },
+      )) ||
+      (await users.findOneAndUpdate(
+        { _id: req.player._id, luckyTokens: { $gte: 1 } },
+        [
+          ...stages,
+          { $set: { luckyTokens: { $subtract: ["$luckyTokens", 1] } } },
+        ],
+        { returnDocument: "after" },
+      ));
+    if (!updated) return refuse(req, res, 409, none);
+    answer(res, updated, {
+      ring: landing.ring,
+      landing: { x: landing.x, z: landing.z, pocketed: landing.pocketed },
+      prize: prize
+        ? { label: prize.label, ...publicReward(prize.reward) }
+        : null,
       granted: paid(updated),
     });
   });

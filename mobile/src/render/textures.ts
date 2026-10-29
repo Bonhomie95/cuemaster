@@ -18,6 +18,8 @@ export const ballColors = [
   "#176a45",
   "#752329",
 ];
+/** Lucky Shot rings, innermost first: gold bullseye, silver for its crate, then teal and violet. */
+export const luckyColors = ["#ffd05b", "#dfe9f2", "#24dbb3", "#b98cff"];
 const cache = new Map<string, T.DataTexture>();
 const BALL_W = 512,
   BALL_H = 256,

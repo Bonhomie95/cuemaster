@@ -15,7 +15,7 @@ The launcher starts an isolated local MongoDB on `127.0.0.1:27028`, the API on `
 Open the printed preview URL. Guest play works without OAuth keys. The native app uses custom native modules and needs a development build, not Expo Go.
 
 - `npm run ios` / `npm run android`: build and launch the native app; keep the API running.
-- `npm run check`: mobile/server TypeScript, 64 physics/session/rule tests, and 14 API integration suites. Start `npm run dev` first; API tests create and remove only their own test account.
+- `npm run check`: mobile/server TypeScript, 78 physics/session/rule tests, and 22 API suites. Start `npm run dev` first (the suites need its MongoDB on 27028); API tests create and remove only their own test accounts.
 - `npm run api`: API only. Reads `server/.env` when run this way.
 - `npm --prefix mobile run benchmark`: desktop simulation benchmark; not a mobile frame-rate certification.
 
@@ -67,8 +67,11 @@ debugging disabled when testing Expo GL.
 - **Friend tables**: a five-letter room code, shared as a tappable `https://<api>/join/CODE` link that opens the app (`server/src/links.ts`).
 - **Invite codes**: both players get 500 coins and 10 rubies once the newcomer finishes three matches (`server/src/invites.ts`).
 - **Daily loop** (`server/src/daily.ts`, `mobile/src/app/DailyRewards.tsx`): a 7-day login streak, free coins every four hours, a daily prize wheel (+3 video spins), three daily missions with a bonus crate, and the 28-day CueMaster Pass (30 tiers, free and premium tracks). Local reminders for crates, free coins and lapsed players (`mobile/src/app/notify.ts`).
-- **Shop** (`mobile/src/app/Shop.tsx`): coin packs, ruby packs, a one-time starter pack, the season's premium pass, and three free-coin videos a day.
-- **Home and menus**: picture cards for each way to play, daily rewards and the shop in side columns, everything else under More (profile, leaderboard by trophies or level, invites, tournaments, practice, tables, cues, settings, How to play). New players pick a name and flag, and get a three-step coaching overlay on their first table.
+- **Lucky Shot** (Daily rewards → Lucky Shot, or the home's Daily rewards button while a shot waits): one free shot a day plus one per rewarded video (two a day) at a fixed layout, the cue ball alone on the head spot and four prize rings round the centre spot. The app sends the shot as it is struck; the referee worker replays it on the shared engine and pays the ring the cue ball stops in (bullseye 1,000 coins + 5 rubies, then a Silver crate, 200 and 50 coins), so it is a skill shot with no random draw. The rings are one table (`LUCKY` in `mobile/src/physics/engine.ts`) that the table draws, the server judges by and `/legal/odds` lists.
+- **Weekly leagues** (`server/src/leagues.ts`, More → Leagues): a player's first matchmade online result of the week puts them in that week's league at their tier (Bronze to Diamond), grouped up to 50 by trophies and ranked by coins won from online pots. From Monday 00:00 UTC the top 10 of a full league move up and earn their league's crate and the bottom 10 drop (a fifth each way in a smaller league). Each player's week settles lazily on their first request after it ends, in one write keyed on the week, so it pays once. Friend rooms do not count toward leagues.
+- **Shop** (`mobile/src/app/Shop.tsx`): coin packs, ruby packs, a one-time starter pack, the season's premium pass, the piggy bank, and three free-coin videos a day.
+- **Piggy bank**: every finished online or computer match drops coins into a locked bank (100 a win, 40 a loss, up to 5,000) in the result's own write. The shop shows what it holds; `piggy.break`, a consumable credited through the same `/store/claim` verification, pays out whatever it holds at that moment and empties it. It is offered from 1,000 coins up.
+- **Home and menus**: picture cards for each way to play, daily rewards and the shop in side columns, everything else under More (profile, leaderboard by trophies or level, weekly leagues, invites, tournaments, practice, tables, cues, settings, How to play). New players pick a name and flag, and get a three-step coaching overlay on their first table.
 - **Sound**: every table and interface sound is synthesised by `tools/build_sounds.py`; one switch in Settings silences both.
 - Branded native splash, Blender opening artwork, guest entry and a club home. Offline practice remains accessible when the API is unavailable.
 - Profile name, country, two original avatars, persistent account progress and account deletion.
@@ -97,7 +100,7 @@ Drag cloth to aim, turn the AIM wheel on the right for fine corrections, pull th
 
 `mobile/assets/models/cuemaster-table.blend` and `mobile/assets/lounge/lounge.blend` are editable originals. Rebuild table and club images with `tools/build_table.py`, `tools/build_lounge.py` and `tools/build_hero.py` (welcome art) using Blender's background mode. `tools/build_details.py` creates the ball-number masks (Pillow). `tools/build_icons.py` renders the coin, ruby, pack, crate, gift and pass art from Blender primitives (`blender -b --python tools/build_icons.py`), and `tools/build_sounds.py` synthesises every sound (numpy).
 
-`node tools/ui-walk.mjs` (with `npm run dev` running) plays the whole app in headless Chrome as two players: every page, the daily systems, the shop, a computer match, an online match between the two players (checking both phones end on the same table) and a friend room. It fails on any console error or missing control; `--store` saves store-size screenshots to `artifacts/store-screenshots/`.
+`node tools/ui-walk.mjs` (with `npm run dev` running) plays the whole app in headless Chrome as two players: every page, the daily systems (Lucky Shot included), the shop and piggy bank, a computer match, an online match between the two players (checking both phones end on the same table), a friend room, and the weekly league both players land in. It fails on any console error or missing control; `--store` saves store-size screenshots to `artifacts/store-screenshots/`.
 
 `mobile/src/app` contains club screens, API client and provider integration. `mobile/TableGame.tsx` contains the match screen. `server/src/catalog.ts` defines progression, venues and events. `server/src/verify.ts` replays the same engine used by the client before granting rewards.
 

@@ -1129,7 +1129,9 @@ function Game({
                           ? "BEHIND THE LINE"
                           : "BALL IN HAND"
                         : session.progress.finished
-                          ? "RACK OVER"
+                          ? session.drill === "lucky"
+                            ? "SHOT TAKEN"
+                            : "RACK OVER"
                           : `${turn === 0 ? "YOUR" : `${session.opponentName.toUpperCase()}’S`} TURN`}
               </Text>
               {!session.replaying &&
@@ -1371,54 +1373,58 @@ function Game({
               </Enter>
             </View>
           )}
-        {!paidMatch && session.progress.finished && !session.running && (
-          <View style={s.finishOverlay}>
-            <Enter style={s.finishCard} accessibilityLiveRegion="polite">
-              <Text style={s.finishTitle}>
-                {paidMatch
-                  ? localWinner(session.progress) === 0
-                    ? "You win"
-                    : `${session.cpu?.name || "Player 2"} wins`
-                  : "Rack complete"}
-              </Text>
-              <Text style={s.description}>
-                {session.progress.returned.includes(8)
-                  ? "8 ball down."
-                  : "Every object ball is pocketed."}
-              </Text>
-              {!paidMatch && (
-                <Press
-                  accessibilityRole="button"
-                  accessibilityLabel="Play again"
-                  style={s.playAgain}
-                  onPress={() => session.reset("break")}
-                >
-                  <Text style={s.playAgainText}>PLAY AGAIN · FULL RACK</Text>
-                </Press>
-              )}
-              {onExit && (
-                <Button
-                  label={
-                    exitBusy
-                      ? "Saving…"
-                      : paidMatch
-                        ? "Choose another venue"
-                        : "Return to club"
-                  }
-                  onPress={() => {
-                    if (!exitBusy) onExit();
-                  }}
-                />
-              )}
-              {session.drill !== "break" && (
-                <Button
-                  label="Repeat drill"
-                  onPress={() => session.reset(session.drill)}
-                />
-              )}
-            </Enter>
-          </View>
-        )}
+        {/* A Lucky Shot table "finishes" with its one shot; the club shows that verdict. */}
+        {!paidMatch &&
+          session.progress.finished &&
+          !session.running &&
+          session.drill !== "lucky" && (
+            <View style={s.finishOverlay}>
+              <Enter style={s.finishCard} accessibilityLiveRegion="polite">
+                <Text style={s.finishTitle}>
+                  {paidMatch
+                    ? localWinner(session.progress) === 0
+                      ? "You win"
+                      : `${session.cpu?.name || "Player 2"} wins`
+                    : "Rack complete"}
+                </Text>
+                <Text style={s.description}>
+                  {session.progress.returned.includes(8)
+                    ? "8 ball down."
+                    : "Every object ball is pocketed."}
+                </Text>
+                {!paidMatch && (
+                  <Press
+                    accessibilityRole="button"
+                    accessibilityLabel="Play again"
+                    style={s.playAgain}
+                    onPress={() => session.reset("break")}
+                  >
+                    <Text style={s.playAgainText}>PLAY AGAIN · FULL RACK</Text>
+                  </Press>
+                )}
+                {onExit && (
+                  <Button
+                    label={
+                      exitBusy
+                        ? "Saving…"
+                        : paidMatch
+                          ? "Choose another venue"
+                          : "Return to club"
+                    }
+                    onPress={() => {
+                      if (!exitBusy) onExit();
+                    }}
+                  />
+                )}
+                {session.drill !== "break" && (
+                  <Button
+                    label="Repeat drill"
+                    onPress={() => session.reset(session.drill)}
+                  />
+                )}
+              </Enter>
+            </View>
+          )}
         {win.width < win.height && Platform.OS !== "web" && (
           <View style={s.rotate}>
             <Text style={s.title}>A wider perspective.</Text>

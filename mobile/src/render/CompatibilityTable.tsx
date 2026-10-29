@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { PanResponder, StyleSheet, Text, View } from "react-native";
 import { session, skins } from "../game/session";
-import { H, W, R } from "../physics/engine";
-import { ballColors } from "./textures";
+import { H, W, R, LUCKY } from "../physics/engine";
+import { ballColors, luckyColors } from "./textures";
 import { aimGuide } from "./aimGuide";
 
 /** A GL-independent view of the same world, for devices whose renderer cannot start. */
@@ -134,6 +134,27 @@ export default function CompatibilityTable() {
                   backgroundColor: "#ffffff80",
                 }}
               />
+              {session.drill === "lucky" &&
+                [...LUCKY.rings].reverse().map((r, k) => {
+                  const i = LUCKY.rings.length - 1 - k,
+                    d = 2 * r * scale;
+                  return (
+                    <View
+                      key={r}
+                      style={{
+                        position: "absolute",
+                        left: (LUCKY.x + H) * scale - d / 2,
+                        top: (LUCKY.z + W) * scale - d / 2,
+                        width: d,
+                        height: d,
+                        borderRadius: d / 2,
+                        borderWidth: 1.5,
+                        borderColor: "#fff3cfd9",
+                        backgroundColor: luckyColors[i] + (i ? "2b" : "99"),
+                      }}
+                    />
+                  );
+                })}
               {[
                 [0, 0],
                 [width / 2, 0],

@@ -129,6 +129,14 @@ export type Today = {
     ads: boolean;
     segments: WheelSegment[];
   };
+  /** The Lucky Shot: rings innermost first, `radius` in metres on the table. */
+  lucky: {
+    free: number;
+    tokens: number;
+    adShotsLeft: number;
+    ads: boolean;
+    rings: (DailyReward & { radius: number; label: string })[];
+  };
   missions: {
     list: DailyMission[];
     bonus: {
@@ -157,6 +165,12 @@ export type Today = {
 /** Every daily claim answers with the new balance and the whole board. */
 export type DailyClaim = { player: Player; today: Today; granted: Granted };
 export type SpinResult = DailyClaim & { index: number; prize: WheelSegment };
+/** `POST /me/lucky`: where the referee's replay left the cue ball, and what that ring paid. */
+export type LuckyResult = DailyClaim & {
+  ring: number;
+  landing: { x: number; z: number; pocketed: boolean };
+  prize: (DailyReward & { label: string }) | null;
+};
 export const todayKey = () => new Date().toISOString().slice(0, 10);
 /** A two-letter country code as its flag emoji; a neutral mark when unset. */
 export function flag(code: string) {
