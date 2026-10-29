@@ -16,7 +16,7 @@ export type VenueMode = "online" | "friend" | "cpu" | "local";
 const MODES: { id: VenueMode; label: string; a11y: string }[] = [
   { id: "online", label: "Online", a11y: "Play a player online" },
   { id: "friend", label: "Friend", a11y: "Play a friend with a room code" },
-  { id: "cpu", label: "House rival", a11y: "Play a computer rival" },
+  { id: "cpu", label: "Vs Computer", a11y: "Play a computer rival" },
   { id: "local", label: "Pass & play", a11y: "Pass and play on one device" },
 ];
 export default function MatchVenues({

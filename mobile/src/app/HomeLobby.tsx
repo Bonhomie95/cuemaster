@@ -111,6 +111,22 @@ export default function HomeLobby(p: LobbyProps) {
       accent: "#b98cff",
       action: () => p.onPlay("cpu"),
     },
+    // The one-time starter pack, shown until it is bought: the cheapest first purchase is the
+    // one most players ever make, so it earns a card of its own.
+    ...(p.player.starterBought
+      ? []
+      : [
+          {
+            title: "Starter Pack",
+            emblem: "gift" as Icon,
+            caption: "Coins and rubies at our best price, once",
+            cta: "SEE OFFER",
+            art: welcome,
+            accent: "#ffd05b",
+            chip: "BEST VALUE",
+            action: p.onShop,
+          },
+        ]),
     {
       title: "Practice",
       emblem: "target",
