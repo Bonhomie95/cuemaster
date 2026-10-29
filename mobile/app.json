@@ -69,6 +69,14 @@
             "NSPrivacyCollectedDataTypePurposes": [
               "NSPrivacyCollectedDataTypePurposeThirdPartyAdvertising"
             ]
+          },
+          {
+            "NSPrivacyCollectedDataType": "NSPrivacyCollectedDataTypePurchaseHistory",
+            "NSPrivacyCollectedDataTypeLinked": true,
+            "NSPrivacyCollectedDataTypeTracking": false,
+            "NSPrivacyCollectedDataTypePurposes": [
+              "NSPrivacyCollectedDataTypePurposeAppFunctionality"
+            ]
           }
         ]
       },
@@ -147,7 +155,7 @@
       ]
     ],
     "scheme": "cuemaster",
-    "description": "A landscape 3D pool game with real-physics shots, practice challenges, cue progression, local pass-and-play and adaptive computer opponents.",
+    "description": "A landscape 3D pool game with real physics: play online 1 vs 1, invite friends to private tables, or play computer rivals, with daily rewards, a season pass and six city venues.",
     "primaryColor": "#070f18",
     "backgroundColor": "#070f18",
     "assetBundlePatterns": [

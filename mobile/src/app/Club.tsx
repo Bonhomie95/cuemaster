@@ -1355,8 +1355,13 @@ function ClubBody() {
                           <Text style={u.fine}>COINS</Text>
                         </View>
                       </View>
+                      <Text style={u.rewardText}>
+                        🏆 {player.trophies || 0} trophies · Online{" "}
+                        {player.stats.onlineWins || 0} wins ·{" "}
+                        {player.stats.onlineLosses || 0} losses
+                      </Text>
                       <Text style={u.body}>
-                        Head-to-head · {player.stats.cpuWins || 0} wins ·{" "}
+                        Vs computer · {player.stats.cpuWins || 0} wins ·{" "}
                         {player.stats.cpuLosses || 0} losses ·{" "}
                         {Math.round(
                           (100 * (player.stats.cpuWins || 0)) /
