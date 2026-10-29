@@ -3,7 +3,7 @@ import { Image, StyleSheet, Text, View } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
 import { Player } from "./api";
-import { portraits } from "./art";
+import { portraits, icons } from "./art";
 import { Press, CountUp } from "./motion";
 
 /**
@@ -77,15 +77,7 @@ export function CurrencyPill({
       scale={0.95}
       style={s.pill}
     >
-      <View
-        style={[s.icon, { backgroundColor: coins ? "#ffd05b26" : "#ff5f6d26" }]}
-      >
-        {coins ? (
-          <Text style={s.coin}>◉</Text>
-        ) : (
-          <Feather name="hexagon" size={13} color="#ff5f6d" />
-        )}
-      </View>
+      <Image source={coins ? icons.coin : icons.ruby} style={s.icon} />
       <CountUp
         value={value}
         style={[s.value, { color: coins ? "#ffe9a8" : "#ffd7db" }]}
@@ -143,14 +135,7 @@ const s = StyleSheet.create({
     borderColor: "#ffffff22",
     backgroundColor: "#04121dd9",
   },
-  icon: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  coin: { color: "#ffd05b", fontSize: 14, fontWeight: "900" },
+  icon: { width: 28, height: 28 },
   value: {
     fontSize: 14,
     fontWeight: "900",

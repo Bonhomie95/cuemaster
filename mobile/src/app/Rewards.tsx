@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
+  Image,
   ActivityIndicator,
   useWindowDimensions,
   Modal,
@@ -16,6 +17,7 @@ import { showRewardedVideo } from "./ads";
 import { celebrate } from "./feedback";
 import { remind } from "./notify";
 import { Press, Enter, CountUp, Pulse, CrateBurst } from "./motion";
+import { icons } from "./art";
 
 type Crate = {
   id: string;
@@ -31,7 +33,7 @@ type Crate = {
   rubyCost: number;
 };
 const TIER: Record<string, string> = {
-  practice: "#7f96a8",
+  practice: "#c8834a",
   club: "#24dbb3",
   silver: "#9fb6c7",
   gold: "#ffb82e",
@@ -104,11 +106,14 @@ function Button({
 export default function Rewards({
   player,
   onClose,
+  onShop,
   backLabel = "Back to profile",
   onPlayer,
 }: {
   player: Player;
   onClose: () => void;
+  /** Rubies are bought in the shop; the crates page points there. */
+  onShop?: () => void;
   backLabel?: string;
   onPlayer: (p: Player) => void;
 }) {
@@ -119,7 +124,6 @@ export default function Rewards({
     [opened, setOpened] = useState<any>(null),
     [revealed, setRevealed] = useState(false),
     [now, setNow] = useState(Date.now());
-  const [store, setStore] = useState<any>(null);
   // Landscape-locked, so the short edge is the real height. On a phone the slots have to give
   // up their padding or the buttons fall off the bottom of the card.
   const win = useWindowDimensions();
@@ -129,17 +133,7 @@ export default function Rewards({
     return () => clearInterval(timer);
   }, []);
   async function load() {
-    const [crates, rubies] = await Promise.all([
-      api("/me/crates"),
-      api("/store").then((s) => ({
-        available: s.platforms.ios || s.platforms.android,
-        packs: s.products
-          .filter((p: any) => p.kind === "rubies")
-          .map((p: any) => ({ ...p, rubies: p.grants.rubies })),
-      })),
-    ]);
-    setData(crates);
-    setStore(rubies);
+    setData(await api("/me/crates"));
   }
   useEffect(() => {
     let active = true;
@@ -230,21 +224,10 @@ export default function Rewards({
                             colors={[`${tint(crate.tier)}33`, "#00000000"]}
                             style={StyleSheet.absoluteFill}
                           />
-                          <View
-                            style={[
-                              s.crateChip,
-                              {
-                                borderColor: `${tint(crate.tier)}66`,
-                                backgroundColor: `${tint(crate.tier)}22`,
-                              },
-                            ]}
-                          >
-                            <Feather
-                              name={isReady(crate, now) ? "gift" : "package"}
-                              size={20}
-                              color={tint(crate.tier)}
-                            />
-                          </View>
+                          <Image
+                            source={icons.crate[crate.tier]}
+                            style={s.crateArt}
+                          />
                           <Text style={s.crateName}>{crate.name}</Text>
                           <Text style={s.crateMeta}>
                             {isReady(crate, now)
@@ -379,28 +362,23 @@ export default function Rewards({
               ),
             )}
           </View>
-          <View style={s.card}>
-            <View style={s.header}>
-              <Text style={s.heading}>Rubies</Text>
-              {!store?.available && (
-                <Text style={s.badge}>PURCHASES NOT AVAILABLE</Text>
-              )}
-            </View>
-            <Text style={s.copy}>
-              {store?.note ||
-                "Rubies open crates early. They never buy coins, cues or tables."}
-            </Text>
-            <View style={s.packs}>
-              {(store?.packs || []).map((p: any) => (
-                <View key={p.id} style={s.pack}>
-                  <Feather name="hexagon" size={16} color="#ff5f6d" />
-                  <Text style={s.packCount}>{p.rubies}</Text>
-                  <Text style={s.packLabel}>{p.label}</Text>
-                  {!!p.bonus && <Text style={s.packBonus}>{p.bonus}</Text>}
-                </View>
-              ))}
-            </View>
-          </View>
+          {!!onShop && (
+            <Press
+              accessibilityRole="button"
+              accessibilityLabel="Get rubies in the shop"
+              onPress={onShop}
+              style={s.shopRow}
+            >
+              <Image source={icons.rubies[1]} style={s.shopArt} />
+              <View style={{ flex: 1 }}>
+                <Text style={s.heading}>Can't wait?</Text>
+                <Text style={s.copy}>
+                  Rubies open a crate now: one ruby for each hour left.
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={20} color="#ffd05b" />
+            </Press>
+          )}
         </>
       )}
 
@@ -420,21 +398,16 @@ export default function Rewards({
                 celebrate();
               }}
             >
-              <View
-                style={[
-                  s.bigCrate,
-                  {
-                    borderColor: `${tint(opened?.opened?.tier)}88`,
-                    backgroundColor: `${tint(opened?.opened?.tier)}22`,
-                  },
-                ]}
-              >
-                <Feather
-                  name={revealed ? "gift" : "package"}
-                  size={54}
-                  color={tint(opened?.opened?.tier)}
-                />
-              </View>
+              <Image
+                source={
+                  revealed
+                    ? opened?.reward?.rubies
+                      ? icons.rubies[3]
+                      : icons.coins[3]
+                    : icons.crate[opened?.opened?.tier || "practice"]
+                }
+                style={s.bigCrate}
+              />
             </CrateBurst>
             <Text style={s.heading}>{opened?.opened?.name}</Text>
             {revealed ? (
@@ -519,7 +492,6 @@ const s = StyleSheet.create({
   rubyCount: { color: "#ffd7db", fontSize: 15, fontWeight: "800" },
   copy: { color: "#a9c4d6", fontSize: 13, lineHeight: 21 },
   heading: { color: "#fffdf3", fontSize: 18, fontWeight: "800" },
-  badge: { color: "#ffda95", fontSize: 11, fontWeight: "800" },
   slots: { flexDirection: "row", flexWrap: "wrap", gap: 12 },
   slotFrame: { flexGrow: 1, flexBasis: 190 },
   slot: {
@@ -550,29 +522,19 @@ const s = StyleSheet.create({
   },
   crateName: { color: "#fffdf3", fontSize: 15, fontWeight: "800" },
   crateMeta: { color: "#90aabd", fontSize: 12, marginBottom: 4 },
-  card: {
-    backgroundColor: "#04121def",
-    borderWidth: 1,
-    borderColor: "#ffffff1c",
-    borderRadius: 16,
-    padding: 20,
-    gap: 12,
-  },
-  packs: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  pack: {
-    flexGrow: 1,
-    flexBasis: 140,
+
+  shopRow: {
+    flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    padding: 14,
-    borderRadius: 12,
+    gap: 12,
+    padding: 12,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#ffffff1c",
-    backgroundColor: "#0a1f2edd",
+    borderColor: "#ff5f6d44",
+    backgroundColor: "#2a0f14aa",
   },
-  packCount: { color: "#ffd7db", fontSize: 20, fontWeight: "900" },
-  packLabel: { color: "#a9c4d6", fontSize: 11, textAlign: "center" },
-  packBonus: { color: "#24dbb3", fontSize: 11, fontWeight: "800" },
+  shopArt: { width: 56, height: 56 },
+
   button: {
     minHeight: 40,
     flexDirection: "row",
@@ -614,15 +576,8 @@ const s = StyleSheet.create({
     backgroundColor: "#061523",
   },
   reveal: { padding: 26, gap: 14, alignItems: "center" },
-  bigCrate: {
-    width: 120,
-    height: 120,
-    borderRadius: 30,
-    borderWidth: 2,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 6,
-  },
+  crateArt: { width: 64, height: 64, marginTop: -6, marginBottom: -2 },
+  bigCrate: { width: 150, height: 150, marginBottom: 2 },
   rewardRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   rewardValue: { color: "#fffdf3", fontSize: 20, fontWeight: "800" },
 });

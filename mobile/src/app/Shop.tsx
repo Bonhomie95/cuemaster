@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import {
+  Image,
   ActivityIndicator,
   Platform,
   ScrollView,
@@ -12,11 +13,19 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Player } from "./api";
 import { loadStore, buy } from "./billing";
 import { Press, Enter, Pulse } from "./motion";
+import { icons } from "./art";
 import { celebrate } from "./feedback";
 import { api } from "./api";
 import { showRewardedVideo } from "./ads";
 
 type Product = Awaited<ReturnType<typeof loadStore>>["products"][number];
+/** Bigger packs get bigger piles: the art is the first thing that says "more". */
+function artFor(p: Product, index: number) {
+  if (p.kind === "coins") return icons.coins[Math.min(index, 3)];
+  if (p.kind === "rubies") return icons.rubies[Math.min(index, 4)];
+  if (p.kind === "pass") return icons.pass;
+  return icons.gift;
+}
 type Tab = "offers" | "rubies" | "coins";
 
 /**
@@ -165,6 +174,7 @@ export default function Shop({
           {products.map((p, i) => (
             <Enter key={p.id} index={i} style={{ alignSelf: "stretch" }}>
               <Card
+                art={artFor(p, i)}
                 product={p}
                 available={store.available && p.available !== false}
                 busy={buying === p.id}
@@ -221,11 +231,13 @@ export default function Shop({
 }
 
 function Card({
+  art,
   product: p,
   available,
   busy,
   onBuy,
 }: {
+  art: any;
   product: Product;
   available: boolean;
   busy: boolean;
@@ -255,11 +267,7 @@ function Card({
         </View>
       )}
       <Pulse active={!pass && !ruby && !coins && !owned} style={s.art}>
-        <Feather
-          name={ruby ? "hexagon" : coins ? "disc" : pass ? "award" : "gift"}
-          size={ruby || coins ? 30 : 34}
-          color={accent}
-        />
+        <Image source={art} style={s.artImage} />
       </Pulse>
       <Text style={s.cardTitle} numberOfLines={2}>
         {p.label}
@@ -364,14 +372,8 @@ const s = StyleSheet.create({
     transform: [{ rotate: "35deg" }],
   },
   ribbonText: { color: "#10233a", fontSize: 10, fontWeight: "900" },
-  art: {
-    width: 54,
-    height: 54,
-    borderRadius: 16,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "#ffffff0d",
-  },
+  art: { height: 76, alignItems: "center", justifyContent: "center" },
+  artImage: { width: 84, height: 84 },
   cardTitle: { color: "#fffdf3", fontSize: 15, fontWeight: "900" },
   grant: { color: "#ffe9a8", fontSize: 12, fontWeight: "800" },
   buy: {

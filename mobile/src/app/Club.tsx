@@ -1183,6 +1183,10 @@ function ClubBody() {
               backLabel={
                 rewardsFrom === "profile" ? "Back to profile" : "Back to club"
               }
+              onShop={() => {
+                setShopTab("rubies");
+                setPage("shop");
+              }}
               onClose={() => setPage(rewardsFrom)}
             />
           ) : page === "wallet" ||

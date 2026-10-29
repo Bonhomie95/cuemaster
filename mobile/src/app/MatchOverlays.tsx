@@ -10,7 +10,7 @@ import {
 } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
-import { portraits } from "./art";
+import { portraits, icons } from "./art";
 import { flag } from "./api";
 import { Press, Enter, CountUp, Pulse } from "./motion";
 import { celebrate } from "./feedback";
@@ -25,14 +25,6 @@ export type Seat = {
   avatar: number;
   country?: string;
   caption: string;
-};
-const TIER_COLOR: Record<string, string> = {
-  practice: "#7f96a8",
-  club: "#24dbb3",
-  silver: "#9fb6c7",
-  gold: "#ffb82e",
-  champion: "#b98cff",
-  master: "#ff5f6d",
 };
 
 /** Two player cards slide in from the edges and meet at a VS mark. */
@@ -262,7 +254,7 @@ export function ResultCard({
         <View style={s.rewardRow}>
           {result.pot > 0 && (
             <Reward
-              icon={<Text style={s.coin}>◉</Text>}
+              icon={<Image source={icons.coin} style={s.rewardImage} />}
               value={<CountUp value={result.pot} style={s.rewardValue} />}
               label="COINS"
             />
@@ -278,10 +270,9 @@ export function ResultCard({
             <Reward
               icon={
                 <Pulse>
-                  <Feather
-                    name="package"
-                    size={20}
-                    color={TIER_COLOR[result.crate.tier] || "#ffd05b"}
+                  <Image
+                    source={icons.crate[result.crate.tier]}
+                    style={s.rewardImage}
                   />
                 </Pulse>
               }
@@ -563,7 +554,8 @@ const s = StyleSheet.create({
     borderColor: "#ffffff1c",
     backgroundColor: "#0a1f2edd",
   },
-  rewardIcon: { height: 24, justifyContent: "center" },
+  rewardIcon: { height: 36, justifyContent: "center" },
+  rewardImage: { width: 38, height: 38 },
   rewardValue: { color: "#fffdf3", fontSize: 18, fontWeight: "900" },
   rewardLabel: {
     color: "#8fa8bb",
