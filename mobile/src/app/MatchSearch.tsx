@@ -15,7 +15,7 @@ import {
   Share,
 } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
-import { Player, Venue } from "./api";
+import { API, Player, Venue } from "./api";
 import { portraits, venueArt } from "./art";
 import { Press, Pulse, Enter } from "./motion";
 import { online } from "../game/online";
@@ -33,18 +33,21 @@ export default function MatchSearch({
   venue,
   player,
   kind,
+  code: invited = "",
   onCancel,
   onRival,
 }: {
   venue: Venue | null;
   player: Player;
   kind: SearchKind;
+  /** A code from an invite link: joined straight away. */
+  code?: string;
   onCancel: () => void;
   onRival: () => void;
 }) {
   useSyncExternalStore(online.subscribe, online.snapshot);
   const [seconds, setSeconds] = useState(0);
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(invited);
   const rotation = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     const spin = Animated.loop(
@@ -67,6 +70,10 @@ export default function MatchSearch({
       });
     if (venue && kind === "host")
       online.createRoom(venue.id).catch((e) => {
+        online.error = e.message;
+      });
+    if (kind === "join" && invited.length === 5)
+      online.join(invited).catch((e) => {
         online.error = e.message;
       });
     return () => {
@@ -187,7 +194,7 @@ export default function MatchSearch({
                 accessibilityLabel="Share room code"
                 onPress={() =>
                   void Share.share({
-                    message: `Play me at CueMaster! Open the app, tap Play pool → Play a friend → Join, and enter ${online.roomCode}.`,
+                    message: `Play me at CueMaster! Tap to join my table: ${API}/join/${online.roomCode} (code ${online.roomCode})`,
                   }).catch(() => {})
                 }
                 style={s.share}

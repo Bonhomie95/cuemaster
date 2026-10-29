@@ -2,6 +2,8 @@ import AccountCenter from "./AccountCenter";
 import { warmTextures } from "../render/textures";
 import { TableHost } from "../render/TableHost";
 import Rewards from "./Rewards";
+import Welcome from "./Welcome";
+import { comeBack } from "./notify";
 import { Press, Enter, CountUp, PageFade, Pulse } from "./motion";
 import { celebrate } from "./feedback";
 import MatchSearch, { SearchKind } from "./MatchSearch";
@@ -244,6 +246,8 @@ function ClubBody() {
     [deleting, setDeleting] = useState(false),
     [deleteText, setDeleteText] = useState("");
   const [verificationError, setVerificationError] = useState("");
+  /** A brand-new guest picks a name and flag before anyone else sees "Rookie". */
+  const [naming, setNaming] = useState(false);
   const [levelUp, setLevelUp] = useState<number | null>(null);
   const lastLevel = useRef<number | null>(null);
   const retryVerification = useRef<(() => void) | null>(null);
@@ -268,6 +272,7 @@ function ClubBody() {
       if (await restoreToken()) {
         try {
           setPlayer(await api<Player>("/me"));
+          comeBack();
         } catch (e) {
           if (e instanceof ApiError && e.status === 401) await clearToken();
           else throw e;
@@ -409,6 +414,7 @@ function ClubBody() {
       const result = await api("/auth/guest", "POST", { adultConfirmed: true });
       await saveToken(result.token);
       setPlayer(result.player);
+      setNaming(true);
     });
   const login = (provider: "google" | "apple") =>
     work(async () => {
@@ -474,7 +480,26 @@ function ClubBody() {
   const [search, setSearch] = useState<{
     venue: Venue | null;
     kind: SearchKind;
+    code?: string;
   } | null>(null);
+  // An invite link (cuemaster://join/CODE) drops the player straight onto the friend's table.
+  const [invite, setInvite] = useState("");
+  useEffect(() => {
+    const read = (url: string | null) => {
+      const code = url?.match(/join\/([A-Z2-9]{5})/i)?.[1];
+      if (code) setInvite(code.toUpperCase());
+    };
+    void Linking.getInitialURL()
+      .then(read)
+      .catch(() => {});
+    const sub = Linking.addEventListener("url", (e) => read(e.url));
+    return () => sub.remove();
+  }, []);
+  useEffect(() => {
+    if (!invite || !player || launch) return;
+    setSearch({ venue: null, kind: "join", code: invite });
+    setInvite("");
+  }, [invite, player, launch]);
   /** What the table shows when a paid rack ends: filled in by the server's verdict. */
   const [result, setResult] = useState<MatchResult | null>(null);
   const [abandoned, setAbandoned] = useState<any>(null);
@@ -761,6 +786,7 @@ function ClubBody() {
         venue={search.venue}
         player={player}
         kind={search.kind}
+        code={search.code}
         onCancel={() => setSearch(null)}
         onRival={() => {
           online.cancel();
@@ -1521,6 +1547,14 @@ function ClubBody() {
         </Modal>
         {rewardModal}
         {levelModal}
+        <Welcome
+          player={player}
+          visible={naming}
+          onDone={(p) => {
+            if (p) setPlayer(p);
+            setNaming(false);
+          }}
+        />
         <Modal
           supportedOrientations={["landscape"]}
           transparent

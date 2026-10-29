@@ -137,7 +137,14 @@
         }
       ],
       "expo-font",
-      "expo-system-ui"
+      "expo-system-ui",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/android-icon-monochrome.png",
+          "color": "#ffd05b"
+        }
+      ]
     ],
     "scheme": "cuemaster",
     "description": "A landscape 3D pool game with real-physics shots, practice challenges, cue progression, local pass-and-play and adaptive computer opponents.",

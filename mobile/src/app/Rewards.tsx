@@ -14,6 +14,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { api, Player } from "./api";
 import { showRewardedVideo } from "./ads";
 import { celebrate } from "./feedback";
+import { remind } from "./notify";
 import { Press, Enter, CountUp, Pulse, CrateBurst } from "./motion";
 
 type Crate = {
@@ -329,11 +330,21 @@ export default function Rewards({
                               disabled={busy || unlocking}
                               onPress={() =>
                                 void work(async () => {
-                                  await api(
+                                  const r = await api(
                                     `/me/crates/${crate.id}/start`,
                                     "POST",
                                     {},
                                   );
+                                  const started = r.crates?.find(
+                                    (c: Crate) => c.id === crate.id,
+                                  );
+                                  if (started?.readyAt)
+                                    void remind(
+                                      "crate",
+                                      new Date(started.readyAt),
+                                      `${crate.name} unlocked`,
+                                      "Your crate is ready. Open it and collect your coins.",
+                                    );
                                   await load();
                                 })
                               }

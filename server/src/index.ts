@@ -4,6 +4,7 @@ import { installRewards, crateAwardStage, publicCrate } from "./rewards";
 import { installStore, billingConfigured } from "./store";
 import { installAds, adsConfigured } from "./ads";
 import { installLive } from "./live";
+import { installLinks } from "./links";
 import {
   appleConfigured,
   exchangeAppleCode,
@@ -120,6 +121,7 @@ app.use(
   }),
 );
 installLegal(app);
+installLinks(app);
 const origins = (
   process.env.CORS_ORIGINS || "http://localhost:8081,http://127.0.0.1:8081"
 )

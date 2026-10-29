@@ -652,3 +652,94 @@ const s = StyleSheet.create({
   },
   awayText: { color: "#ffe2a3", fontSize: 12, fontWeight: "700" },
 });
+
+const STEPS: { text: string; at: "centre" | "left" | "right" }[] = [
+  { text: "Drag anywhere on the cloth to aim the cue.", at: "centre" },
+  { text: "Pull the power bar down, then let go to shoot.", at: "left" },
+  {
+    text: "Tap SPIN for draw, follow or side. AIM opens fine aim.",
+    at: "right",
+  },
+];
+/**
+ * Three taps of coaching on a player's first table, then never again. The flag is per device
+ * and best-effort: if storage fails, the worst case is seeing the tips twice.
+ */
+export function Tutorial({ active }: { active: boolean }) {
+  const [step, setStep] = useState<number | null>(null);
+  useEffect(() => {
+    if (!active) return;
+    let alive = true;
+    void import("@react-native-async-storage/async-storage")
+      .then(({ default: storage }) => storage.getItem("cuemaster.tutorial"))
+      .then((seen) => alive && !seen && setStep(0))
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [active]);
+  if (step === null || !active) return null;
+  const current = STEPS[step];
+  const finish = () => {
+    setStep(null);
+    void import("@react-native-async-storage/async-storage")
+      .then(({ default: storage }) =>
+        storage.setItem("cuemaster.tutorial", "1"),
+      )
+      .catch(() => {});
+  };
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${current.text} Tap to continue.`}
+      onPress={() => (step + 1 < STEPS.length ? setStep(step + 1) : finish())}
+      style={[StyleSheet.absoluteFill, t.root]}
+    >
+      <Enter
+        key={step}
+        style={[
+          t.tip,
+          current.at === "left"
+            ? { left: 84, top: "38%" }
+            : current.at === "right"
+              ? { right: 96, top: "30%" }
+              : { alignSelf: "center", top: "44%" },
+        ]}
+      >
+        <Feather
+          name={
+            current.at === "left"
+              ? "arrow-left"
+              : current.at === "right"
+                ? "arrow-right"
+                : "move"
+          }
+          size={20}
+          color="#ffd05b"
+        />
+        <Text style={t.text}>{current.text}</Text>
+        <Text style={t.step}>
+          {step + 1}/{STEPS.length} ·{" "}
+          {step + 1 < STEPS.length ? "TAP" : "GOT IT"}
+        </Text>
+      </Enter>
+    </Pressable>
+  );
+}
+const t = StyleSheet.create({
+  root: { backgroundColor: "#02070d73", zIndex: 35 },
+  tip: {
+    position: "absolute",
+    maxWidth: 280,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    padding: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#ffd05b88",
+    backgroundColor: "#061523f2",
+  },
+  text: { color: "#fffdf3", fontSize: 14, fontWeight: "800", flexShrink: 1 },
+  step: { color: "#ffd05b", fontSize: 10, fontWeight: "900", letterSpacing: 1 },
+});

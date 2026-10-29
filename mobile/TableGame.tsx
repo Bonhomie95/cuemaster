@@ -49,6 +49,7 @@ import {
   EmoteBar,
   EmoteBubble,
   AwayBanner,
+  Tutorial,
 } from "./src/app/MatchOverlays";
 /** A finished paid rack, as the server settled it. */
 export type MatchResult = ResultView;
@@ -1022,6 +1023,14 @@ function Game({
             stake={`WINNER TAKES ◉ ${(entryFee * 2).toLocaleString()}`}
           />
         )}
+        <Tutorial
+          active={
+            session.shots === 0 &&
+            !session.cpuTurn &&
+            !session.running &&
+            Date.now() > Math.max(cpuIntro, online.match?.introUntil ?? 0)
+          }
+        />
         {isOnline && !!online.opponentAwayUntil && !online.result && (
           <AwayBanner
             until={online.opponentAwayUntil}
