@@ -3,7 +3,7 @@ import type { Express, RequestHandler } from "express";
 import type { Db, Document } from "mongodb";
 import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
-import { SLOTS, crateByTier, type Crate } from "./rewards";
+import { SLOTS, crateByTier, newCrate, type Crate } from "./rewards";
 import { adsConfigured } from "./ads";
 import { currentSeason } from "./season";
 import { dailyKey } from "./catalog";
@@ -51,6 +51,8 @@ export const DAILY: {
   gift: { hours: number; coins: number };
   wheel: { label: string; weight: number; reward: Reward; jackpot?: boolean }[];
   spins: { freePerDay: number; adPerDay: number };
+  /** Coins for a rewarded video, for the player who is short of an entry fee. */
+  videoCoins: { coins: number; perDay: number };
   missions: {
     perDay: number;
     pool: Mission[];
@@ -96,6 +98,7 @@ export const DAILY: {
     },
   ],
   spins: { freePerDay: 1, adPerDay: 3 },
+  videoCoins: { coins: 150, perDay: 3 },
   missions: {
     perDay: 3,
     pool: [
@@ -361,9 +364,7 @@ function missionStages(event: MissionEvent, n: number, date = dailyKey()) {
  * with, so two claims landing together cannot both squeeze into the last slot.
  */
 function grant(reward: Reward, passXp = 0, now = new Date()) {
-  const crate: Crate | null = reward.crate
-    ? { id: randomUUID(), tier: reward.crate, earnedAt: now, hoursOff: 0 }
-    : null;
+  const crate: Crate | null = reward.crate ? newCrate(reward.crate, now) : null;
   const fallback = reward.crate ? DAILY.crateFallbackCoins[reward.crate] : 0;
   const held = { $ifNull: ["$crates", []] };
   const room = { $lt: [{ $size: held }, SLOTS] };

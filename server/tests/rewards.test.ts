@@ -53,7 +53,7 @@ test("ruby cost falls as a crate unlocks and is zero once it is ready", () => {
     unlockAt: new Date(now + 12 * 3600000),
   };
   const full = rubyCost(crate, now);
-  assert.equal(full, 24, "12 hours at one ruby per half hour");
+  assert.equal(full, 12, "12 hours at one ruby per started hour");
   assert.ok(rubyCost(crate, now + 6 * 3600000) < full);
   assert.equal(rubyCost(crate, now + 12 * 3600000), 0);
   assert.equal(publicCrate(crate, now + 12 * 3600000).ready, true);
@@ -160,4 +160,48 @@ test("crates are earned by winning, bounded by slots, and paid out exactly once"
   );
   assert.equal((await call("/me")).body.rubies, 0);
   await call("/me", "DELETE", { confirm: "DELETE" });
+});
+
+test("a crate's contents are fixed when it is earned, so rubies only buy time", async () => {
+  const { MongoClient } = await import("mongodb");
+  const mongo = await new MongoClient(
+    process.env.TEST_MONGODB_URI || "mongodb://127.0.0.1:27028",
+  ).connect();
+  const players = mongo
+    .db(process.env.TEST_MONGODB_DB || "cuemaster")
+    .collection<any>("players");
+  let token = "";
+  const call = async (path: string, method = "GET", body?: unknown) => {
+    const r = await fetch(base + path, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return { status: r.status, body: r.status === 204 ? null : await r.json() };
+  };
+  try {
+    token = (await call("/auth/guest", "POST", { adultConfirmed: true })).body
+      .token;
+    const crate = (await winVerifiedRack(call)).body.crate;
+    const me = (await call("/me")).body;
+    const stored = (await players.findOne({ _id: me.id })).crates.find(
+      (c: any) => c.id === crate.id,
+    );
+    assert.ok(stored.contents, "contents are rolled at the win");
+    const listed = (await call("/me/crates")).body.crates[0];
+    assert.equal(listed.contents, undefined, "and never shown before opening");
+    await players.updateOne({ _id: me.id }, { $set: { rubies: 200 } });
+    await call(`/me/crates/${crate.id}/start`, "POST", {});
+    const opened = await call(`/me/crates/${crate.id}/open`, "POST", {
+      spendRubies: true,
+    });
+    assert.equal(opened.status, 200);
+    assert.deepEqual(opened.body.reward, stored.contents);
+  } finally {
+    await call("/me", "DELETE", { confirm: "DELETE" });
+    await mongo.close();
+  }
 });

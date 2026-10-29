@@ -122,8 +122,8 @@ test("concurrent signed redemptions cannot race past the daily video limit", asy
     200,
   );
 
-  // Ten tickets, all redeemed at once. The cap is six, and the read-then-write it replaced let
-  // every concurrent redemption see the same count and grant on top of it.
+  // Ten tickets, all redeemed at once. A crate takes at most three videos (and a day six), and
+  // the read-then-write this replaced let every concurrent redemption grant on top of the cap.
   const tickets = [];
   for (let i = 0; i < 10; i++) {
     const t = await call("/ads/reward-ticket", "POST", { crateId: crate.id });
@@ -135,10 +135,10 @@ test("concurrent signed redemptions cannot race past the daily video limit", asy
   );
   const after = await call("/me/crates");
   const held = after.body.crates.find((c: any) => c.id === crate.id);
-  assert.ok(
-    held.hoursOff <= 6,
-    `hoursOff ${held.hoursOff} must respect the cap of 6`,
-  );
-  assert.equal(after.body.videosLeft, 0);
+  assert.equal(held.hoursOff, 3, "exactly the per-crate cap, never more");
+  assert.equal(held.videosLeft, 0);
+  assert.equal(after.body.videosLeft, 3, "the rest of the day's videos remain");
+  const more = await call("/ads/reward-ticket", "POST", { crateId: crate.id });
+  assert.equal(more.status, 409, "a crate out of videos refuses a new ticket");
   await call("/me", "DELETE", { confirm: "DELETE" });
 });

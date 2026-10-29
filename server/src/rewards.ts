@@ -4,6 +4,7 @@ import type { Db } from "mongodb";
 import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import { track } from "./daily";
+import { currentSeason } from "./season";
 
 /**
  * Reward crates.
@@ -24,13 +25,29 @@ export type Crate = {
   earnedAt: Date;
   unlockAt?: Date;
   hoursOff?: number;
+  /**
+   * Rolled when the crate is earned and never shown before opening. Rubies and videos then
+   * only buy time, never a fresh random draw, which keeps paid speed-ups clear of the stores'
+   * loot-box rules while the crate stays a surprise.
+   */
+  contents?: { coins: number; rubies: number };
 };
+export const newCrate = (tier: string, earnedAt = new Date()): Crate => ({
+  id: randomUUID(),
+  tier,
+  earnedAt,
+  hoursOff: 0,
+  contents: rollContents(tier),
+});
 export const SLOTS = 4;
 /** A day's worth of claimed wins cannot outrun the unlock timers, but cap it anyway. */
 export const DAILY_CRATE_LIMIT = 12;
 /** Rewarded-video speed-ups per day, enforced by the server. */
 export const DAILY_VIDEO_LIMIT = 6;
-const MINUTES_PER_RUBY = 30;
+/** Videos can finish a small crate but only dent a big one; rubies or time do the rest. */
+export const VIDEOS_PER_CRATE = 3;
+/** One ruby per started hour: about $0.05 an hour at pack prices, so a skip is an easy yes. */
+const MINUTES_PER_RUBY = 60;
 
 export const CRATES = [
   {
@@ -147,6 +164,7 @@ export function publicCrate(crate: Crate, now = Date.now()) {
     readyAt: ready,
     ready: !!ready && ready.getTime() <= now,
     hoursOff: crate.hoursOff || 0,
+    videosLeft: Math.max(0, VIDEOS_PER_CRATE - (crate.hoursOff || 0)),
     rubyCost: rubyCost(crate, now),
   };
 }
@@ -203,7 +221,11 @@ export function installRewards(
       return res.status(409).json({
         error: "Another crate is already unlocking. Open it first.",
       });
-    const unlockAt = new Date(now + crateByTier(crate.tier).hours * 3600000);
+    // A premium pass halves every unlock timer for its season.
+    const pass = req.player.passPremiumSeason === currentSeason().id ? 0.5 : 1;
+    const unlockAt = new Date(
+      now + crateByTier(crate.tier).hours * pass * 3600000,
+    );
     const updated = await users.findOneAndUpdate(
       {
         _id: req.player._id,
@@ -245,7 +267,7 @@ export function installRewards(
         return res
           .status(409)
           .json({ error: `Not enough rubies. This crate costs ${cost}.` });
-      const reward = rollContents(crate.tier);
+      const reward = crate.contents ?? rollContents(crate.tier);
       // One atomic write removes the crate and pays it out, so a retry cannot pay twice.
       const updated = await users.findOneAndUpdate(
         {
@@ -289,12 +311,7 @@ export function installRewards(
  * document the request was read with.
  */
 export function crateAwardStage() {
-  const crate: Crate = {
-    id: randomUUID(),
-    tier: rollCrate().tier,
-    earnedAt: new Date(),
-    hoursOff: 0,
-  };
+  const crate = newCrate(rollCrate().tier);
   const day = todayKey();
   const used = {
     $cond: [{ $eq: ["$crateDay", day] }, { $ifNull: ["$crateCount", 0] }, 0],

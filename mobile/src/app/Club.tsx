@@ -1222,6 +1222,10 @@ function ClubBody() {
                   });
               }}
               onJoin={() => setSearch({ venue: null, kind: "join" })}
+              onShop={() => {
+                setShopTab("coins");
+                setPage("shop");
+              }}
               onClose={() => setPage("home")}
             />
           ) : page !== "profile" ? (
@@ -1521,6 +1525,11 @@ function ClubBody() {
                         icon="external-link"
                         label="Delete your account on the web"
                         url={config.urls?.deleteAccount}
+                      />
+                      <NavRow
+                        icon="percent"
+                        label="Reward odds"
+                        url={config.urls?.odds}
                       />
                       <Text style={u.fine}>
                         CUEMASTER {version} · COINS ARE VIRTUAL ITEMS, NOT MONEY

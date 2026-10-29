@@ -3,7 +3,7 @@ import type { Express, RequestHandler } from "express";
 import type { Db } from "mongodb";
 import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
-import { DAILY_VIDEO_LIMIT } from "./rewards";
+import { DAILY_VIDEO_LIMIT, VIDEOS_PER_CRATE } from "./rewards";
 import { DAILY } from "./daily";
 
 /**
@@ -77,22 +77,30 @@ export function installAds(app: Express, db: Db, required: RequestHandler) {
         return res
           .status(409)
           .json({ error: "Video rewards are not available yet." });
-      // A ticket pays for one thing: an hour off a started crate, or one extra wheel spin.
+      // A ticket pays for one thing: an hour off a started crate, one extra wheel spin, or a
+      // handful of coins for a player who is short of an entry fee.
       const input = z
         .union([
           z.object({ crateId: z.string().uuid() }).strict(),
-          z.object({ purpose: z.literal("spin") }).strict(),
+          z.object({ purpose: z.enum(["spin", "coins"]) }).strict(),
         ])
         .parse(req.body);
-      if ("purpose" in input) {
-        // Refuse before the advert rather than after it: a capped day would pay nothing.
-        // `redeem()` enforces the same cap again inside its own write.
-        const day = new Date().toISOString().slice(0, 10);
+      // Refuse before the advert rather than after it: a capped day would pay nothing.
+      // `redeem()` enforces the same caps again inside its own write.
+      const day = new Date().toISOString().slice(0, 10);
+      if ("purpose" in input && input.purpose === "spin") {
         const used =
           req.player.spinAdDay === day ? req.player.spinAdCount || 0 : 0;
         if (used >= DAILY.spins.adPerDay)
           return res.status(409).json({
             error: "Today's video spins are used. More tomorrow.",
+          });
+      } else if ("purpose" in input) {
+        const used =
+          req.player.coinAdDay === day ? req.player.coinAdCount || 0 : 0;
+        if (used >= DAILY.videoCoins.perDay)
+          return res.status(409).json({
+            error: "Today's free-coin videos are used. More tomorrow.",
           });
       } else {
         const crate = (req.player.crates || []).find(
@@ -102,12 +110,17 @@ export function installAds(app: Express, db: Db, required: RequestHandler) {
           return res
             .status(409)
             .json({ error: "Start the crate before speeding it up." });
+        if ((crate.hoursOff || 0) >= VIDEOS_PER_CRATE)
+          return res.status(409).json({
+            error:
+              "This crate has had its videos. Rubies or time will open it.",
+          });
       }
       const ticket = {
         _id: randomUUID(),
         playerId: req.player._id,
         ...("purpose" in input
-          ? { purpose: "spin" }
+          ? { purpose: input.purpose }
           : { purpose: "crate", crateId: input.crateId }),
         redeemed: false,
         createdAt: new Date(),
@@ -187,6 +200,37 @@ export function installAds(app: Express, db: Db, required: RequestHandler) {
         DAILY.spins.adPerDay
       );
     }
+    if (ticket.purpose === "coins") {
+      const watched = {
+        $cond: [
+          { $eq: ["$coinAdDay", day] },
+          { $ifNull: ["$coinAdCount", 0] },
+          0,
+        ],
+      };
+      const allowed = { $lt: [watched, DAILY.videoCoins.perDay] };
+      const prior = await users.findOneAndUpdate({ _id: ticket.playerId }, [
+        {
+          $set: {
+            coins: {
+              $add: [
+                { $ifNull: ["$coins", 0] },
+                { $cond: [allowed, DAILY.videoCoins.coins, 0] },
+              ],
+            },
+            coinAdDay: day,
+            coinAdCount: {
+              $cond: [allowed, { $add: [watched, 1] }, watched],
+            },
+          },
+        },
+      ]);
+      if (!prior) return false;
+      return (
+        (prior.coinAdDay === day ? prior.coinAdCount || 0 : 0) <
+        DAILY.videoCoins.perDay
+      );
+    }
     const held = { $ifNull: ["$crates", []] };
     const used = {
       $cond: [{ $eq: ["$videoDay", day] }, { $ifNull: ["$videoCount", 0] }, 0],
@@ -195,9 +239,24 @@ export function installAds(app: Express, db: Db, required: RequestHandler) {
       $and: [
         { $lt: [used, DAILY_VIDEO_LIMIT] },
         {
+          // Only a crate that still has video time left can take another hour off.
           $in: [
             ticket.crateId,
-            { $map: { input: held, as: "c", in: "$$c.id" } },
+            {
+              $map: {
+                input: {
+                  $filter: {
+                    input: held,
+                    as: "c",
+                    cond: {
+                      $lt: [{ $ifNull: ["$$c.hoursOff", 0] }, VIDEOS_PER_CRATE],
+                    },
+                  },
+                },
+                as: "c",
+                in: "$$c.id",
+              },
+            },
           ],
         },
       ],
@@ -238,7 +297,10 @@ export function installAds(app: Express, db: Db, required: RequestHandler) {
     const usedBefore = before.videoDay === day ? before.videoCount || 0 : 0;
     return (
       usedBefore < DAILY_VIDEO_LIMIT &&
-      (before.crates || []).some((c: any) => c.id === ticket.crateId)
+      (before.crates || []).some(
+        (c: any) =>
+          c.id === ticket.crateId && (c.hoursOff || 0) < VIDEOS_PER_CRATE,
+      )
     );
   }
 

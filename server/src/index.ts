@@ -231,6 +231,7 @@ app.get("/config", (_req, res) =>
       terms: publicUrl("/legal/terms"),
       support: publicUrl("/legal/support"),
       deleteAccount: publicUrl("/legal/delete-account"),
+      odds: publicUrl("/legal/odds"),
     },
   }),
 );

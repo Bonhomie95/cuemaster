@@ -13,6 +13,8 @@ import { Player } from "./api";
 import { loadStore, buy } from "./billing";
 import { Press, Enter, Pulse } from "./motion";
 import { celebrate } from "./feedback";
+import { api } from "./api";
+import { showRewardedVideo } from "./ads";
 
 type Product = Awaited<ReturnType<typeof loadStore>>["products"][number];
 type Tab = "offers" | "rubies" | "coins";
@@ -65,6 +67,30 @@ export default function Shop({
         );
       else if (r.status === "failed")
         setError(r.message || "The purchase did not go through.");
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBuying("");
+    }
+  };
+  // A player short of an entry fee can always earn a little, which also makes the shop the
+  // place to look when coins run out, rather than a dead end.
+  const freeCoins = async () => {
+    if (buying) return;
+    setBuying("video");
+    setError("");
+    setNotice("");
+    try {
+      const outcome = await showRewardedVideo({ purpose: "coins" });
+      if (outcome === "unavailable")
+        throw new Error("No video is available right now. Try again shortly.");
+      if (outcome === "granted") {
+        // AdMob's signed callback grants the coins; give it a moment, then read back.
+        await new Promise((r) => setTimeout(r, 1200));
+        onPlayer(await api<Player>("/me"));
+        celebrate();
+        setNotice("Free coins added.");
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -146,6 +172,36 @@ export default function Shop({
               />
             </Enter>
           ))}
+          {tab !== "rubies" && Platform.OS !== "web" && (
+            <Enter index={products.length} style={{ alignSelf: "stretch" }}>
+              <View style={[s.card, { borderColor: "#24dbb355" }]}>
+                <LinearGradient
+                  pointerEvents="none"
+                  colors={["#24dbb333", "#00000000"]}
+                  style={StyleSheet.absoluteFill}
+                />
+                <View style={s.art}>
+                  <Feather name="play-circle" size={32} color="#24dbb3" />
+                </View>
+                <Text style={s.cardTitle}>Free coins</Text>
+                <Text style={s.grant}>◉ 150 coins per video</Text>
+                <Text style={[s.grant, { color: "#a9c4d6" }]}>Three a day</Text>
+                <Press
+                  accessibilityRole="button"
+                  accessibilityLabel="Watch a video for free coins"
+                  disabled={!!buying}
+                  onPress={() => void freeCoins()}
+                  style={[s.buy, { backgroundColor: "#24dbb3" }]}
+                >
+                  {buying === "video" ? (
+                    <ActivityIndicator color="#10233a" />
+                  ) : (
+                    <Text style={s.buyText}>Watch</Text>
+                  )}
+                </Press>
+              </View>
+            </Enter>
+          )}
           {!products.length && (
             <Text style={s.empty}>
               Nothing here right now. Check back soon.

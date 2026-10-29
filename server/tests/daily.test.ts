@@ -633,3 +633,39 @@ test(
     }
   },
 );
+
+test("a video tops up coins, three times a day", async () => {
+  const r = await fetch(base + "/auth/guest", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ adultConfirmed: true }),
+  });
+  const { token, player } = await r.json();
+  const call = async (path: string, body?: unknown) => {
+    const res = await fetch(base + path, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body ?? {}),
+    });
+    return { status: res.status, body: await res.json().catch(() => null) };
+  };
+  for (let i = 0; i < 3; i++) {
+    const t = await call("/ads/reward-ticket", { purpose: "coins" });
+    assert.equal(t.status, 201);
+    assert.equal(
+      (await call(`/ads/reward-ticket/${t.body.ticket}/redeem`)).status,
+      200,
+    );
+  }
+  assert.equal(
+    (await call("/ads/reward-ticket", { purpose: "coins" })).status,
+    409,
+  );
+  const me = await fetch(base + "/me", {
+    headers: { Authorization: `Bearer ${token}` },
+  }).then((res) => res.json());
+  assert.equal(me.coins, player.coins + 450);
+});

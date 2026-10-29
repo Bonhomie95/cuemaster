@@ -177,6 +177,7 @@ export type ProviderConfig = {
     terms: string;
     support: string;
     deleteAccount: string;
+    odds?: string;
   };
 };
 const host =

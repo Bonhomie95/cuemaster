@@ -1,4 +1,6 @@
 import type { Express } from "express";
+import { crateOdds } from "./rewards";
+import { DAILY } from "./daily";
 
 /**
  * Public policy pages. Both stores require reachable URLs for privacy, terms, support and
@@ -139,6 +141,36 @@ const DELETE_PAGE = () => `
 <h2>What is kept, and for how long</h2>
 <p>Encrypted backups are rotated out within 30 days. Aggregate, non-identifying counts (for example the number of challenges completed across all players) are kept. Records we must retain by law are kept only for as long as the law requires.</p>`;
 
+/**
+ * The odds behind every random reward, from the same tables the server rolls against, so the
+ * page can never drift from the game. Crates are earned, never sold, and their contents are
+ * fixed when earned; this page exists for the stores' age-rating questions and for players
+ * who want to know.
+ */
+const ODDS = () => {
+  const crates = crateOdds();
+  const wheelTotal = DAILY.wheel.reduce((n, w) => n + w.weight, 0);
+  return `<p>Every reward below is decided by the CueMaster server. Crates are earned by winning a match or collected from daily rewards; they cannot be bought. A crate's contents are fixed the moment it is earned, so opening it early with rubies or a video only saves time.</p>
+<h2>Which crate a win seals</h2><ul>${crates
+    .map(
+      (c) =>
+        `<li>${escape(c.name)}: ${c.chance}% · unlocks in ${c.hours} hour${c.hours === 1 ? "" : "s"}</li>`,
+    )
+    .join("")}</ul>
+<h2>What is inside each crate</h2><ul>${crates
+    .map(
+      (c) =>
+        `<li>${escape(c.name)}: ${c.coins.min.toLocaleString("en")}–${c.coins.max.toLocaleString("en")} coins, every value equally likely; plus a ${c.rubyChance}% chance of ${c.rubies.min === c.rubies.max ? c.rubies.min : `${c.rubies.min}–${c.rubies.max}`} ${c.rubies.max === 1 ? "ruby" : "rubies"}</li>`,
+    )
+    .join("")}</ul>
+<h2>The daily prize wheel</h2><p>One free spin a day; up to ${DAILY.spins.adPerDay} more for watching a video. Spins are never sold.</p><ul>${DAILY.wheel
+    .map(
+      (w) =>
+        `<li>${escape(w.label)}: ${((100 * w.weight) / wheelTotal).toFixed(1)}%</li>`,
+    )
+    .join("")}</ul>`;
+};
+
 export function installLegal(app: Express) {
   const html = (res: any, body: string) =>
     res.type("html").set("Cache-Control", "public, max-age=300").send(body);
@@ -154,5 +186,6 @@ export function installLegal(app: Express) {
   app.get("/legal/delete-account", (_q, res) =>
     html(res, page("Delete your account", DELETE_PAGE())),
   );
+  app.get("/legal/odds", (_q, res) => html(res, page("Reward odds", ODDS())));
   app.get("/legal", (_q, res) => res.redirect(302, "/legal/privacy"));
 }

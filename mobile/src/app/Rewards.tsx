@@ -26,6 +26,8 @@ type Crate = {
   readyAt: string | null;
   ready: boolean;
   hoursOff: number;
+  /** Videos this crate can still take; each takes an hour off. */
+  videosLeft: number;
   rubyCost: number;
 };
 const TIER: Record<string, string> = {
@@ -299,9 +301,13 @@ export default function Rewards({
                                   label={
                                     busy
                                       ? "Loading video…"
-                                      : `Watch · −1h (${data.videosLeft})`
+                                      : `Watch · −1h (${Math.min(data.videosLeft, crate.videosLeft)})`
                                   }
-                                  disabled={busy || !data.videosLeft}
+                                  disabled={
+                                    busy ||
+                                    !data.videosLeft ||
+                                    !crate.videosLeft
+                                  }
                                   onPress={() =>
                                     void work(async () => {
                                       const outcome = await showRewardedVideo(

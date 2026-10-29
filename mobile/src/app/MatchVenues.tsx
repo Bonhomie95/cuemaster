@@ -25,6 +25,7 @@ export default function MatchVenues({
   busy,
   onEnter,
   onJoin,
+  onShop,
   onClose,
 }: {
   venues: Venue[];
@@ -32,6 +33,8 @@ export default function MatchVenues({
   busy: boolean;
   onEnter: (v: Venue, mode: VenueMode) => void;
   onJoin: () => void;
+  /** Short of an entry fee: the shop, where a video or a pack fixes it. */
+  onShop: () => void;
   onClose: () => void;
 }) {
   useSyncExternalStore(online.subscribe, online.snapshot);
@@ -139,8 +142,8 @@ export default function MatchVenues({
               <Press
                 accessibilityRole="button"
                 accessibilityLabel={`Enter ${v.name} for ${v.entry} coins`}
-                disabled={busy || locked || poor}
-                onPress={() => onEnter(v, mode)}
+                disabled={busy || locked}
+                onPress={() => (poor ? onShop() : onEnter(v, mode))}
                 style={[
                   s.button,
                   // Locked and unaffordable rooms are states, not offers: they stay dark.
@@ -157,7 +160,7 @@ export default function MatchVenues({
                   {locked
                     ? `Level ${v.level} required`
                     : poor
-                      ? "Not enough coins"
+                      ? "Get coins"
                       : busy
                         ? "Starting…"
                         : mode === "online"
