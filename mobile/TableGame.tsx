@@ -149,8 +149,9 @@ function Power({ compact = false }: { compact?: boolean }) {
           disabled && { opacity: 0.3 },
         ]}
       >
-        {/* The track reads empty at rest; the bright fill is the whole affordance. */}
-        <View style={[s.powerFillClip, { height: `${6 + power * 94}%` }]}>
+        {/* The bright fill is the power; the cue inside slides back as it is pulled, the
+            way the big pool games draw it, so the control explains itself. */}
+        <View style={[s.powerFillClip, { height: `${power * 100}%` }]}>
           <LinearGradient
             colors={["#24dbb3", "#ffd05b", "#ff694c"]}
             locations={[0, 0.55, 1]}
@@ -163,7 +164,25 @@ function Power({ compact = false }: { compact?: boolean }) {
             style={[s.powerTick, { top: ((travel + 30) * n) / 4 }]}
           />
         ))}
-        <View style={[s.powerKnob, { top: power * travel }]} />
+        <View
+          pointerEvents="none"
+          style={[s.powerCue, { height: travel + 30, top: 6 + power * travel }]}
+        >
+          <View style={s.powerTip} />
+          <View style={s.powerFerrule} />
+          <LinearGradient
+            colors={["#f3dcae", "#c99a5b"]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={{ width: 10, flex: 1 }}
+          />
+          <LinearGradient
+            colors={["#5b3320", "#2b160c"]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={{ width: 12, height: 26, borderRadius: 3 }}
+          />
+        </View>
       </View>
       {pulling ? (
         <Text style={s.powerValue}>{Math.round(power * 100)}%</Text>
@@ -269,8 +288,13 @@ function Spin({
     </View>
   );
 }
-function FineAim({ narrow = false }: { narrow?: boolean }) {
+/**
+ * Fine aim as a ribbed wheel on the right rail, always in reach: drag it up or down for
+ * hair-line corrections. The ribs move with the finger, so it feels like turning a dial.
+ */
+function FineAim() {
   const start = React.useRef(0);
+  const [offset, setOffset] = useState(0);
   const pan = useMemo(
     () =>
       PanResponder.create({
@@ -281,34 +305,40 @@ function FineAim({ narrow = false }: { narrow?: boolean }) {
         },
         onPanResponderMove: (_, g) => {
           if (session.cpuTurn || session.running) return;
-          session.angle = start.current + g.dx * 0.0013;
+          session.angle = start.current - g.dy * 0.0011;
+          setOffset(g.dy);
         },
       }),
     [],
   );
+  const spacing = 9;
   return (
-    <View style={s.fineAimWrap}>
-      <Text style={s.controlCaption}>FINE AIM</Text>
-      <View
-        {...pan.panHandlers}
-        accessibilityLabel="Drag horizontally to fine tune aim"
-        hitSlop={14}
-        style={[s.fineAim, narrow && { width: 150 }]}
-      >
-        <Feather name="chevron-left" size={15} color="#9fc2d6" />
-        {Array.from({ length: 17 }, (_, i) => (
-          <View
-            key={i}
-            style={{
-              width: 1,
-              height: i === 8 ? 13 : i % 4 === 0 ? 9 : 5,
-              borderRadius: 1,
-              backgroundColor: i === 8 ? C.gold : "#ffffff4d",
-            }}
-          />
-        ))}
-        <Feather name="chevron-right" size={15} color="#9fc2d6" />
-      </View>
+    <View
+      {...pan.panHandlers}
+      accessibilityLabel="Drag up or down to fine tune aim"
+      hitSlop={14}
+      style={s.wheel}
+    >
+      <LinearGradient
+        pointerEvents="none"
+        colors={["#00000099", "#ffffff14", "#00000099"]}
+        style={StyleSheet.absoluteFill}
+      />
+      {Array.from({ length: 16 }, (_, i) => (
+        <View
+          key={i}
+          pointerEvents="none"
+          style={[
+            s.wheelRib,
+            {
+              top:
+                ((((i * spacing + offset) % (16 * spacing)) + 16 * spacing) %
+                  (16 * spacing)) -
+                4,
+            },
+          ]}
+        />
+      ))}
     </View>
   );
 }
@@ -929,7 +959,6 @@ function Game({
     "skins" | "drills" | "spin" | "settings" | "quit" | "you" | "rival" | null
   >(null);
   const [code, setCode] = useState("");
-  const [fineAim, setFineAim] = useState(false);
   useEffect(() => {
     const h = BackHandler.addEventListener("hardwareBackPress", () => {
       setPanel("quit");
@@ -1231,24 +1260,10 @@ function Game({
             <Spin size={34} />
           </Pressable>
           <Text style={s.controlCaption}>SPIN</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Toggle fine aim"
-            onPress={() => setFineAim((v) => !v)}
-            style={({ pressed }) => [
-              s.spinButtonFrame,
-              { marginTop: 14 },
-              pressed && { opacity: 0.75 },
-              fineAim && { borderColor: C.gold },
-            ]}
-          >
-            <Feather
-              name="crosshair"
-              size={20}
-              color={fineAim ? C.gold : C.ink}
-            />
-          </Pressable>
-          <Text style={s.controlCaption}>AIM</Text>
+          <View style={{ marginTop: 12, alignItems: "center", gap: 6 }}>
+            <FineAim />
+            <Text style={s.controlCaption}>AIM</Text>
+          </View>
           {isOnline && !online.result && (
             <View style={{ marginTop: 14, alignItems: "center" }}>
               <EmoteBar
@@ -1276,9 +1291,7 @@ function Game({
                 session.notify();
               }}
             />
-          ) : (
-            fineAim && <FineAim narrow={width < 960} />
-          )}
+          ) : null}
           {!paidMatch &&
             (session.canReplay || session.progress.returned.length > 0) && (
               <View
@@ -2072,11 +2085,11 @@ const s = StyleSheet.create({
     borderRadius: 2,
     backgroundColor: "#24212a",
   },
-  shotPower: { position: "absolute", left: 26, top: "34%" },
+  shotPower: { position: "absolute", left: 26, top: "26%" },
   shotSpin: {
     position: "absolute",
     right: 22,
-    top: "42%",
+    top: "22%",
     alignItems: "center",
     gap: 8,
   },
@@ -2309,39 +2322,42 @@ const s = StyleSheet.create({
     marginTop: 2,
   },
   powerTrack: {
-    width: 11,
-    borderRadius: 7,
+    width: 34,
+    borderRadius: 17,
     borderWidth: 1,
-    borderColor: "#ffffff26",
-    backgroundColor: "#061420cc",
-    overflow: "visible",
+    borderColor: "#ffffff30",
+    backgroundColor: "#061420d9",
+    overflow: "hidden",
   },
+  powerCue: {
+    position: "absolute",
+    left: 11,
+    width: 12,
+    alignItems: "center",
+  },
+  powerTip: {
+    width: 9,
+    height: 5,
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
+    backgroundColor: "#4a8fd6",
+  },
+  powerFerrule: { width: 9, height: 6, backgroundColor: "#f6f1e4" },
   // The fill is clipped so the gradient keeps its colours as the bar grows.
   powerFillClip: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    borderRadius: 7,
     overflow: "hidden",
+    opacity: 0.85,
   },
   powerTick: {
     position: "absolute",
-    left: 14,
-    width: 5,
+    left: 4,
+    right: 4,
     height: 1,
-    backgroundColor: "#ffffff30",
-  },
-  powerKnob: {
-    position: "absolute",
-    width: 25,
-    height: 25,
-    left: -8,
-    borderRadius: 13,
-    backgroundColor: "#fffdf3",
-    borderWidth: 3,
-    borderColor: "#ffd05b",
-    boxShadow: "0 2px 8px #00000066",
+    backgroundColor: "#ffffff22",
   },
   powerValue: {
     fontSize: 13,
@@ -2385,18 +2401,22 @@ const s = StyleSheet.create({
   chevron: { color: C.gold, fontSize: 17 },
   centerBottom: { alignItems: "center", gap: 9, flex: 1 },
   message: { color: "#bcc9bc", fontSize: 12, letterSpacing: 0.2 },
-  fineAimWrap: { flexDirection: "row", alignItems: "center", gap: 8 },
-  fineAim: {
-    width: 196,
-    height: 26,
-    paddingHorizontal: 8,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    borderRadius: 13,
+  wheel: {
+    width: 38,
+    height: 118,
+    borderRadius: 19,
+    overflow: "hidden",
     borderWidth: 1,
-    borderColor: "#ffffff1a",
-    backgroundColor: "#0a1a27b3",
+    borderColor: "#ffffff30",
+    backgroundColor: "#0a1a27e6",
+  },
+  wheelRib: {
+    position: "absolute",
+    left: 7,
+    right: 7,
+    height: 2,
+    borderRadius: 1,
+    backgroundColor: "#ffffff40",
   },
   aimHelp: { fontSize: 6, color: "#6d8072", letterSpacing: 1.2 },
   pottedTray: {
