@@ -7,7 +7,8 @@ import { api } from "./api";
  *
  * The advert is shown here, but nothing is granted here: the server issues a ticket, the ticket
  * travels to AdMob as the SSV user id, and AdMob's signed callback is what actually takes the
- * hour off the crate. That means a modified app cannot award itself anything.
+ * hour off the crate or adds the extra spin. That means a modified app cannot award itself
+ * anything.
  *
  * Ad identifiers come from the Expo config, which defaults to Google's public test units.
  */
@@ -17,9 +18,12 @@ const unit = () => {
 };
 
 export type RewardOutcome = "granted" | "dismissed" | "unavailable";
+/** What a video pays for: an hour off a started crate, or one extra spin of the daily wheel. */
+export type RewardFor = { crateId: string } | { purpose: "spin" };
 
+/** A bare string is a crate id, as the crate screen has always passed it. */
 export async function showRewardedVideo(
-  crateId: string,
+  target: string | RewardFor,
 ): Promise<RewardOutcome> {
   if (Platform.OS === "web") return "unavailable";
   const adUnitId = unit();
@@ -30,9 +34,11 @@ export async function showRewardedVideo(
   } catch {
     return "unavailable";
   }
-  const { ticket, clientRedeem } = await api("/ads/reward-ticket", "POST", {
-    crateId,
-  });
+  const { ticket, clientRedeem } = await api(
+    "/ads/reward-ticket",
+    "POST",
+    typeof target === "string" ? { crateId: target } : target,
+  );
 
   const mobileAds = ads.default;
   await mobileAds().initialize();
