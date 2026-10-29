@@ -19,6 +19,10 @@ export type Player = {
   selectedCue?: string;
   completed: string[];
   selectedTable: string;
+  /** The one-time starter pack has been bought. */
+  starterBought?: boolean;
+  /** The season id whose premium pass this player owns, if any. */
+  passPremiumSeason?: number | null;
   stats: {
     finishes: number;
     shots: number;

@@ -68,7 +68,7 @@ debugging disabled when testing Expo GL.
 - Six table finishes with server-enforced level locks and saved equipment selection.
 - Six practice challenges, verified first-clear XP/coins, repeatable free practice, daily gifts.
 - Reward crates: a win seals one of six crate tiers, four slots, one unlock at a time, opened on the timer or early with rubies. Contents are rolled on the server and the odds are published in the app.
-- Two currencies: coins are earned and pay for everything that affects play; rubies are a scarce bonus and the only thing real money buys. Ruby purchases stay disabled until store billing is configured.
+- Two currencies: coins, the soft currency, pay entry fees, cues and tables; rubies, the premium currency, open crates early. Real money buys both, plus a one-time starter pack and the season's premium pass, through Apple and Google billing only. Purchases stay off until `STORE_BILLING` is set.
 - Optional rewarded video takes an hour off a crate. It ships on Google's public AdMob test units, and the hour is granted by AdMob's signed server callback, never by the device. Non-personalised ads only; no advertising identifier, no tracking prompt.
 - Coin competitions with optional coin entry fees, server-replayed scores, a persistent leaderboard, and ranked coin prizes that settle automatically when the event closes.
 - Weekly Pro and USDC Masters event pages with announced status and closed entries.
@@ -109,9 +109,12 @@ one place, read by both the Android gradle plugin and the app. They default to G
 test units so the whole flow runs today; a release build refuses to compile until they are
 replaced. Point each rewarded unit's server-side verification at `https://<api>/ads/reward`.
 
-Ruby purchases need `STORE_BILLING` and an implementation of `verifyPurchase()` in
-`server/src/store.ts`. Until then the endpoint returns 503 and credits nothing. Full list in
-[what only you can do](docs/release/OWNER-CHECKLIST.md).
+Purchases go through `expo-iap` (`mobile/src/app/billing.ts`) and are credited only by
+`POST /store/claim` in `server/src/store.ts`, which verifies each StoreKit 2 transaction offline
+against Apple's root certificate and each Play purchase with the Play Developer API, then
+credits it exactly once. `STORE_BILLING` lists the enabled platforms (`ios`, `android`);
+Android also needs `GOOGLE_PLAY_SERVICE_ACCOUNT`. A platform that is not enabled answers 503 and
+credits nothing. Store setup is in [what only you can do](docs/release/OWNER-CHECKLIST.md).
 
 ## Administration
 

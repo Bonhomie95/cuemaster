@@ -129,7 +129,12 @@ export default function Rewards({
   async function load() {
     const [crates, rubies] = await Promise.all([
       api("/me/crates"),
-      api("/store/rubies"),
+      api("/store").then((s) => ({
+        available: s.platforms.ios || s.platforms.android,
+        packs: s.products
+          .filter((p: any) => p.kind === "rubies")
+          .map((p: any) => ({ ...p, rubies: p.grants.rubies })),
+      })),
     ]);
     setData(crates);
     setStore(rubies);
