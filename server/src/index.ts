@@ -655,20 +655,6 @@ app.post("/me/table", required, async (req: any, res) => {
   );
   res.json(publicUser(u));
 });
-app.post("/me/daily", required, async (req: any, res) => {
-  const key = "daily:" + new Date().toISOString().slice(0, 10);
-  const updated = await users.findOneAndUpdate(
-    { _id: req.player._id, completed: { $ne: key } },
-    { $addToSet: { completed: key }, $inc: { coins: 100 } },
-    { returnDocument: "after" },
-  );
-  res.json({
-    claimed: !!updated,
-    player: publicUser(
-      updated || (await users.findOne({ _id: req.player._id })),
-    ),
-  });
-});
 app.post("/auth/logout", required, async (req, res) => {
   await sessions.deleteOne({
     tokenHash: hash(req.headers.authorization!.slice(7)),

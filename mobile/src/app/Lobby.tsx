@@ -16,6 +16,7 @@ import { Press, Enter } from "./motion";
 export { default as IconButton } from "./IconButton";
 import HomeLobby from "./HomeLobby";
 import { venueArt } from "./art";
+import type { DailyTab } from "./DailyRewards";
 type Icon = React.ComponentProps<typeof Feather>["name"];
 type Page = "home" | "tables" | "practice" | "events";
 export type LobbyProps = {
@@ -33,7 +34,9 @@ export type LobbyProps = {
   onChallenge: (c: Challenge) => void;
   onDaily: () => void;
   onEvent: (e: Tournament) => void;
-  onGift: () => void;
+  /** Daily streak, wheel, missions and pass, opened at one tab. */
+  onHub: (tab: DailyTab) => void;
+  onShop: () => void;
 };
 function Badge({ icon, text }: { icon: Icon; text: string }) {
   return (
@@ -91,9 +94,6 @@ export default function Lobby(p: LobbyProps) {
   const completed = p.player.completed.filter((k) =>
     k.startsWith("practice:"),
   ).length;
-  const gifted = p.player.completed.includes(
-    "daily:" + new Date().toISOString().slice(0, 10),
-  );
   const dailyDone = p.player.completed.includes("daily-shot:" + todayKey());
   const stamped = p.catalog.venues
     .filter((v) =>

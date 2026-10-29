@@ -54,9 +54,10 @@ test("MongoDB account, locks, rewards, event scores and account lifecycle", asyn
       avatar: 1,
     });
     assert.equal(edited.body.country, "NG");
-    const gift = await call("/me/daily", "POST");
-    assert.equal(gift.body.claimed, true);
-    assert.equal((await call("/me/daily", "POST")).body.claimed, false);
+    const gift = await call("/me/gift/claim", "POST", {});
+    assert.equal(gift.status, 200);
+    assert.equal(gift.body.granted.coins, 100);
+    assert.equal((await call("/me/gift/claim", "POST", {})).status, 409);
     const start = await call("/practice/start", "POST", {
       tableId: "heritage",
       challengeId: "pocket",

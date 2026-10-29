@@ -1,10 +1,14 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View, Text, StyleSheet, Pressable, ScrollView } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
 import type { LobbyProps } from "./Lobby";
 import IconButton from "./IconButton";
 import { Press, Enter, Pulse } from "./motion";
+import { api, Today } from "./api";
+import { readyToCollect } from "./DailyRewards";
+import { online } from "../game/online";
+import { remind } from "./notify";
 type Icon = React.ComponentProps<typeof Feather>["name"];
 
 /**
@@ -25,13 +29,48 @@ export default function HomeLobby(p: LobbyProps) {
     x >= content - width - 3
       ? pageCount - 1
       : Math.min(pageCount - 1, Math.round(x / step));
-  const done = p.player.completed.filter((k) =>
-    k.startsWith("practice:"),
-  ).length;
-  const gifted = p.player.completed.includes(
-    "daily:" + new Date().toISOString().slice(0, 10),
-  );
-  const open = p.catalog.tournaments.find((t) => t.status === "open");
+  // The day's board drives the badges; it is re-read whenever the player's balances change,
+  // which is every time they come back from collecting something.
+  const [today, setToday] = useState<Today | null>(null);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    let alive = true;
+    void api<Today>("/me/today")
+      .then((t) => {
+        if (!alive) return;
+        setToday(t);
+        // The next refill of free coins becomes a reminder, without asking for permission here.
+        if (t.gift.readyAt)
+          void remind(
+            "gift",
+            new Date(t.gift.readyAt),
+            "Free coins are ready",
+            `${t.gift.coins} coins are waiting in the club.`,
+            false,
+          );
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [p.player.coins, p.player.rubies, p.player.crates]);
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const ready = today ? readyToCollect(today, now) : null;
+  const giftLeft = today?.gift.readyAt
+    ? Math.max(0, Date.parse(today.gift.readyAt) - now)
+    : 0;
+  const clock = (ms: number) => {
+    const h = Math.floor(ms / 3600000),
+      m = Math.floor((ms % 3600000) / 60000),
+      sec = Math.floor((ms % 60000) / 1000);
+    return h ? `${h}h ${m}m` : `${m}:${String(sec).padStart(2, "0")}`;
+  };
+  const missionsDone = today
+    ? today.missions.list.filter((m) => m.claimed).length
+    : 0;
   const modes: {
     title: string;
     caption: string;
@@ -41,7 +80,10 @@ export default function HomeLobby(p: LobbyProps) {
   }[] = [
     {
       title: "Play pool",
-      caption: "PLAY A HOUSE RIVAL",
+      caption:
+        online.online > 1
+          ? `${online.online.toLocaleString()} ONLINE NOW`
+          : "ONLINE & FRIENDS",
       icon: "play",
       accent: "#24dbb3",
       action: p.onPlay,
@@ -165,37 +207,56 @@ export default function HomeLobby(p: LobbyProps) {
 
       <View style={s.dock}>
         <Quick
-          icon={gifted ? "check" : "gift"}
-          label={gifted ? "Collected" : "Daily gift"}
-          badge={!gifted}
-          disabled={p.busy || gifted}
-          onPress={p.onGift}
+          icon="calendar"
+          label={today ? `Day ${today.streak.day || 1}` : "Daily"}
+          a11y="Daily rewards"
+          badge={!!ready?.daily}
+          onPress={() => p.onHub("daily")}
+        />
+        <Quick
+          icon="disc"
+          label="Spin"
+          a11y="Prize wheel"
+          badge={!!ready?.spin}
+          onPress={() => p.onHub("spin")}
         />
         <Quick
           icon="gift"
+          label={giftLeft ? clock(giftLeft) : "Free coins"}
+          a11y="Free coins"
+          badge={!!ready?.gift}
+          onPress={() => p.onHub("daily")}
+        />
+        <Quick
+          icon="check-square"
+          label={`Missions ${missionsDone}/3`}
+          a11y="Daily missions"
+          badge={!!ready?.missions}
+          onPress={() => p.onHub("missions")}
+        />
+        <Quick
+          icon="star"
+          label={today ? `Pass ${today.pass.tier}` : "Pass"}
+          a11y="CueMaster Pass"
+          badge={!!ready?.pass}
+          onPress={() => p.onHub("pass")}
+        />
+        <Quick
+          icon="package"
           label={
             p.player.crates
               ? `${p.player.crates} crate${p.player.crates === 1 ? "" : "s"}`
               : "Crates"
           }
+          a11y="Crates"
           badge={!!p.player.crates}
           onPress={p.onRewards}
         />
         <Quick
-          icon="crosshair"
-          label={`Drills ${done}/6`}
-          onPress={() => p.onPage("practice")}
-        />
-        <Quick
-          icon="award"
-          label={open ? "Event open" : "Events"}
-          badge={!!open}
-          onPress={() => p.onPage("events")}
-        />
-        <Quick
-          icon="grid"
-          label={p.selected.name}
-          onPress={() => p.onPage("tables")}
+          icon="shopping-bag"
+          label="Shop"
+          a11y="Shop"
+          onPress={p.onShop}
         />
         <View style={s.pager}>
           {Array.from({ length: pageCount }, (_, i) => (
@@ -232,12 +293,15 @@ export default function HomeLobby(p: LobbyProps) {
 function Quick({
   icon,
   label,
+  a11y,
   badge = false,
   disabled = false,
   onPress,
 }: {
   icon: Icon;
   label: string;
+  /** A stable name for screen readers and the UI walk; the visible label can be a countdown. */
+  a11y?: string;
   badge?: boolean;
   disabled?: boolean;
   onPress: () => void;
@@ -245,7 +309,7 @@ function Quick({
   return (
     <Press
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={a11y || label}
       accessibilityState={{ disabled }}
       disabled={disabled}
       onPress={onPress}
@@ -334,7 +398,7 @@ const s = StyleSheet.create({
   dock: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 18,
+    gap: 12,
     paddingHorizontal: 26,
   },
   quick: { alignItems: "center", gap: 6, minWidth: 56 },

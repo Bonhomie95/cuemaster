@@ -5,6 +5,7 @@ import Rewards from "./Rewards";
 import Welcome from "./Welcome";
 import InviteCard from "./Invite";
 import Shop from "./Shop";
+import { DailyHub, DailyTab } from "./DailyRewards";
 import { PlayerBadge, CurrencyPill } from "./TopBar";
 import { restorePending } from "./billing";
 import { comeBack } from "./notify";
@@ -81,7 +82,8 @@ type Page =
   | "rewards"
   | "leaderboard"
   | "blocked"
-  | "shop";
+  | "shop"
+  | "daily";
 type Launch = {
   kind: "free" | "practice" | "event" | "local" | "daily" | "online";
   drill: string;
@@ -242,6 +244,7 @@ function ClubBody() {
   const [shopTab, setShopTab] = useState<"offers" | "rubies" | "coins">(
     "offers",
   );
+  const [hubTab, setHubTab] = useState<DailyTab>("daily");
   const [page, setPage] = useState<Page>("home"),
     [adult, setAdult] = useState(false),
     [launch, setLaunch] = useState<Launch | null>(null),
@@ -1153,7 +1156,19 @@ function ClubBody() {
             paddingBottom: Math.max(insets.bottom, 14),
           }}
         >
-          {page === "shop" ? (
+          {page === "daily" ? (
+            <DailyHub
+              key={hubTab}
+              player={player}
+              onPlayer={setPlayer}
+              initialTab={hubTab}
+              onClose={() => setPage("home")}
+              onBuyPremium={() => {
+                setShopTab("offers");
+                setPage("shop");
+              }}
+            />
+          ) : page === "shop" ? (
             <Shop
               key={shopTab}
               player={player}
@@ -1229,17 +1244,14 @@ function ClubBody() {
               onChallenge={startChallenge}
               onDaily={startDaily}
               onEvent={viewEvent}
-              onGift={() =>
-                work(async () => {
-                  const result = await api("/me/daily", "POST");
-                  setPlayer(result.player);
-                  setToast(
-                    result.claimed
-                      ? "100 coins added to your balance."
-                      : "Already collected today.",
-                  );
-                })
-              }
+              onHub={(tab) => {
+                setHubTab(tab);
+                setPage("daily");
+              }}
+              onShop={() => {
+                setShopTab("offers");
+                setPage("shop");
+              }}
             />
           ) : (
             <ScrollView
