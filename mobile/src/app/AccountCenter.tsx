@@ -90,6 +90,7 @@ export default function AccountCenter({
     [busy, setBusy] = useState(false),
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
+  const [metric, setMetric] = useState<"trophies" | "xp">("trophies");
   const [scope, setScope] = useState<"global" | "country">("global"),
     [address, setAddress] = useState(""),
     [confirmed, setConfirmed] = useState(false),
@@ -100,7 +101,7 @@ export default function AccountCenter({
       ? "/me/usdc"
       : area === "blocked"
         ? "/me/blocked"
-        : `/leaderboard?scope=${scope}`;
+        : `/leaderboard?scope=${scope}&metric=${metric}`;
   async function refresh() {
     const result = await api(path);
     setData(result);
@@ -316,6 +317,24 @@ export default function AccountCenter({
         <>
           <View style={s.actions}>
             <Button
+              icon="award"
+              selected={metric === "trophies"}
+              label="Trophies"
+              onPress={() => {
+                setSelected(null);
+                setMetric("trophies");
+              }}
+            />
+            <Button
+              icon="trending-up"
+              selected={metric === "xp"}
+              label="Level"
+              onPress={() => {
+                setSelected(null);
+                setMetric("xp");
+              }}
+            />
+            <Button
               icon="globe"
               selected={scope === "global"}
               label="Global"
@@ -335,8 +354,9 @@ export default function AccountCenter({
             />
           </View>
           <Text style={s.copy}>
-            Ranked by server-verified challenge XP. Match wins and USDC earnings
-            are not used for this ranking.
+            {metric === "trophies"
+              ? "Trophies come from online wins: +24 for a win, −16 for a loss."
+              : "Ranked by server-verified XP from matches, drills and events."}
           </Text>
           {!!selected && (
             <Card>
@@ -419,7 +439,9 @@ export default function AccountCenter({
                         : ""}
                     </Text>
                   </View>
-                  <Text style={s.score}>{p.xp} XP</Text>
+                  <Text style={s.score}>
+                    {metric === "trophies" ? `🏆 ${p.trophies}` : `${p.xp} XP`}
+                  </Text>
                   {p.id !== player.id && (
                     <Button
                       icon="more-horizontal"

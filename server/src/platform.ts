@@ -160,6 +160,11 @@ export function installPlatform(
       .enum(["global", "country"])
       .default("global")
       .parse(req.query.scope);
+    // Trophies rank online play; XP ranks everything a player has had verified.
+    const metric = z
+      .enum(["xp", "trophies"])
+      .default("xp")
+      .parse(req.query.metric);
     const blocked = req.player.blockedPlayers || [];
     const country = scope === "country" ? req.player.country : null;
     if (scope === "country" && !country)
@@ -181,18 +186,27 @@ export function installPlatform(
             avatar: 1,
             country: 1,
             xp: 1,
+            trophies: 1,
             "stats.finishes": 1,
             "stats.cpuStreak": 1,
             "stats.bestStreak": 1,
+            "stats.onlineWins": 1,
           },
         },
       )
-      .sort({ xp: -1, "stats.finishes": -1, _id: 1 })
+      .sort(
+        metric === "trophies"
+          ? { trophies: -1, xp: -1, _id: 1 }
+          : { xp: -1, "stats.finishes": -1, _id: 1 },
+      )
       .limit(100)
       .toArray();
     res.json({
       scope,
-      metric: "Verified progression XP",
+      metric:
+        metric === "trophies"
+          ? "Trophies from online matches"
+          : "Verified progression XP",
       players: board.map((u, i) => ({
         id: u._id,
         rank: i + 1,
@@ -200,6 +214,8 @@ export function installPlatform(
         avatar: u.avatar,
         country: u.country,
         xp: u.xp,
+        trophies: u.trophies || 0,
+        onlineWins: u.stats?.onlineWins || 0,
         finishes: u.stats?.finishes || 0,
         streak: Math.max(0, u.stats?.cpuStreak || 0),
         bestStreak: u.stats?.bestStreak || 0,

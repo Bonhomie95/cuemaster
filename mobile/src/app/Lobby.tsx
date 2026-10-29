@@ -39,6 +39,7 @@ export type LobbyProps = {
   /** Daily streak, wheel, missions and pass, opened at one tab. */
   onHub: (tab: DailyTab) => void;
   onShop: () => void;
+  onMore: () => void;
 };
 function Badge({ icon, text }: { icon: Icon; text: string }) {
   return (

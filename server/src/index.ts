@@ -75,6 +75,7 @@ await Promise.all([
   // The leaderboard sorts every unsuspended player by XP; without this it is a collection
   // scan that fails outright once the in-memory sort passes 32MB.
   users.createIndex({ xp: -1, "stats.finishes": -1, _id: 1 }),
+  users.createIndex({ trophies: -1, xp: -1, _id: 1 }),
   users.createIndex({ "providers.google": 1 }, { unique: true, sparse: true }),
   users.createIndex({ "providers.apple": 1 }, { unique: true, sparse: true }),
   entries.createIndex({ playerId: 1, eventId: 1 }, { unique: true }),

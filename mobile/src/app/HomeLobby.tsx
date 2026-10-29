@@ -164,17 +164,12 @@ export default function HomeLobby(p: LobbyProps) {
       <View style={s.column}>
         <Side
           icon="calendar"
-          label={today ? `Day ${today.streak.day || 1}` : "Daily"}
+          label={today ? `Day ${today.streak.day || 1}` : "Rewards"}
           a11y="Daily rewards"
-          badge={!!ready?.daily}
-          onPress={() => p.onHub("daily")}
-        />
-        <Side
-          icon="disc"
-          label="Spin"
-          a11y="Prize wheel"
-          badge={!!ready?.spin}
-          onPress={() => p.onHub("spin")}
+          badge={!!(ready?.daily || ready?.spin || ready?.missions)}
+          onPress={() =>
+            p.onHub(ready?.daily ? "daily" : ready?.spin ? "spin" : "missions")
+          }
         />
         <Side
           image={icons.coin}
@@ -184,11 +179,11 @@ export default function HomeLobby(p: LobbyProps) {
           onPress={() => p.onHub("daily")}
         />
         <Side
-          icon="check-square"
-          label={`Missions ${today ? today.missions.list.filter((m) => m.claimed).length : 0}/3`}
-          a11y="Daily missions"
-          badge={!!ready?.missions}
-          onPress={() => p.onHub("missions")}
+          image={icons.pass}
+          label={today ? `Pass ${today.pass.tier}` : "Pass"}
+          a11y="CueMaster Pass"
+          badge={!!ready?.pass}
+          onPress={() => p.onHub("pass")}
         />
       </View>
       <ScrollView
@@ -285,14 +280,7 @@ export default function HomeLobby(p: LobbyProps) {
           badge={!!p.player.crates}
           onPress={p.onRewards}
         />
-        <Side
-          image={icons.pass}
-          label={today ? `Pass ${today.pass.tier}` : "Pass"}
-          a11y="CueMaster Pass"
-          badge={!!ready?.pass}
-          onPress={() => p.onHub("pass")}
-        />
-        <Side icon="edit-2" label="Cues" a11y="Cues" onPress={p.onCues} />
+        <Side icon="grid" label="More" a11y="More options" onPress={p.onMore} />
       </View>
     </View>
   );
@@ -353,7 +341,7 @@ const s = StyleSheet.create({
     paddingTop: 10,
     gap: 6,
   },
-  column: { width: 70, gap: 8, alignItems: "center" },
+  column: { width: 70, gap: 14, alignItems: "center" },
   rail: { paddingHorizontal: 8, gap: 12, alignItems: "center" },
   card: {
     borderRadius: 18,

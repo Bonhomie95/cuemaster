@@ -71,6 +71,10 @@ export async function forget(id: string) {
   const n = await load();
   await n?.cancelScheduledNotificationAsync(id).catch(() => {});
 }
+/** The Settings switch: asks for permission if it has not been refused, says whether it is on. */
+export async function enableReminders() {
+  return !!(await allowed(true));
+}
 /** Each visit pushes the "come back" nudge three days out, so only a lapsed player sees it. */
 export function comeBack() {
   void remind(

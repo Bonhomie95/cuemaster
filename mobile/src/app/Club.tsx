@@ -5,6 +5,10 @@ import Rewards from "./Rewards";
 import Welcome from "./Welcome";
 import InviteCard from "./Invite";
 import Shop from "./Shop";
+import MorePage from "./MorePage";
+import HowToPlay from "./HowToPlay";
+import { setSound } from "./sound";
+import { enableReminders } from "./notify";
 import { DailyHub, DailyTab } from "./DailyRewards";
 import { PlayerBadge, CurrencyPill } from "./TopBar";
 import { restorePending } from "./billing";
@@ -83,7 +87,11 @@ type Page =
   | "leaderboard"
   | "blocked"
   | "shop"
-  | "daily";
+  | "daily"
+  | "more"
+  | "settings"
+  | "help"
+  | "invite";
 type Launch = {
   kind: "free" | "practice" | "event" | "local" | "daily" | "online";
   drill: string;
@@ -1102,32 +1110,21 @@ function ClubBody() {
             compact={small}
             onPress={() => setPage("profile")}
           />
-          <View style={{ flexDirection: "row", gap: 4 }}>
-            <IconButton
-              icon="home"
-              label="Home"
-              selected={page === "home"}
+          {page === "home" ? (
+            <Text style={u.logoMini}>
+              CUE<Text style={{ color: "#ffd05b" }}>MASTER</Text>
+            </Text>
+          ) : (
+            <Press
+              accessibilityRole="button"
+              accessibilityLabel="Home"
               onPress={() => setPage("home")}
-            />
-            <IconButton
-              icon="grid"
-              label="Tables"
-              selected={page === "tables"}
-              onPress={() => setPage("tables")}
-            />
-            <IconButton
-              icon="target"
-              label="Practice"
-              selected={page === "practice"}
-              onPress={() => setPage("practice")}
-            />
-            <IconButton
-              icon="award"
-              label="Events"
-              selected={page === "events"}
-              onPress={() => setPage("events")}
-            />
-          </View>
+              style={u.backPill}
+            >
+              <Feather name="chevron-left" size={18} color="#fffdf3" />
+              <Text style={u.backText}>{TITLES[page] || "Home"}</Text>
+            </Press>
+          )}
           <View style={[u.topRight, { gap: 10 }]}>
             <CurrencyPill
               kind="rubies"
@@ -1144,6 +1141,12 @@ function ClubBody() {
                 setShopTab("coins");
                 setPage("shop");
               }}
+            />
+            <IconButton
+              icon="menu"
+              label="More"
+              selected={page === "more"}
+              onPress={() => setPage(page === "more" ? "home" : "more")}
             />
           </View>
         </View>
@@ -1182,7 +1185,11 @@ function ClubBody() {
               player={player}
               onPlayer={setPlayer}
               backLabel={
-                rewardsFrom === "profile" ? "Back to profile" : "Back to club"
+                rewardsFrom === "profile"
+                  ? "Back to profile"
+                  : rewardsFrom === "more"
+                    ? "Back"
+                    : "Back to club"
               }
               onShop={() => {
                 setShopTab("rubies");
@@ -1197,7 +1204,9 @@ function ClubBody() {
               key={page}
               area={page}
               player={player}
-              onClose={() => setPage("profile")}
+              onClose={() =>
+                setPage(page === "leaderboard" ? "more" : "settings")
+              }
             />
           ) : page === "cues" ? (
             <CueShop
@@ -1235,7 +1244,21 @@ function ClubBody() {
               }}
               onClose={() => setPage("home")}
             />
-          ) : page !== "profile" ? (
+          ) : page === "more" ? (
+            <MorePage
+              player={player}
+              onOpen={(target) => {
+                if (target === "rewards") setRewardsFrom("more");
+                setPage(target);
+              }}
+            />
+          ) : page === "help" ? (
+            <HowToPlay />
+          ) : page === "invite" ? (
+            <ScrollView contentContainerStyle={u.invitePage}>
+              <InviteCard onPlayer={setPlayer} />
+            </ScrollView>
+          ) : page !== "profile" && page !== "settings" ? (
             <Lobby
               key={page}
               page={page}
@@ -1266,6 +1289,7 @@ function ClubBody() {
                 setShopTab("offers");
                 setPage("shop");
               }}
+              onMore={() => setPage("more")}
             />
           ) : (
             <ScrollView
@@ -1420,133 +1444,141 @@ function ClubBody() {
                         }
                       />
                     </View>
-                    <View style={[u.feature, { flex: 1, minWidth: 240 }]}>
-                      <InviteCard onPlayer={setPlayer} />
-                      <Text style={u.cardTitle}>Club & rewards</Text>
-                      <NavRow
-                        icon="gift"
-                        label="Reward crates"
-                        detail={
-                          player.crates
-                            ? `${player.crates} crate${player.crates === 1 ? "" : "s"} waiting`
-                            : "Win a match to seal a crate"
-                        }
-                        onPress={() => {
-                          setRewardsFrom("profile");
-                          setPage("rewards");
-                        }}
-                      />
-                      <NavRow
-                        icon="award"
-                        label="Leaderboard"
-                        detail="Global and country rankings"
-                        onPress={() => setPage("leaderboard")}
-                      />
-                      <NavRow
-                        icon="credit-card"
-                        label="USDC rewards"
-                        detail="Payout address · payouts not active"
-                        onPress={() => setPage("wallet")}
-                      />
-                      <NavRow
-                        icon="slash"
-                        label="Blocked players"
-                        detail="Players hidden from your leaderboards"
-                        onPress={() => setPage("blocked")}
-                      />
-                      <View style={u.divider} />
-                      <Text style={u.cardTitle}>Keep your progress.</Text>
-                      <Text style={u.body}>
-                        {player.guest
-                          ? "Connect a new Google or Apple account to preserve this guest profile. Signing into an existing account loads its saved progress."
-                          : "Your progress is stored with your connected account."}
-                      </Text>
-                      <View style={{ gap: 10, marginTop: 16 }}>
-                        <ProviderButton
-                          provider="google"
-                          connected={player.providers.includes("google")}
-                          disabled={busy}
-                          onPress={() => login("google")}
-                        />
-                        {(Platform.OS === "ios" || Platform.OS === "web") && (
-                          <ProviderButton
-                            provider="apple"
-                            connected={player.providers.includes("apple")}
-                            disabled={busy}
-                            onPress={() => login("apple")}
-                          />
-                        )}
-                      </View>
-                      <View style={u.divider} />
-                      <Text style={u.cardTitle}>
-                        Your account, your choice.
-                      </Text>
-                      <Text style={u.body}>
-                        Guest access is tied to this device. Sign in before
-                        signing out if you want to keep access to your guest
-                        progress.
-                      </Text>
-                      <Action
-                        secondary
-                        label="Sign out"
-                        disabled={busy}
-                        onPress={() =>
-                          work(async () => {
-                            try {
-                              await api("/auth/logout", "POST");
-                            } catch (e) {
-                              if (!(e instanceof ApiError && e.status === 401))
-                                throw e;
-                            }
-                            await clearToken();
-                            setPlayer(null);
-                            setAdult(false);
-                          })
-                        }
-                      />
-                      <NavRow
-                        danger
-                        icon="trash-2"
-                        label="Delete account"
-                        detail="Permanent. Removes your profile and progress."
-                        onPress={() => {
-                          setDeleteText("");
-                          setDeleting(true);
-                        }}
-                      />
-                      <View style={u.divider} />
-                      <Text style={u.cardTitle}>Legal & support</Text>
-                      <NavRow
-                        icon="shield"
-                        label="Privacy policy"
-                        url={config.urls?.privacy}
-                      />
-                      <NavRow
-                        icon="file-text"
-                        label="Terms of service"
-                        url={config.urls?.terms}
-                      />
-                      <NavRow
-                        icon="life-buoy"
-                        label="Support"
-                        url={config.urls?.support}
-                      />
-                      <NavRow
-                        icon="external-link"
-                        label="Delete your account on the web"
-                        url={config.urls?.deleteAccount}
-                      />
-                      <NavRow
-                        icon="percent"
-                        label="Reward odds"
-                        url={config.urls?.odds}
-                      />
-                      <Text style={u.fine}>
-                        CUEMASTER {version} · COINS ARE VIRTUAL ITEMS, NOT MONEY
-                      </Text>
-                    </View>
                   </View>
                 </>
+              )}
+              {page === "settings" && (
+                <View
+                  style={[
+                    u.row,
+                    { alignItems: "flex-start", flexWrap: "wrap" },
+                  ]}
+                >
+                  <View style={[u.feature, { flex: 1, minWidth: 240 }]}>
+                    <Text style={u.cardTitle}>Sound & play</Text>
+                    <NavRow
+                      icon={session.sound ? "volume-2" : "volume-x"}
+                      label="Sound effects"
+                      detail={session.sound ? "On" : "Off"}
+                      onPress={() => setSound(!session.sound)}
+                    />
+                    <NavRow
+                      icon="bell"
+                      label="Reminders"
+                      detail="Crate ready, free coins, your streak"
+                      onPress={() =>
+                        void enableReminders().then((on) =>
+                          setToast(
+                            on
+                              ? "Reminders are on."
+                              : "Reminders are off in your phone's settings.",
+                          ),
+                        )
+                      }
+                    />
+                    <NavRow
+                      icon="credit-card"
+                      label="USDC rewards"
+                      detail="Payout address · payouts not active"
+                      onPress={() => setPage("wallet")}
+                    />
+                    <NavRow
+                      icon="slash"
+                      label="Blocked players"
+                      detail="Players hidden from your leaderboards"
+                      onPress={() => setPage("blocked")}
+                    />
+                  </View>
+                  <View style={[u.feature, { flex: 1, minWidth: 240 }]}>
+                    <Text style={u.cardTitle}>Keep your progress.</Text>
+                    <Text style={u.body}>
+                      {player.guest
+                        ? "Connect a new Google or Apple account to preserve this guest profile. Signing into an existing account loads its saved progress."
+                        : "Your progress is stored with your connected account."}
+                    </Text>
+                    <View style={{ gap: 10, marginTop: 16 }}>
+                      <ProviderButton
+                        provider="google"
+                        connected={player.providers.includes("google")}
+                        disabled={busy}
+                        onPress={() => login("google")}
+                      />
+                      {(Platform.OS === "ios" || Platform.OS === "web") && (
+                        <ProviderButton
+                          provider="apple"
+                          connected={player.providers.includes("apple")}
+                          disabled={busy}
+                          onPress={() => login("apple")}
+                        />
+                      )}
+                    </View>
+                    <View style={u.divider} />
+                    <Text style={u.cardTitle}>Your account, your choice.</Text>
+                    <Text style={u.body}>
+                      Guest access is tied to this device. Sign in before
+                      signing out if you want to keep access to your guest
+                      progress.
+                    </Text>
+                    <Action
+                      secondary
+                      label="Sign out"
+                      disabled={busy}
+                      onPress={() =>
+                        work(async () => {
+                          try {
+                            await api("/auth/logout", "POST");
+                          } catch (e) {
+                            if (!(e instanceof ApiError && e.status === 401))
+                              throw e;
+                          }
+                          await clearToken();
+                          setPlayer(null);
+                          setAdult(false);
+                        })
+                      }
+                    />
+                    <NavRow
+                      danger
+                      icon="trash-2"
+                      label="Delete account"
+                      detail="Permanent. Removes your profile and progress."
+                      onPress={() => {
+                        setDeleteText("");
+                        setDeleting(true);
+                      }}
+                    />
+                    <View style={u.divider} />
+                    <Text style={u.cardTitle}>Legal & support</Text>
+                    <NavRow
+                      icon="shield"
+                      label="Privacy policy"
+                      url={config.urls?.privacy}
+                    />
+                    <NavRow
+                      icon="file-text"
+                      label="Terms of service"
+                      url={config.urls?.terms}
+                    />
+                    <NavRow
+                      icon="life-buoy"
+                      label="Support"
+                      url={config.urls?.support}
+                    />
+                    <NavRow
+                      icon="external-link"
+                      label="Delete your account on the web"
+                      url={config.urls?.deleteAccount}
+                    />
+                    <NavRow
+                      icon="percent"
+                      label="Reward odds"
+                      url={config.urls?.odds}
+                    />
+                    <Text style={u.fine}>
+                      CUEMASTER {version} · COINS ARE VIRTUAL ITEMS, NOT MONEY
+                    </Text>
+                  </View>
+                </View>
               )}
             </ScrollView>
           )}
@@ -1768,7 +1800,51 @@ function ClubBody() {
   );
 }
 const version = Constants.expoConfig?.version || "";
+/** What the back pill in the top bar says on each page. */
+const TITLES: Partial<Record<Page, string>> = {
+  tables: "Tables",
+  practice: "Practice",
+  events: "Tournaments",
+  profile: "Profile",
+  matches: "Play",
+  cues: "Cues",
+  wallet: "USDC rewards",
+  rewards: "Crates",
+  leaderboard: "Leaderboard",
+  blocked: "Blocked players",
+  shop: "Shop",
+  daily: "Daily rewards",
+  more: "More",
+  settings: "Settings",
+  help: "How to play",
+  invite: "Invite friends",
+};
 const u = StyleSheet.create({
+  logoMini: {
+    color: "#fffdf3",
+    fontSize: 15,
+    fontWeight: "900",
+    letterSpacing: 3,
+  },
+  backPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    height: 36,
+    paddingLeft: 8,
+    paddingRight: 14,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#ffffff26",
+    backgroundColor: "#04121dd9",
+  },
+  backText: { color: "#fffdf3", fontSize: 13, fontWeight: "800" },
+  invitePage: {
+    padding: 20,
+    maxWidth: 560,
+    width: "100%",
+    alignSelf: "center",
+  },
   navRow: {
     minHeight: 52,
     flexDirection: "row",

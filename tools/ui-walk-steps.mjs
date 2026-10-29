@@ -7,31 +7,34 @@ export const walkSteps = [
       await snap(a, "00-welcome-name");
       await a.type("Player name", "LagosAce");
       await a.tap("Save and play");
-      await a.see("Play pool");
+      await a.see("Play Online");
     });
     await check("home", async () => {
-      await a.see("THE NEXT SHOT IS YOURS");
+      await a.see("Vs Computer");
       await snap(a, "01-home");
     });
-    await check("top navigation", async () => {
-      await a.tap("Tables");
-      await a.see("Your table collection");
-      await snap(a, "02-tables");
-      await a.tap("Practice");
-      await a.see("The practice lab");
-      await snap(a, "03-practice");
-      await a.tap("Events");
-      await a.see("The competition room");
+    await check("the More menu reaches every other page", async () => {
+      for (const [tile, heading] of [
+        ["Tables", "Your table collection"],
+        ["Practice", "The practice lab"],
+        ["Tournaments", "The competition room"],
+        ["How to play", "8-ball in a minute"],
+        ["Settings", "Sound & play"],
+        ["Invite friends", "You both get"],
+        ["Leaderboard", "Trophies come from online wins"],
+      ]) {
+        await a.tap("More");
+        await a.tap(tile);
+        await a.see(heading);
+        await snap(a, "02-" + tile.toLowerCase().replaceAll(" ", "-"));
+      }
       await a.tap("Home");
-      await a.see("THE NEXT SHOT IS YOURS");
+      await a.see("Play Online");
     });
-    await check("profile, invite card, leaderboard", async () => {
+    await check("profile", async () => {
       await a.tap("Open profile");
       await a.see("Player profile");
-      await a.see("Invite friends");
       await snap(a, "04-profile");
-      await a.tap("Leaderboard");
-      await a.see(/Leaderboard|LEADERBOARD/);
       await a.tap("Home");
     });
     await check("crates page", async () => {
@@ -83,10 +86,10 @@ export const walkSteps = [
       await a.see("Starter pack");
       await snap(a, "17-shop-offers");
       await a.tap("Close shop");
-      await a.see("THE NEXT SHOT IS YOURS");
+      await a.see("Play Online");
     });
     await check("free play: aim, shoot, settle, leave", async () => {
-      await a.tap("Free play");
+      await a.tap("Free Play");
       await a.see("POWER");
       await sleep(2500);
       await a.eval("__cm.angle = 0.004; __cm.power = 1; __cm.shoot()");
@@ -96,11 +99,10 @@ export const walkSteps = [
       await a.tap("Table settings");
       await a.tap("Quit match");
       await a.tap("Quit");
-      await a.see("THE NEXT SHOT IS YOURS");
+      await a.see("Play Online");
     });
     await check("house rival: VS card, then forfeit", async () => {
-      await a.tap("Play pool");
-      await a.tap("Play a computer rival");
+      await a.tap("Vs Computer");
       await a.tap("Enter Lagos");
       await a.see("House rival");
       await snap(a, "06-vs-house");
@@ -115,14 +117,14 @@ export const walkSteps = [
     await check("second player joins", async () => {
       await enter(b);
       await b.tap("Skip for now");
-      await b.see("Play pool");
+      await b.see("Play Online");
     });
     await check("online: both queue at Lagos and meet", async () => {
       await a.tap("Play a player online");
       await a.tap("Enter Lagos");
       await a.see("FINDING AN OPPONENT");
       await snap(a, "07-searching");
-      await b.tap("Play pool");
+      await b.tap("Play Online");
       await b.tap("Enter Lagos");
       await a.see("WINNER TAKES");
       await snap(a, "08-vs-online");
