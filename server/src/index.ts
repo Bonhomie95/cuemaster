@@ -168,6 +168,8 @@ const publicUser = (u: any) => ({
   completed: u.completed || [],
   selectedTable: u.selectedTable,
   stats: u.stats || { finishes: 0, shots: 0 },
+  starterBought: !!u.starterBought,
+  passPremiumSeason: u.passPremiumSeason ?? null,
   createdAt: u.createdAt,
 });
 async function issue(playerId: string) {

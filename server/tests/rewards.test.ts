@@ -143,12 +143,16 @@ test("crates are earned by winning, bounded by slots, and paid out exactly once"
   assert.equal(sped.hoursOff, 1);
   assert.equal((await call("/me/crates")).body.videosLeft, 5);
   assert.equal((await call("/me")).body.crates, SLOTS);
-  assert.equal((await call("/store/rubies")).body.available, false);
+  assert.deepEqual((await call("/store")).body.platforms, {
+    ios: false,
+    android: false,
+  });
   assert.equal(
     (
-      await call("/store/rubies/claim", "POST", {
+      await call("/store/claim", "POST", {
         platform: "ios",
-        transactionId: "forged-receipt-0001",
+        productId: "rubies.handful",
+        transaction: "forged-receipt-0001",
       })
     ).status,
     503,
