@@ -1,6 +1,7 @@
 import { assertProductionConfig, listenHost } from "./config";
 import { installLegal, legalConfigured } from "./legal";
 import { installRewards, crateAwardStage, publicCrate } from "./rewards";
+import { installDaily, track, addPassXp, DAILY } from "./daily";
 import { installStore, billingConfigured } from "./store";
 import { installAds, adsConfigured } from "./ads";
 import { installLive } from "./live";
@@ -459,6 +460,17 @@ app.post("/local-matches/:id/finish", required, async (req: any, res) => {
     ],
     { returnDocument: "after" },
   );
+  // Missions and the pass count only the write that actually finished a CPU match, so a retried
+  // request counts nothing twice, and only a refereed win counts as a win.
+  if (updated?.localMatch?.mode === "cpu") {
+    void track(db, updated._id, "match_played");
+    if (verified) void track(db, updated._id, "match_won");
+    void addPassXp(
+      db,
+      updated._id,
+      DAILY.passXp.cpuMatch + (verified ? DAILY.passXp.verifiedWin : 0),
+    );
+  }
   // A third finished match can pay an invite bonus; read the player back if it did.
   const invited =
     !!updated &&
@@ -807,6 +819,17 @@ app.post(
     } catch (e) {
       return res.status(422).json({ error: (e as Error).message });
     }
+    // A refereed clear counts toward missions once per distinct run: the app retries the same
+    // ticket and shots after a dropped response, and that is still one clear.
+    void tickets
+      .updateOne(
+        { _id: ticket._id },
+        { $addToSet: { runs: hash(JSON.stringify(input.shots)) } },
+      )
+      .then((r) => {
+        if (r.modifiedCount) void track(db, req.player._id, "practice_clear");
+      })
+      .catch(() => {});
     const key = `practice:${challenge.id}`;
     const rewarded = await users.findOneAndUpdate(
       { _id: req.player._id, completed: { $ne: key } },
@@ -1005,6 +1028,9 @@ app.post(
       { $addToSet: { completed: key }, $inc: { xp: DAILY_SHOT_XP } },
       { returnDocument: "after" },
     );
+    void track(db, req.player._id, "daily_shot");
+    // Pass XP follows the once-a-day XP above; resubmitting a better run earns nothing more.
+    if (rewarded) void addPassXp(db, req.player._id, DAILY.passXp.dailyShot);
     res.json({
       verified: true,
       result: { shots: result.shots, score: result.score },
@@ -1017,6 +1043,7 @@ app.post(
 );
 installRewards(app, db, required, publicUser);
 installInvites(app, db, required, publicUser);
+installDaily(app, db, required, publicUser);
 installStore(app, db, required, publicUser);
 installAds(app, db, required);
 installPlatform(app, db, required);
@@ -1230,5 +1257,16 @@ const server = app.listen(port, host, () =>
 installLive(server, db, {
   authenticate: playerForToken,
   publicUser,
-  onResult: (playerId) => void settleInvite(db, playerId).catch(() => {}),
+  // An online result counts for missions, the pass and invites like a refereed CPU match.
+  onResult: (playerId, won) => {
+    void track(db, playerId, "match_played");
+    void track(db, playerId, "online_played");
+    if (won) void track(db, playerId, "match_won");
+    void addPassXp(
+      db,
+      playerId,
+      DAILY.passXp.cpuMatch + (won ? DAILY.passXp.verifiedWin : 0),
+    );
+    void settleInvite(db, playerId).catch(() => {});
+  },
 });

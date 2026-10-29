@@ -89,6 +89,74 @@ export type LeaderReplay = {
   name: string;
   shots: { angle: number; power: number; side: number; top: number }[];
 };
+/** A daily reward. A crate is named by type only; what it holds is rolled when it opens. */
+export type DailyReward = {
+  coins: number;
+  rubies: number;
+  /** `fallbackCoins` is paid instead when every crate slot is full. */
+  crate: { tier: string; name: string; fallbackCoins: number } | null;
+};
+/** What a claim actually paid. `fallback` is a crate that became coins because the slots were full. */
+export type Granted = {
+  coins: number;
+  rubies: number;
+  crate: { tier: string; name: string } | null;
+  fallback: { tier: string; name: string; coins: number } | null;
+  passXp: number;
+};
+export type DailyMission = {
+  id: string;
+  label: string;
+  goal: number;
+  progress: number;
+  reward: DailyReward;
+  passXp: number;
+  claimed: boolean;
+};
+export type WheelSegment = DailyReward & { label: string; jackpot: boolean };
+/** `GET /me/today`: everything the daily screens draw, in one answer. */
+export type Today = {
+  date: string;
+  resetsAt: string;
+  slots: { held: number; max: number };
+  streak: { day: number; claimedToday: boolean; rewards: DailyReward[] };
+  /** `readyAt` is null when the gift can be collected now. */
+  gift: { coins: number; hours: number; readyAt: string | null };
+  spin: {
+    free: number;
+    tokens: number;
+    adSpinsLeft: number;
+    ads: boolean;
+    segments: WheelSegment[];
+  };
+  missions: {
+    list: DailyMission[];
+    bonus: {
+      reward: DailyReward;
+      passXp: number;
+      ready: boolean;
+      claimed: boolean;
+    };
+  };
+  pass: {
+    season: number;
+    endsAt: string;
+    xp: number;
+    tier: number;
+    xpPerTier: number;
+    premium: boolean;
+    rewards: {
+      tier: number;
+      xp: number;
+      free: DailyReward;
+      premium: DailyReward;
+    }[];
+    claimed: { free: number[]; premium: number[] };
+  };
+};
+/** Every daily claim answers with the new balance and the whole board. */
+export type DailyClaim = { player: Player; today: Today; granted: Granted };
+export type SpinResult = DailyClaim & { index: number; prize: WheelSegment };
 export const todayKey = () => new Date().toISOString().slice(0, 10);
 /** A two-letter country code as its flag emoji; a neutral mark when unset. */
 export function flag(code: string) {

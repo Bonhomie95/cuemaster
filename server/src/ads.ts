@@ -4,6 +4,7 @@ import type { Db } from "mongodb";
 import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import { DAILY_VIDEO_LIMIT } from "./rewards";
+import { DAILY } from "./daily";
 
 /**
  * Rewarded video, verified by AdMob rather than by the phone.
@@ -76,21 +77,38 @@ export function installAds(app: Express, db: Db, required: RequestHandler) {
         return res
           .status(409)
           .json({ error: "Video rewards are not available yet." });
-      const { crateId } = z
-        .object({ crateId: z.string().uuid() })
-        .strict()
+      // A ticket pays for one thing: an hour off a started crate, or one extra wheel spin.
+      const input = z
+        .union([
+          z.object({ crateId: z.string().uuid() }).strict(),
+          z.object({ purpose: z.literal("spin") }).strict(),
+        ])
         .parse(req.body);
-      const crate = (req.player.crates || []).find(
-        (c: any) => c.id === crateId,
-      );
-      if (!crate?.unlockAt)
-        return res
-          .status(409)
-          .json({ error: "Start the crate before speeding it up." });
+      if ("purpose" in input) {
+        // Refuse before the advert rather than after it: a capped day would pay nothing.
+        // `redeem()` enforces the same cap again inside its own write.
+        const day = new Date().toISOString().slice(0, 10);
+        const used =
+          req.player.spinAdDay === day ? req.player.spinAdCount || 0 : 0;
+        if (used >= DAILY.spins.adPerDay)
+          return res.status(409).json({
+            error: "Today's video spins are used. More tomorrow.",
+          });
+      } else {
+        const crate = (req.player.crates || []).find(
+          (c: any) => c.id === input.crateId,
+        );
+        if (!crate?.unlockAt)
+          return res
+            .status(409)
+            .json({ error: "Start the crate before speeding it up." });
+      }
       const ticket = {
         _id: randomUUID(),
         playerId: req.player._id,
-        crateId,
+        ...("purpose" in input
+          ? { purpose: "spin" }
+          : { purpose: "crate", crateId: input.crateId }),
         redeemed: false,
         createdAt: new Date(),
         expiresAt: new Date(Date.now() + 15 * 60000),
@@ -124,7 +142,7 @@ export function installAds(app: Express, db: Db, required: RequestHandler) {
   );
 
   /**
-   * Redeem one ticket for one hour off its crate.
+   * Redeem one ticket: one hour off its crate, or one extra spin of the daily wheel.
    *
    * The ticket burn is the idempotency key: one signed callback, one grant. The daily cap is
    * then applied inside a single pipeline update, because two callbacks arriving together used
@@ -138,6 +156,37 @@ export function installAds(app: Express, db: Db, required: RequestHandler) {
     );
     if (!ticket) return false;
     const day = new Date().toISOString().slice(0, 10);
+    if (ticket.purpose === "spin") {
+      // One spin token per ticket, capped per day inside a single write like the crate path
+      // below, so concurrent callbacks cannot both read the same count and grant past the cap.
+      const spins = {
+        $cond: [
+          { $eq: ["$spinAdDay", day] },
+          { $ifNull: ["$spinAdCount", 0] },
+          0,
+        ],
+      };
+      const allowed = { $lt: [spins, DAILY.spins.adPerDay] };
+      const prior = await users.findOneAndUpdate({ _id: ticket.playerId }, [
+        {
+          $set: {
+            spinTokens: {
+              $add: [
+                { $ifNull: ["$spinTokens", 0] },
+                { $cond: [allowed, 1, 0] },
+              ],
+            },
+            spinAdDay: day,
+            spinAdCount: { $cond: [allowed, { $add: [spins, 1] }, spins] },
+          },
+        },
+      ]);
+      if (!prior) return false;
+      return (
+        (prior.spinAdDay === day ? prior.spinAdCount || 0 : 0) <
+        DAILY.spins.adPerDay
+      );
+    }
     const held = { $ifNull: ["$crates", []] };
     const used = {
       $cond: [{ $eq: ["$videoDay", day] }, { $ifNull: ["$videoCount", 0] }, 0],

@@ -3,6 +3,7 @@ import type { Express, RequestHandler } from "express";
 import type { Db } from "mongodb";
 import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
+import { track } from "./daily";
 
 /**
  * Reward crates.
@@ -267,6 +268,8 @@ export function installRewards(
         return res
           .status(409)
           .json({ error: "Crate already opened. Reload rewards." });
+      // Counted only by the write that removed the crate, so a retried open counts nothing.
+      void track(db, req.player._id, "crate_opened");
       res.json({
         opened: { ...view, spentRubies: cost },
         reward,
