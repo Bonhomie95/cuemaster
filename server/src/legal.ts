@@ -65,7 +65,7 @@ const PRIVACY = () => `
 <li>If you connect Google or Apple, the provider's account identifier and the identity details you allow. We never receive your provider password. Apple refresh tokens are stored encrypted so your Apple authorization can be revoked when you delete your account.</li>
 <li>If you save a payout wallet, its Base-network address and verification status. The game never asks for a seed phrase or private key and does not process cryptocurrency deposits or payouts.</li>
 <li>Player reports and block lists, for moderation.</li>
-<li>Your coin and ruby balances, the crates you hold and what they contained, and any ruby purchase you make. A purchase is recorded by the transaction identifier the store gives us; we never see your card or payment details.</li>
+<li>Your coin and ruby balances, the crates you hold and what they contained, and any purchase you make. A purchase is recorded by the transaction identifier the store gives us, and carries a one-way code derived from your account so that only your account can be credited with it; we never see your card or payment details.</li>
 <li>Your IP address, seen transiently by the service infrastructure and used for request rate limiting.</li>
 </ul>
 <h2>Adverts</h2>
@@ -100,7 +100,7 @@ const TERMS = () => `
 <p>Coins and rubies are virtual items. They are not cryptocurrency, not a deposit, and not a promise of cash redemption. They have no value outside the game, cannot be transferred between players and cannot be exchanged for money. Entry to any game or competition is paid in coins only.</p>
 <p>Winning a match seals a reward crate. A crate opens after its timer, or immediately if you spend rubies. Crate contents are random within a range that depends on the crate's type, and are decided by our service when the crate is opened, never by your device. Rubies change when a crate opens; they never change what is inside it.</p>
 <p>A crate's timer can also be shortened by watching a short advert. That is always optional.</p>
-<p>Where ruby purchases are offered they are sold through Apple or Google, at the price their store shows, and are delivered as rubies only. Rubies buy time on a crate; they never buy coins, cues or tables. Purchases are final except where the store's own refund rules or your local law say otherwise; refunds are handled by Apple or Google, not by us. We may change prices, pack sizes and crate contents, and will publish the current odds in the game.</p>
+<p>Where purchases are offered they are sold through Apple or Google, at the price their store shows, and are delivered as the coins, rubies or season pass the store names. Coins pay for entry fees, cues and tables. Rubies open crates early; they never buy coins, cues or tables. The pass unlocks the premium reward track for the season in which it is bought. Purchases are final except where the store's own refund rules or your local law say otherwise; refunds are handled by Apple or Google, not by us. We may change prices, pack sizes and crate contents, and will publish the current odds in the game.</p>
 <p>Challenge awards are validated by our service; interrupted, invalid or duplicate submissions may earn nothing.</p>
 <h2>Competitions</h2>
 <p>Competitions charge their entry in coins and pay their prizes in coins. Prizes are credited automatically when the event closes, using the verified scores shown on the event board. An entry fee is not refunded if you do not finish.</p>
