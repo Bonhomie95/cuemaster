@@ -26,6 +26,10 @@ const SIZES = store
       { name: "appstore-2868x1320", width: 956, height: 440, scale: 3 },
     ]
   : [{ name: "phone", width: 874, height: 402, scale: 2 }];
+// --size=appstore walks only the sizes whose name contains it.
+const only = process.argv.find((a) => a.startsWith("--size="))?.slice(7);
+if (only)
+  SIZES.splice(0, SIZES.length, ...SIZES.filter((s) => s.name.includes(only)));
 const CHROME =
   process.env.CHROME ||
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";

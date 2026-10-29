@@ -127,7 +127,7 @@ function SeatCard({ seat, accent }: { seat: Seat; accent: string }) {
         />
       </View>
       <Text style={s.vsName} numberOfLines={1}>
-        {seat.name} {seat.country !== undefined ? flag(seat.country) : ""}
+        {seat.name} {seat.country ? flag(seat.country) : ""}
       </Text>
       <Text style={s.vsCaption}>{seat.caption}</Text>
     </View>
