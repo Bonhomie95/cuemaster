@@ -182,7 +182,11 @@ export default function MatchSearch({
           {kind === "host" && online.roomCode ? (
             <Enter style={s.codeCard}>
               <Text style={s.copy}>Room code</Text>
-              <View style={s.codeRow}>
+              <View
+                style={s.codeRow}
+                accessible
+                accessibilityLabel={`Room code ${online.roomCode}`}
+              >
                 {online.roomCode.split("").map((c, i) => (
                   <View key={i} style={s.codeCell}>
                     <Text style={s.codeChar}>{c}</Text>

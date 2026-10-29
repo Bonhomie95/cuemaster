@@ -4,6 +4,9 @@ import { TableHost } from "../render/TableHost";
 import Rewards from "./Rewards";
 import Welcome from "./Welcome";
 import InviteCard from "./Invite";
+import Shop from "./Shop";
+import { PlayerBadge, CurrencyPill } from "./TopBar";
+import { restorePending } from "./billing";
 import { comeBack } from "./notify";
 import { Press, Enter, CountUp, PageFade, Pulse } from "./motion";
 import { celebrate } from "./feedback";
@@ -77,7 +80,8 @@ type Page =
   | "wallet"
   | "rewards"
   | "leaderboard"
-  | "blocked";
+  | "blocked"
+  | "shop";
 type Launch = {
   kind: "free" | "practice" | "event" | "local" | "daily" | "online";
   drill: string;
@@ -235,6 +239,9 @@ function ClubBody() {
       cashPayouts: false,
     });
   const [rewardsFrom, setRewardsFrom] = useState<Page>("profile");
+  const [shopTab, setShopTab] = useState<"offers" | "rubies" | "coins">(
+    "offers",
+  );
   const [page, setPage] = useState<Page>("home"),
     [adult, setAdult] = useState(false),
     [launch, setLaunch] = useState<Launch | null>(null),
@@ -274,6 +281,11 @@ function ClubBody() {
         try {
           setPlayer(await api<Player>("/me"));
           comeBack();
+          // A purchase paid for but not yet credited (a crash, a dropped connection) is
+          // claimed now; the store keeps it open until the server confirms.
+          void restorePending()
+            .then((p) => p && setPlayer(p))
+            .catch(() => {});
         } catch (e) {
           if (e instanceof ApiError && e.status === 401) await clearToken();
           else throw e;
@@ -1080,29 +1092,12 @@ function ClubBody() {
             },
           ]}
         >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Open profile"
-            accessibilityState={{ selected: page === "profile" }}
+          <PlayerBadge
+            player={player}
+            selected={page === "profile"}
+            compact={small}
             onPress={() => setPage("profile")}
-            style={{
-              width: 44,
-              height: 44,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Image
-              source={portraits[player.avatar]}
-              style={[
-                u.avatar,
-                page === "profile" && {
-                  borderColor: "#e1c18a",
-                  borderWidth: 2,
-                },
-              ]}
-            />
-          </Pressable>
+          />
           <View style={{ flexDirection: "row", gap: 4 }}>
             <IconButton
               icon="home"
@@ -1129,17 +1124,23 @@ function ClubBody() {
               onPress={() => setPage("events")}
             />
           </View>
-          <View style={[u.topRight, { gap: 14 }]}>
-            {!!player.rubies && (
-              <View style={u.currency}>
-                <Feather name="hexagon" size={14} color="#ff5f6d" />
-                <CountUp value={player.rubies} style={u.rubies} />
-              </View>
-            )}
-            <View style={u.currency}>
-              <Text style={u.coins}>◉</Text>
-              <CountUp value={player.coins} style={u.coins} />
-            </View>
+          <View style={[u.topRight, { gap: 10 }]}>
+            <CurrencyPill
+              kind="rubies"
+              value={player.rubies || 0}
+              onPlus={() => {
+                setShopTab("rubies");
+                setPage("shop");
+              }}
+            />
+            <CurrencyPill
+              kind="coins"
+              value={player.coins}
+              onPlus={() => {
+                setShopTab("coins");
+                setPage("shop");
+              }}
+            />
           </View>
         </View>
         <PageFade
@@ -1152,7 +1153,15 @@ function ClubBody() {
             paddingBottom: Math.max(insets.bottom, 14),
           }}
         >
-          {page === "rewards" ? (
+          {page === "shop" ? (
+            <Shop
+              key={shopTab}
+              player={player}
+              onPlayer={setPlayer}
+              initialTab={shopTab}
+              onClose={() => setPage("home")}
+            />
+          ) : page === "rewards" ? (
             <Rewards
               player={player}
               onPlayer={setPlayer}
