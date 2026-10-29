@@ -56,9 +56,24 @@ if (!version) throw Error("Chrome did not start.");
 
 /** One browser tab, driven over the DevTools protocol. */
 async function open(url, size) {
-  const target = await fetch(`http://127.0.0.1:9334/json/new?about:blank`, {
-    method: "PUT",
-  }).then((r) => r.json());
+  // Each player gets a window of their own: a background tab stops animating (no frames, no
+  // physics), and both phones must play the same shot at the same time.
+  const browser = new WebSocket(version.webSocketDebuggerUrl);
+  await new Promise((r) => (browser.onopen = r));
+  const created = await new Promise((resolve) => {
+    browser.onmessage = (e) => resolve(JSON.parse(e.data).result);
+    browser.send(
+      JSON.stringify({
+        id: 1,
+        method: "Target.createTarget",
+        params: { url: "about:blank", newWindow: true },
+      }),
+    );
+  });
+  browser.close();
+  const target = (
+    await fetch("http://127.0.0.1:9334/json/list").then((r) => r.json())
+  ).find((t) => t.id === created.targetId);
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((r) => (ws.onopen = r));
   let id = 0;
@@ -97,6 +112,7 @@ async function open(url, size) {
     screenOrientation: { type: "landscapePrimary", angle: 90 },
   });
   await send("Emulation.setTouchEmulationEnabled", { enabled: true });
+  await send("Emulation.setFocusEmulationEnabled", { enabled: true });
   await send("Page.navigate", { url });
   const page = {
     errors,

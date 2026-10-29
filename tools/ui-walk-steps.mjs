@@ -41,6 +41,50 @@ export const walkSteps = [
     });
   },
   async ({ a, check, snap, sleep }) => {
+    await check("daily streak: claim day 1 once", async () => {
+      await a.tap("Daily rewards");
+      await a.see("Day 1");
+      await snap(a, "12-daily");
+      await a.tap("Claim");
+      await a.until(
+        "[...document.querySelectorAll('[aria-label]')].some(e => /^Day 1: .*collected/.test(e.getAttribute('aria-label')))",
+      );
+    });
+    await check("free coins: collect, then a countdown", async () => {
+      await a.tap("Collect the free gift");
+      await a.until(
+        "[...document.querySelectorAll('[aria-label]')].some(e => e.getAttribute('aria-label').startsWith('Next free gift in'))",
+      );
+    });
+    await check("prize wheel lands and pays", async () => {
+      await a.tap("Spin");
+      await a.tap("Spin the wheel");
+      await sleep(1500);
+      await snap(a, "13-wheel");
+      await a.see("You won", 12000);
+    });
+    await check("missions and the pass", async () => {
+      await a.tap("Missions");
+      await a.see(/Finish all three|Claim bonus/);
+      await snap(a, "14-missions");
+      await a.tap("Pass");
+      await a.see("Unlock premium");
+      await snap(a, "15-pass");
+      await a.tap("Unlock premium");
+      await a.see("Top up");
+    });
+    await check("shop tabs", async () => {
+      await a.tap("Rubies");
+      await a.see("Handful of rubies");
+      await snap(a, "16-shop-rubies");
+      await a.tap("Coins");
+      await a.see("Pile of coins");
+      await a.tap("Offers");
+      await a.see("Starter pack");
+      await snap(a, "17-shop-offers");
+      await a.tap("Close shop");
+      await a.see("THE NEXT SHOT IS YOURS");
+    });
     await check("free play: aim, shoot, settle, leave", async () => {
       await a.tap("Free play");
       await a.see("POWER");
@@ -122,7 +166,7 @@ export const walkSteps = [
       await b.tap("Play a friend with a room code");
       await b.tap("Join a friend's table with a code");
       await b.type("Room code", code);
-      await b.tap("Join table");
+      await b.tap("Join room");
       await a.see("FRIENDLY");
       await sleep(3600);
       await a.tap("Table settings");
