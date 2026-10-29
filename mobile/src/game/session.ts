@@ -4,6 +4,23 @@ import { World, drill, P, Ball, ball, R, H, W } from "../physics/engine";
 import { Progress } from "./progress";
 import { localWinner } from "./localMatch";
 export type Shot = { angle: number; power: number; side: number; top: number };
+/** A table at rest: everything needed to rebuild it on another device. */
+export type TableState = {
+  balls: Ball[];
+  progress: Record<string, any>;
+  placement: boolean;
+  headStringPlacement: boolean;
+  shots: number;
+};
+/** An online opponent. Their actions arrive from the server instead of being planned here. */
+export type RemoteOpponent = {
+  seat: number;
+  name: string;
+  avatar: number;
+  country: string;
+  level: number;
+  trophies: number;
+};
 /** Everything the player decided in a match; the server replays these with the same CPU seed. */
 export type Action =
   | ({ t: "shot" } & Shot)
@@ -143,10 +160,153 @@ export class Session {
   cpuWait = 0;
   cpuPlan: CpuShot | null = null;
   cpuSerial = -1;
+  remote: RemoteOpponent | null = null;
+  /** Every action the local player makes, so an online match can send it to the server. */
+  onAction: ((a: Action) => void) | null = null;
+  /**
+   * Online sync. `localSeq` counts actions applied on this device (the player's own are applied
+   * at once, before the server confirms them). The server numbers every action it accepts and
+   * sends the table it computed; once this device has played the same action out, it adopts
+   * that table if its own result differs, so float drift between phones can never split a game.
+   */
+  localSeq = 0;
+  inbox: { seq: number; action: Action; state: TableState }[] = [];
+  confirmed = new Map<number, TableState>();
+  remoteAim: Shot | null = null;
+  applyingInbox = false;
+  /** True whenever the opponent, computer or online, holds the table. Input is locked then. */
   get cpuTurn() {
-    return !!this.cpu && this.progress.turn === 1 && !this.progress.finished;
+    return (
+      (!!this.cpu || !!this.remote) &&
+      this.progress.turn === 1 &&
+      !this.progress.finished
+    );
+  }
+  get opponentName() {
+    return this.cpu?.name || this.remote?.name || "Player 2";
+  }
+  record(a: Action) {
+    this.actions.push(a);
+    if (this.applyingInbox) return;
+    // Timeouts are decided by the server in an online match and arrive through the inbox.
+    if (this.remote && a.t !== "timeout") this.localSeq++;
+    this.onAction?.(a);
+  }
+  /** Leave online mode; called when a match ends or the player leaves the table. */
+  endOnline() {
+    this.remote = null;
+    this.onAction = null;
+    this.inbox = [];
+    this.confirmed.clear();
+    this.localSeq = 0;
+    this.remoteAim = null;
+  }
+  tableState(): TableState {
+    return {
+      balls: this.world.balls.map((b) => ({ ...b })),
+      progress: JSON.parse(JSON.stringify(this.progress)),
+      placement: this.placement,
+      headStringPlacement: this.headStringPlacement,
+      shots: this.shots,
+    };
+  }
+  /** Adopt a table from the server. `mirror` swaps the seats: this device is always player 0. */
+  loadTableState(state: TableState, mirror = false) {
+    const p = Object.assign(new Progress(), state.progress);
+    p.groups = [...state.progress.groups] as Progress["groups"];
+    p.returned = [...state.progress.returned];
+    p.shotPots = [...state.progress.shotPots];
+    p.rails = [...state.progress.rails];
+    if (mirror) {
+      p.turn = 1 - p.turn;
+      p.breakShooter = 1 - p.breakShooter;
+      p.groups = [p.groups[1], p.groups[0]];
+    }
+    this.progress = p;
+    this.world = new World(state.balls);
+    this.previous = this.world.balls.map((b) => ({ ...b }));
+    this.placement = state.placement;
+    this.headStringPlacement = state.headStringPlacement;
+    this.shots = state.shots;
+    this.potted = p.returned.length;
+    this.running = false;
+    this.accumulator = 0;
+    this.alpha = 1;
+    this.snapDrops = true;
+    this.notify();
+  }
+  /** Same table to within a tenth of a millimetre, and the same rules state. */
+  matches(state: TableState, mirror = false) {
+    const mine = this.tableState();
+    const turn = mirror ? 1 - state.progress.turn : state.progress.turn;
+    const groups = mirror
+      ? [state.progress.groups[1], state.progress.groups[0]]
+      : state.progress.groups;
+    return (
+      mine.progress.turn === turn &&
+      mine.progress.finished === state.progress.finished &&
+      mine.progress.breakChoice === state.progress.breakChoice &&
+      mine.progress.foul === state.progress.foul &&
+      mine.placement === state.placement &&
+      JSON.stringify(mine.progress.groups) === JSON.stringify(groups) &&
+      JSON.stringify([...mine.progress.returned].sort()) ===
+        JSON.stringify([...state.progress.returned].sort()) &&
+      state.balls.every((b) => {
+        const a = mine.balls.find((m) => m.id === b.id);
+        return (
+          !!a &&
+          a.pocketed === b.pocketed &&
+          (b.pocketed ||
+            (Math.abs(a.x - b.x) < 1e-4 && Math.abs(a.z - b.z) < 1e-4))
+        );
+      })
+    );
+  }
+  /** Apply confirmed opponent actions in order and reconcile with the server's tables. */
+  updateRemote(dt: number) {
+    if (!this.remote || this.running) return;
+    const mirror = this.remote.seat === 0;
+    const state = this.confirmed.get(this.localSeq);
+    if (state) {
+      if (!this.matches(state, mirror)) {
+        this.loadTableState(state, mirror);
+        this.aimAtTarget();
+      }
+      for (const seq of this.confirmed.keys())
+        if (seq <= this.localSeq) this.confirmed.delete(seq);
+    }
+    const next = this.inbox[0];
+    if (next && next.seq <= this.localSeq) this.inbox.shift();
+    else if (next && next.seq === this.localSeq + 1) {
+      this.inbox.shift();
+      this.applyingInbox = true;
+      try {
+        perform(this, next.action);
+      } catch {
+        // The server's table is the truth; a rule disagreement here just adopts it.
+      } finally {
+        this.applyingInbox = false;
+      }
+      this.localSeq = next.seq;
+      this.confirmed.set(next.seq, next.state);
+      if (!this.running) this.updateRemote(0);
+      return;
+    }
+    // The opponent's cue follows their aim as it arrives.
+    if (this.cpuTurn && this.remoteAim && !this.placement) {
+      const a = this.remoteAim;
+      const difference = Math.atan2(
+        Math.sin(a.angle - this.angle),
+        Math.cos(a.angle - this.angle),
+      );
+      this.angle += difference * Math.min(1, Math.max(0, dt) * 12);
+      this.power = a.power;
+      this.side = a.side;
+      this.top = a.top;
+    }
   }
   updateCpu(dt: number) {
+    if (!this.cpu) return;
     if (!this.cpuTurn || this.running) {
       this.cpuWait = 0;
       this.cpuPlan = null;
@@ -215,7 +375,7 @@ export class Session {
   }
   expireTurn() {
     this.power = 0;
-    if (this.progress.turn === 0) this.actions.push({ t: "timeout" });
+    if (this.progress.turn === 0) this.record({ t: "timeout" });
     this.progress.turn = 1 - this.progress.turn;
     this.progress.foul = "Time expired";
     this.placement = true;
@@ -236,7 +396,8 @@ export class Session {
     if (!this.turnDeadline)
       this.turnDeadline = now + this.activeCue.seconds * 1000;
     const left = Math.max(0, Math.ceil((this.turnDeadline - now) / 1000));
-    if (left === 0) this.expireTurn();
+    // Online, the server owns the clock and sends the timeout itself.
+    if (left === 0 && !this.remote) this.expireTurn();
     else if (left !== this.secondsLeft) {
       this.secondsLeft = left;
       this.notify();
@@ -342,7 +503,7 @@ export class Session {
     choice: "spot" | "rerack" | "opponent-break" | "accept" | "hand",
   ) {
     if (!this.progress.breakChoice || this.running) return;
-    if (this.progress.turn === 0) this.actions.push({ t: "break", choice });
+    if (this.progress.turn === 0) this.record({ t: "break", choice });
     const owner = this.progress.turn;
     const breaker = this.progress.breakShooter;
     if (choice === "rerack" || choice === "opponent-break") {
@@ -427,7 +588,7 @@ export class Session {
       this.placement = false;
       this.headStringPlacement = false;
       this.usedPlacement = !this.matchRules;
-      if (!this.cpuTurn) this.actions.push({ t: "place", x, z });
+      if (!this.cpuTurn) this.record({ t: "place", x, z });
       this.aimAtTarget();
     }
     this.previous = this.world.balls.map((b) => ({ ...b }));
@@ -456,7 +617,7 @@ export class Session {
         top: this.top,
       });
       if (!this.cpuTurn)
-        this.actions.push({
+        this.record({
           t: "shot",
           angle: this.angle,
           power: this.power,
@@ -599,6 +760,7 @@ export class Session {
   update(dt: number) {
     this.updateClock();
     this.updateCpu(dt);
+    this.updateRemote(dt);
     if (
       this.queue.length &&
       !this.running &&
@@ -743,30 +905,47 @@ export function replayMatch(
     // The result is fixed the moment the rack ends; anything a device recorded after that
     // (a stray tap on the cloth, say) cannot change it and must not void a real win.
     if (s.progress.finished) break;
-    if (a.t === "shot") {
-      Object.assign(s, {
-        angle: a.angle,
-        power: a.power,
-        side: a.side,
-        top: a.top,
-      });
-      s.shoot();
-      if (!s.running) throw new Error("A recorded shot could not be played.");
-    } else if (a.t === "place") {
-      if (!s.placement || !s.placeCue(a.x, a.z))
-        throw new Error("A recorded placement was not allowed.");
-    } else if (a.t === "break") {
-      if (!s.progress.breakChoice)
-        throw new Error("No break decision was due.");
-      s.resolveBreak(a.choice);
-    } else if (a.t === "timeout") {
-      if (s.progress.turn !== 0)
-        throw new Error("Only the player can time out.");
-      s.expireTurn();
-    }
+    if (a.t === "timeout" && s.progress.turn !== 0)
+      throw new Error("Only the player can time out.");
+    perform(s, a);
   }
   settle();
   return { finished: s.progress.finished, winner: localWinner(s.progress) };
+}
+/**
+ * Apply one recorded action, or throw if the rules would not have allowed it. Shared by the
+ * referee's match replay, the online match server and the device applying an opponent's move,
+ * so all three agree on what is legal.
+ */
+export function perform(s: Session, a: Action) {
+  if (a.t === "shot") {
+    Object.assign(s, {
+      angle: a.angle,
+      power: a.power,
+      side: a.side,
+      top: a.top,
+    });
+    s.shoot();
+    if (!s.running) throw new Error("A recorded shot could not be played.");
+  } else if (a.t === "place") {
+    // Before the opening break the breaker may move the cue ball anywhere behind the head
+    // string. The device records that as a placement; without this the referee refused it and
+    // a player who adjusted the break could never have a win verified.
+    if (
+      !s.placement &&
+      s.drill === "break" &&
+      s.shots === 0 &&
+      !s.progress.breakChoice
+    )
+      s.placement = s.headStringPlacement = true;
+    if (!s.placement || !s.placeCue(a.x, a.z))
+      throw new Error("A recorded placement was not allowed.");
+  } else if (a.t === "break") {
+    if (!s.progress.breakChoice) throw new Error("No break decision was due.");
+    s.resolveBreak(a.choice);
+  } else if (a.t === "timeout") {
+    s.expireTurn();
+  }
 }
 // Dev-only handle for inspecting and scripting shots from a browser console.
 if ((globalThis as any).__DEV__) (globalThis as any).__cm = session;

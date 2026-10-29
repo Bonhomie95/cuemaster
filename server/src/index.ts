@@ -3,6 +3,7 @@ import { installLegal, legalConfigured } from "./legal";
 import { installRewards, crateAwardStage, publicCrate } from "./rewards";
 import { installStore, billingConfigured } from "./store";
 import { installAds, adsConfigured } from "./ads";
+import { installLive } from "./live";
 import {
   appleConfigured,
   exchangeAppleCode,
@@ -162,6 +163,7 @@ const publicUser = (u: any) => ({
   level: levelOf(u.xp),
   coins: u.coins,
   rubies: u.rubies || 0,
+  trophies: u.trophies || 0,
   crates: (u.crates || []).length,
   ownedCues: u.ownedCues || ["club"],
   selectedCue: u.selectedCue || "club",
@@ -181,15 +183,17 @@ async function issue(playerId: string) {
   });
   return token;
 }
-async function account(req: any) {
-  const token = req.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
-  if (!token) return null;
+async function playerForToken(token: string, req: any = {}) {
   const s = await sessions.findOne({
     tokenHash: hash(token),
     expiresAt: { $gt: new Date() },
   });
   req.session = s;
   return s ? await users.findOne({ _id: s.playerId }) : null;
+}
+async function account(req: any) {
+  const token = req.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
+  return token ? playerForToken(token, req) : null;
 }
 const suspendedMessage = (u: any) =>
   u.banned
@@ -212,7 +216,7 @@ app.get("/config", (_req, res) =>
     googleWebClientId: process.env.GOOGLE_WEB_CLIENT_ID || "",
     apple: appleConfigured(),
     cashPayouts: false,
-    onlineMatchmaking: false,
+    onlineMatchmaking: true,
     legal: legalConfigured(),
     rubyStore: billingConfigured(),
     ads: adsConfigured(),
@@ -278,6 +282,7 @@ const shotInput = z.object({
   top: z.number().min(-1).max(1),
 });
 const shot = shotInput.strict();
+const CPU_WIN_XP = 30;
 // Embedded match state makes charging and retry protection a single atomic write.
 app.post("/local-matches/start", required, async (req: any, res) => {
   const { venueId, requestId, mode } = z
@@ -385,6 +390,8 @@ app.post("/local-matches/:id/finish", required, async (req: any, res) => {
   // so the coin rate is bounded by the clock rather than by how many wins a device claims.
   // Pass-and-play has no rival seed to replay, so its wins cannot be verified and seal nothing.
   const award = won && cpu ? crateAwardStage() : null;
+  // A verified win takes the pot, both entries, as an online win does.
+  const pot = award ? 2 * (match.entry || 0) : 0;
   const streak = {
     $cond: [
       {
@@ -432,7 +439,16 @@ app.post("/local-matches/:id/finish", required, async (req: any, res) => {
                 },
               }
             : {}),
-          ...(award ? award.fields : {}),
+          ...(award
+            ? {
+                ...award.fields,
+                coins: { $add: ["$coins", pot] },
+                xp: { $add: [{ $ifNull: ["$xp", 0] }, CPU_WIN_XP] },
+                "stats.coinsWon": {
+                  $add: [{ $ifNull: ["$stats.coinsWon", 0] }, pot],
+                },
+              }
+            : {}),
         },
       },
     ],
@@ -441,13 +457,16 @@ app.post("/local-matches/:id/finish", required, async (req: any, res) => {
   const u = updated || (await users.findOne({ _id: req.player._id }));
   if (u.localMatch?.id !== req.params.id)
     return res.status(404).json({ error: "Match not found." });
-  // Local outcomes are unranked; never mint coins or competitive rewards from client results.
+  // Coins move only on a referee-verified CPU win; pass-and-play results never pay anything.
   const earned = (u.crates || []).find((c: any) => c.id === award?.crate.id);
   res.json({
     player: publicUser(u),
     match: u.localMatch,
     crate: earned ? publicCrate(earned) : null,
     verified,
+    // Only a write that actually settled this match paid anything.
+    pot: updated && award ? pot : 0,
+    xp: updated && award ? CPU_WIN_XP : 0,
   });
 });
 app.post("/auth/guest", authLimit, async (req, res) => {
@@ -1193,6 +1212,7 @@ app.use((err: any, _req: any, res: any, _next: any) => {
   res.status(500).json({ error: "Something went wrong. Please try again." });
 });
 const host = listenHost(process.env);
-app.listen(port, host, () =>
+const server = app.listen(port, host, () =>
   console.log(`CueMaster API http://${host}:${port} · MongoDB connected`),
 );
+installLive(server, db, { authenticate: playerForToken, publicUser });

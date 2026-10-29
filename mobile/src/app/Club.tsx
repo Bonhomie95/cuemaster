@@ -4,14 +4,20 @@ import { TableHost } from "../render/TableHost";
 import Rewards from "./Rewards";
 import { Press, Enter, CountUp, PageFade, Pulse } from "./motion";
 import { celebrate } from "./feedback";
-import MatchSearch from "./MatchSearch";
+import MatchSearch, { SearchKind } from "./MatchSearch";
+import { online } from "../game/online";
 import { CpuOpponent } from "../game/cpu";
 import CueShop from "./CueShop";
 import * as Crypto from "expo-crypto";
 import Constants from "expo-constants";
 import MatchVenues from "./MatchVenues";
 import { localWinner } from "../game/localMatch";
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   View,
   Text,
@@ -47,12 +53,13 @@ import {
   Challenge,
   Tournament,
   ProviderConfig,
+  flag,
 } from "./api";
 import { signInProvider } from "./identity";
 import { welcome, venueArt, portraits, clubRoom } from "./art";
 import ProviderButton from "./ProviderButton";
 import Lobby, { IconButton } from "./Lobby";
-import TableGame from "../../TableGame";
+import TableGame, { MatchResult } from "../../TableGame";
 import { session } from "../game/session";
 import type { LeaderReplay } from "./api";
 void SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -69,7 +76,7 @@ type Page =
   | "leaderboard"
   | "blocked";
 type Launch = {
-  kind: "free" | "practice" | "event" | "local" | "daily";
+  kind: "free" | "practice" | "event" | "local" | "daily" | "online";
   drill: string;
   ticket?: string;
   challenge?: Challenge;
@@ -82,11 +89,6 @@ type Launch = {
   venue?: Venue;
 };
 const money = (n: number) => n.toLocaleString();
-function flag(code: string) {
-  return /^[A-Z]{2}$/.test(code)
-    ? String.fromCodePoint(...[...code].map((c) => c.charCodeAt(0) + 127397))
-    : "◎";
-}
 function Action({
   label,
   onPress,
@@ -436,7 +438,8 @@ function ClubBody() {
     session.reset(l.drill);
     launchRef.current = l;
     submitted.current = false;
-    setSearchVenue(null);
+    setSearch(null);
+    setResult(null);
     setLaunch(l);
   }
   const enterLocal = (v: Venue, mode: "local" | "cpu" = "local") =>
@@ -444,7 +447,7 @@ function ClubBody() {
       const active = await api("/local-matches/active");
       if (active) {
         // Reloaded racks cannot be restored yet. Show a recoverable forfeit choice.
-        setSearchVenue(null);
+        setSearch(null);
         setAbandoned(active);
         return;
       }
@@ -468,38 +471,104 @@ function ClubBody() {
         v,
       );
     });
-  const [searchVenue, setSearchVenue] = useState<Venue | null>(null);
+  const [search, setSearch] = useState<{
+    venue: Venue | null;
+    kind: SearchKind;
+  } | null>(null);
+  /** What the table shows when a paid rack ends: filled in by the server's verdict. */
+  const [result, setResult] = useState<MatchResult | null>(null);
   const [abandoned, setAbandoned] = useState<any>(null);
+  // A found opponent opens the table straight away; the session is already seated by `online`.
+  const liveRevision = useSyncExternalStore(online.subscribe, online.snapshot);
+  const liveMatchId = online.status === "playing" ? online.match?.id : null;
+  useEffect(() => {
+    const m = online.match;
+    if (!liveMatchId || !m) return;
+    setSearch(null);
+    setResult(null);
+    setToast("");
+    const l: Launch = {
+      kind: "online",
+      drill: "break",
+      venue: m.venue,
+      label: `${m.venue.name} · online`,
+    };
+    launchRef.current = l;
+    setLaunch(l);
+    // The entry was charged as the match opened.
+    void api<Player>("/me")
+      .then(setPlayer)
+      .catch(() => {});
+  }, [liveMatchId]);
+  useEffect(() => {
+    if (online.result?.player) setPlayer(online.result.player);
+  }, [liveRevision]);
+  /**
+   * Report a finished (or abandoned) rack. A finished rack stays on the table behind the result
+   * card; an abandoned one is a forfeit and goes back to the venues.
+   */
+  const settling = useRef<string | null>(null);
   const finishLocal = () =>
     work(async () => {
-      if (!launch?.matchId) return;
+      if (!launch?.matchId || settling.current === launch.matchId) return;
       const winner = localWinner(session.progress);
-      const result = await api(
-        `/local-matches/${launch.matchId}/finish`,
-        "POST",
-        {
+      settling.current = launch.matchId;
+      let r;
+      try {
+        r = await api(`/local-matches/${launch.matchId}/finish`, "POST", {
           outcome: winner === null ? "forfeit" : winner === 0 ? "won" : "lost",
           // The referee replays these against the same rival seed before a win counts.
           actions: launch.opponent ? session.actions : undefined,
-        },
-      );
-      setPlayer(result.player);
-      setToast(
-        winner === null
-          ? "Match forfeited."
+        });
+      } catch (e) {
+        settling.current = null;
+        throw e;
+      }
+      setPlayer(r.player);
+      if (winner === null) {
+        setToast("Match forfeited.");
+        leaveGame();
+        setPage("matches");
+        return;
+      }
+      const rival = launch.opponent?.name || "Player 2";
+      const unverified = winner === 0 && !!launch.opponent && !r.verified;
+      setResult({
+        won: winner === 0 && !unverified,
+        title: unverified
+          ? "Win not verified"
           : winner === 0
-            ? !launch.opponent
-              ? "You won. Pass & play seals no crate."
-              : !result.verified
-                ? "Win not verified. No crate."
-                : result.crate
-                  ? `You won. ${result.crate.name} sealed.`
-                  : "You won. Crate slots full."
-            : `${launch.opponent?.name || "Player 2"} won the match.`,
-      );
-      leaveGame();
-      setPage(winner === 0 && result.crate ? "rewards" : "matches");
+            ? "You win"
+            : `${rival} wins`,
+        pot: r.pot || 0,
+        xp: r.xp || 0,
+        crate: r.crate,
+        note: !launch.opponent
+          ? "Pass & play is for fun: no pot, no crate."
+          : unverified
+            ? "The referee could not confirm this rack, so it pays nothing."
+            : winner === 0 && !r.crate
+              ? "Crate slots are full. Open one to make room for the next."
+              : winner === 0
+                ? ""
+                : "Shake it off. The next rack is yours.",
+      });
     });
+  // A rack that ends is reported at once, so the result card shows the real pot and crate.
+  useEffect(
+    () =>
+      session.subscribe(() => {
+        const l = launchRef.current;
+        if (
+          l?.kind === "local" &&
+          session.progress.finished &&
+          !session.running &&
+          settling.current !== l.matchId
+        )
+          void finishLocal();
+      }),
+    [launch, player],
+  );
   const equip = (v: Venue) =>
     work(async () => {
       if (!player) return;
@@ -569,6 +638,8 @@ function ClubBody() {
     });
   const leaveGame = () => {
     session.cpu = null;
+    session.endOnline();
+    setResult(null);
     setVerificationError("");
     retryVerification.current = null;
     setLaunch(null);
@@ -684,16 +755,16 @@ function ClubBody() {
       </View>
     </Modal>
   );
-  if (searchVenue && player && !launch)
+  if (search && player && !launch)
     return (
       <MatchSearch
-        venue={searchVenue}
+        venue={search.venue}
         player={player}
-        busy={busy}
-        error={toast}
-        onCancel={() => setSearchVenue(null)}
-        onPlay={() => {
-          void enterLocal(searchVenue, "cpu");
+        kind={search.kind}
+        onCancel={() => setSearch(null)}
+        onRival={() => {
+          online.cancel();
+          if (search.venue) void enterLocal(search.venue, "cpu");
         }}
       />
     );
@@ -701,16 +772,46 @@ function ClubBody() {
     return (
       <View style={{ flex: 1 }}>
         <TableGame
-          onExit={launch.kind === "local" ? finishLocal : leaveGame}
-          paidMatch={launch.kind === "local"}
+          onExit={
+            launch.kind === "online"
+              ? () => {
+                  const after = online.result?.player;
+                  online.leave();
+                  if (after) setPlayer(after);
+                  leaveGame();
+                  setPage("matches");
+                }
+              : launch.kind === "local"
+                ? result
+                  ? () => {
+                      leaveGame();
+                      setPage("matches");
+                    }
+                  : finishLocal
+                : leaveGame
+          }
+          online={launch.kind === "online"}
+          result={result}
+          onPlayAgain={
+            launch.kind === "local" && launch.venue
+              ? () =>
+                  void enterLocal(
+                    launch.venue!,
+                    launch.opponent ? "cpu" : "local",
+                  )
+              : undefined
+          }
+          paidMatch={launch.kind === "local" || launch.kind === "online"}
           entryFee={launch.venue?.entry || 0}
           exitBusy={busy}
           exitError={toast}
           playerName={player.name}
           playerAvatar={player.avatar}
+          playerCountry={player.country}
+          playerLevel={player.level}
           playerStats={player.stats}
           modeLabel={
-            launch.kind === "local"
+            launch.kind === "local" || launch.kind === "online"
               ? `${launch.venue?.name} · ${launch.venue?.entry} coins`
               : launch.label || launch.challenge?.name || "LOCAL PRACTICE"
           }
@@ -1061,9 +1162,15 @@ function ClubBody() {
               busy={busy}
               onEnter={(v, mode) => {
                 setToast("");
-                if (mode === "local") void enterLocal(v);
-                else setSearchVenue(v);
+                if (mode === "local" || mode === "cpu")
+                  void enterLocal(v, mode);
+                else
+                  setSearch({
+                    venue: v,
+                    kind: mode === "friend" ? "host" : "queue",
+                  });
               }}
+              onJoin={() => setSearch({ venue: null, kind: "join" })}
               onClose={() => setPage("home")}
             />
           ) : page !== "profile" ? (

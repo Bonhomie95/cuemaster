@@ -13,6 +13,7 @@ export type Player = {
   level: number;
   coins: number;
   rubies?: number;
+  trophies?: number;
   crates?: number;
   ownedCues?: string[];
   selectedCue?: string;
@@ -32,6 +33,9 @@ export type Player = {
     worstStreak?: number;
     coinsWon?: number;
     cratesOpened?: number;
+    onlineMatches?: number;
+    onlineWins?: number;
+    onlineLosses?: number;
   };
 };
 export type Venue = {
@@ -82,6 +86,12 @@ export type LeaderReplay = {
   shots: { angle: number; power: number; side: number; top: number }[];
 };
 export const todayKey = () => new Date().toISOString().slice(0, 10);
+/** A two-letter country code as its flag emoji; a neutral mark when unset. */
+export function flag(code: string) {
+  return /^[A-Z]{2}$/.test(code)
+    ? String.fromCodePoint(...[...code].map((c) => c.charCodeAt(0) + 127397))
+    : "◎";
+}
 export type ProviderConfig = {
   google: boolean;
   googleWebClientId: string;
@@ -148,6 +158,8 @@ const storage = {
     } catch {}
   },
 };
+/** The live socket authenticates with the same session token as every request. */
+export const sessionToken = () => token;
 export async function restoreToken() {
   token = await storage.get();
   return token;

@@ -39,8 +39,19 @@ import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
 import { tableHost, useTableHost, stageHeight } from "./src/render/TableHost";
 import CompatibilityTable from "./src/render/CompatibilityTable";
 import { session, skins, encodeReplay } from "./src/game/session";
-import type { Player } from "./src/app/api";
+import { flag, type Player } from "./src/app/api";
 import { Press, Enter } from "./src/app/motion";
+import { online } from "./src/game/online";
+import {
+  VsIntro,
+  ResultCard,
+  ResultView,
+  EmoteBar,
+  EmoteBubble,
+  AwayBanner,
+} from "./src/app/MatchOverlays";
+/** A finished paid rack, as the server settled it. */
+export type MatchResult = ResultView;
 import { groupOf } from "./src/game/progress";
 import { ballColors } from "./src/render/textures";
 const C = {
@@ -339,18 +350,7 @@ function Audio() {
   }, []);
   return null;
 }
-export default function TableGame({
-  onExit,
-  paidMatch = false,
-  entryFee = 0,
-  exitBusy = false,
-  exitError = "",
-  playerName = "YOU",
-  playerAvatar = 0,
-  playerStats,
-  modeLabel = "LOCAL PRACTICE",
-  allowedSkins = [0],
-}: {
+type TableProps = {
   onExit?: () => void;
   paidMatch?: boolean;
   entryFee?: number;
@@ -358,24 +358,21 @@ export default function TableGame({
   exitError?: string;
   playerName?: string;
   playerAvatar?: number;
+  playerCountry?: string;
+  playerLevel?: number;
   playerStats?: Player["stats"];
   modeLabel?: string;
   allowedSkins?: number[];
-}) {
+  /** An online match: the opponent, the clock and the result come from the server. */
+  online?: boolean;
+  /** A settled house-rival or pass-and-play rack. */
+  result?: MatchResult | null;
+  onPlayAgain?: () => void;
+};
+export default function TableGame(props: TableProps) {
   return (
     <SafeAreaProvider>
-      <Game
-        onExit={onExit}
-        paidMatch={paidMatch}
-        entryFee={entryFee}
-        exitBusy={exitBusy}
-        exitError={exitError}
-        playerName={playerName}
-        playerAvatar={playerAvatar}
-        playerStats={playerStats}
-        modeLabel={modeLabel}
-        allowedSkins={allowedSkins}
-      />
+      <Game {...props} />
     </SafeAreaProvider>
   );
 }
@@ -855,25 +852,73 @@ function Game({
   entryFee = 0,
   exitBusy = false,
   exitError = "",
-  playerName,
-  playerAvatar,
+  playerName = "YOU",
+  playerAvatar = 0,
+  playerCountry = "",
+  playerLevel = 1,
   playerStats,
-  modeLabel,
-  allowedSkins,
-}: {
-  onExit?: () => void;
-  paidMatch?: boolean;
-  entryFee?: number;
-  exitBusy?: boolean;
-  exitError?: string;
-  playerName: string;
-  playerAvatar: number;
-  playerStats?: Player["stats"];
-  modeLabel: string;
-  allowedSkins: number[];
-}) {
+  modeLabel = "LOCAL PRACTICE",
+  allowedSkins = [0],
+  online: isOnline = false,
+  result = null,
+  onPlayAgain,
+}: TableProps) {
   const insets = useSafeAreaInsets();
   useSyncExternalStore(session.subscribe, session.snapshot);
+  useSyncExternalStore(online.subscribe, online.snapshot);
+  // House-rival racks open with the same VS card as online ones; the clock waits for it.
+  const [cpuIntro] = useState(() =>
+    session.cpu && session.shots === 0 ? Date.now() + 2400 : 0,
+  );
+  useEffect(() => {
+    if (cpuIntro)
+      session.turnDeadline = cpuIntro + session.activeCue.seconds * 1000;
+  }, [cpuIntro]);
+  // The server sends the result as the last shot starts; reveal it when the phone has shown it.
+  const [, setTick] = useState(0);
+  const live = isOnline ? online.result : null;
+  useEffect(() => {
+    if (!live || Date.now() >= live.revealAt) return;
+    const t = setTimeout(
+      () => setTick((n) => n + 1),
+      live.revealAt - Date.now(),
+    );
+    return () => clearTimeout(t);
+  }, [live]);
+  const liveResult: MatchResult | null =
+    live && Date.now() >= live.revealAt
+      ? {
+          won: live.won,
+          draw: live.draw,
+          title: live.draw
+            ? "Match abandoned"
+            : live.won
+              ? "You win"
+              : `${session.opponentName} wins`,
+          note:
+            live.reason === "resign"
+              ? live.won
+                ? `${session.opponentName} resigned.`
+                : "You resigned."
+              : live.reason === "disconnect"
+                ? live.won
+                  ? `${session.opponentName} did not come back.`
+                  : "You were away too long."
+                : live.reason === "idle"
+                  ? live.won
+                    ? `${session.opponentName} let the clock run out three times.`
+                    : "Three turns ran out in a row."
+                  : live.draw
+                    ? "Both players left. Entries refunded."
+                    : "",
+          pot: live.pot,
+          xp: live.xp,
+          trophies: live.trophies,
+          refunded: live.refunded,
+          crate: live.crate,
+        }
+      : null;
+  const shownResult = isOnline ? liveResult : result;
   const win = useWindowDimensions();
   // Landscape-locked: the reported orientation can lag on device, so derive it from the sizes.
   const width = Math.max(win.width, win.height),
@@ -940,6 +985,56 @@ function Game({
         pointerEvents="box-none"
       >
         <GroupAnnouncement />
+        {isOnline && online.match && (
+          <VsIntro
+            until={online.match.introUntil}
+            me={{
+              name: playerName,
+              avatar: playerAvatar,
+              country: playerCountry,
+              caption: `LV ${playerLevel}`,
+            }}
+            them={{
+              name: online.match.opponent.name,
+              avatar: online.match.opponent.avatar,
+              country: online.match.opponent.country,
+              caption: `LV ${online.match.opponent.level} · ${online.match.opponent.trophies} trophies`,
+            }}
+            title={`${online.match.venue.name.toUpperCase()} · ${online.match.private ? "FRIENDLY" : "ONLINE"}`}
+            stake={`WINNER TAKES ◉ ${online.match.pot.toLocaleString()}`}
+          />
+        )}
+        {!!cpuIntro && session.cpu && (
+          <VsIntro
+            until={cpuIntro}
+            me={{
+              name: playerName,
+              avatar: playerAvatar,
+              country: playerCountry,
+              caption: `LV ${playerLevel}`,
+            }}
+            them={{
+              name: session.cpu.name,
+              avatar: session.cpu.avatar,
+              caption: `House rival · ${session.cpu.tier}`,
+            }}
+            title={modeLabel.toUpperCase()}
+            stake={`WINNER TAKES ◉ ${(entryFee * 2).toLocaleString()}`}
+          />
+        )}
+        {isOnline && !!online.opponentAwayUntil && !online.result && (
+          <AwayBanner
+            until={online.opponentAwayUntil}
+            name={session.opponentName}
+          />
+        )}
+        {isOnline && online.bubble && (
+          <EmoteBubble
+            text={online.bubble.text}
+            at={online.bubble.at}
+            side={online.bubble.mine ? "left" : "right"}
+          />
+        )}
         <View
           style={[
             s.topBar,
@@ -989,14 +1084,14 @@ function Game({
                       ? `POTTED: ${session.progress.shotPots.join(", ")}`
                       : ""
                     : session.cpuTurn
-                      ? `${session.cpu!.name.toUpperCase()}’S SHOT`
+                      ? `${session.opponentName.toUpperCase()}’S SHOT`
                       : session.placement
                         ? session.headStringPlacement
                           ? "BEHIND THE LINE"
                           : "BALL IN HAND"
                         : session.progress.finished
                           ? "RACK OVER"
-                          : `${turn === 0 ? "YOUR" : "PLAYER 2’S"} TURN`}
+                          : `${turn === 0 ? "YOUR" : `${session.opponentName.toUpperCase()}’S`} TURN`}
               </Text>
               {!session.replaying &&
                 (session.progress.scratch ||
@@ -1020,7 +1115,7 @@ function Game({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Opponent player card"
-              disabled={!session.cpu}
+              disabled={!session.cpu && !session.remote}
               onPress={() => setPanel("rival")}
               style={({ pressed }) => [
                 s.playerStrip,
@@ -1034,14 +1129,18 @@ function Game({
               <View style={[s.stripText, { alignItems: "flex-end" }]}>
                 <Text numberOfLines={1} style={s.playerName}>
                   {turn === 1 ? "▸ " : ""}
-                  {session.cpu ? session.cpu.name.toUpperCase() : "PLAYER 2"}
+                  {session.opponentName.toUpperCase()}
                 </Text>
                 <PlayerBalls player={1} compact />
               </View>
               <ClockRing player={1} enabled={paidMatch}>
                 <Avatar
                   opponent
-                  variant={session.cpu?.avatar ?? (playerAvatar === 0 ? 1 : 0)}
+                  variant={
+                    session.cpu?.avatar ??
+                    session.remote?.avatar ??
+                    (playerAvatar === 0 ? 1 : 0)
+                  }
                 />
               </ClockRing>
             </Pressable>
@@ -1137,6 +1236,15 @@ function Game({
             />
           </Pressable>
           <Text style={s.controlCaption}>AIM</Text>
+          {isOnline && !online.result && (
+            <View style={{ marginTop: 14, alignItems: "center" }}>
+              <EmoteBar
+                emotes={online.emotes}
+                onPick={(i) => online.emote(i)}
+              />
+              <Text style={s.controlCaption}>CHAT</Text>
+            </View>
+          )}
         </View>
         <View
           style={[s.bottomCentre, { bottom: 6 + insets.bottom }]}
@@ -1193,7 +1301,51 @@ function Game({
               </View>
             )}
         </View>
-        {session.progress.finished && !session.running && (
+        {paidMatch && shownResult && (
+          <ResultCard
+            result={shownResult}
+            primary={
+              isOnline
+                ? online.opponentLeft
+                  ? undefined
+                  : () => online.rematch()
+                : onPlayAgain
+            }
+            primaryLabel={
+              isOnline
+                ? online.rematchOffered
+                  ? "Accept rematch"
+                  : online.rematchAsked
+                    ? "Waiting…"
+                    : "Rematch"
+                : "Play again"
+            }
+            primaryDisabled={isOnline && online.rematchAsked}
+            status={
+              isOnline
+                ? online.opponentLeft
+                  ? `${session.opponentName} left the table.`
+                  : online.rematchOffered
+                    ? `${session.opponentName} wants a rematch!`
+                    : online.error
+                : undefined
+            }
+            secondaryLabel="Leave table"
+            onSecondary={() => onExit?.()}
+          />
+        )}
+        {paidMatch &&
+          !shownResult &&
+          session.progress.finished &&
+          !session.running && (
+            <View style={s.finishOverlay} pointerEvents="none">
+              <Enter style={s.finishCard}>
+                <Text style={s.finishTitle}>Rack over</Text>
+                <Text style={s.description}>Settling the result…</Text>
+              </Enter>
+            </View>
+          )}
+        {!paidMatch && session.progress.finished && !session.running && (
           <View style={s.finishOverlay}>
             <Enter style={s.finishCard} accessibilityLiveRegion="polite">
               <Text style={s.finishTitle}>
@@ -1260,7 +1412,9 @@ function Game({
         <View style={s.scrim}>
           <ScrollView style={[s.panel, { maxHeight: "90%", flexGrow: 0 }]}>
             <Text style={s.eyebrow}>
-              {session.progress.turn === 0 ? playerName : "PLAYER 2"}
+              {session.progress.turn === 0
+                ? playerName
+                : session.opponentName.toUpperCase()}
             </Text>
             <Text style={s.panelTitle}>
               {session.progress.breakChoice === "eight"
@@ -1565,13 +1719,15 @@ function Game({
                 <Text style={s.panelTitle}>Quit match?</Text>
                 {!!exitError && <Text style={s.description}>{exitError}</Text>}
                 <Text style={s.description}>
-                  {paidMatch
-                    ? `Counts as a loss. ${entryFee} coins stay paid.`
-                    : "You will leave this rack and lose your current progress."}
+                  {isOnline
+                    ? `Resigning counts as a loss. ${session.opponentName} takes the ${entryFee * 2}-coin pot.`
+                    : paidMatch
+                      ? `Counts as a loss. ${entryFee} coins stay paid.`
+                      : "You will leave this rack and lose your current progress."}
                 </Text>
                 <Button label="Keep playing" onPress={() => setPanel(null)} />
                 <Button
-                  label={exitBusy ? "Saving…" : "Quit"}
+                  label={exitBusy ? "Saving…" : isOnline ? "Resign" : "Quit"}
                   onPress={() => {
                     if (!exitBusy) onExit?.();
                   }}
@@ -1584,6 +1740,31 @@ function Game({
                 avatar={playerAvatar}
                 stats={playerStats}
               />
+            )}
+            {panel === "rival" && session.remote && (
+              <>
+                <View style={s.statHead}>
+                  <Avatar opponent variant={session.remote.avatar} />
+                  <View>
+                    <Text style={s.panelTitle}>
+                      {session.remote.name} {flag(session.remote.country)}
+                    </Text>
+                    <Text style={s.description}>Online player</Text>
+                  </View>
+                </View>
+                <View style={s.statGrid}>
+                  <Stat label="LEVEL" value={session.remote.level} />
+                  <Stat label="TROPHIES" value={session.remote.trophies} />
+                  <Stat
+                    label="ONLINE WINS"
+                    value={online.match?.opponent.wins ?? 0}
+                  />
+                  <Stat
+                    label="SHOT CLOCK"
+                    value={`${cueById(session.cueIds[1]).seconds}s`}
+                  />
+                </View>
+              </>
             )}
             {panel === "rival" && session.cpu && (
               <>

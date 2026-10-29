@@ -63,6 +63,8 @@ test("CPU entries preserve rivals on retry and update separate adaptive records 
       );
       won = result.verified;
       if (played.winner === 0) assert.ok(won, "a played-out win verifies");
+      // A verified win takes the pot: both entries.
+      assert.equal(result.pot, won ? 100 : 0);
     }
     assert.ok(won, "the planner beat the rival within six racks");
     p = await call("/me");
@@ -71,7 +73,7 @@ test("CPU entries preserve rivals on retry and update separate adaptive records 
     assert.equal(p.stats.cpuWins, 1);
     const board = await call("/leaderboard");
     assert.ok(board.players.some((r: any) => r.bestStreak === 1));
-    assert.equal(p.coins, 1000 - spent);
+    assert.equal(p.coins, 1000 - spent + 100);
   } finally {
     await call("/me", "DELETE", { confirm: "DELETE" });
   }
