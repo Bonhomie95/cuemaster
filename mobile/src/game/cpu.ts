@@ -41,6 +41,36 @@ export function cpuSkill(stats: {
     ),
   );
 }
+/**
+ * Strength for an opponent seated against a player, from that player's last five results
+ * (1 = win, 0 = loss) and the room. A losing run meets a softer game, a winning run a harder
+ * one, and a newcomer gets a slightly easy first rack; the higher rooms' regulars are better.
+ */
+export const FORM = {
+  base: 0.3,
+  span: 0.45,
+  newcomer: 0.4,
+  perVenueLevel: 0.03,
+  jitter: 0.05,
+  min: 0.25,
+  max: 0.9,
+};
+export function formSkill(
+  form: readonly number[],
+  venueLevel = 1,
+  random = Math.random,
+) {
+  const recent = form.slice(-5);
+  const rate = recent.length
+    ? recent.reduce((a, b) => a + b, 0) / recent.length
+    : FORM.newcomer;
+  const skill =
+    FORM.base +
+    FORM.span * rate +
+    FORM.perVenueLevel * Math.max(0, venueLevel - 1) +
+    (random() - 0.5) * 2 * FORM.jitter;
+  return Math.max(FORM.min, Math.min(FORM.max, skill));
+}
 export function makeCpu(
   stats: Parameters<typeof cpuSkill>[0],
   seed: number,

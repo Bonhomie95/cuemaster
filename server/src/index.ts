@@ -436,6 +436,18 @@ app.post("/local-matches/:id/finish", required, async (req: any, res) => {
           },
           ...(cpu
             ? {
+                // The last five results, 1 for a win: what a house opponent's strength follows.
+                form: {
+                  $slice: [
+                    {
+                      $concatArrays: [
+                        { $ifNull: ["$form", []] },
+                        [won ? 1 : 0],
+                      ],
+                    },
+                    -5,
+                  ],
+                },
                 "stats.cpuStreak": streak,
                 // The longest run of verified wins, kept for the profile and the leaderboard.
                 "stats.bestStreak": {

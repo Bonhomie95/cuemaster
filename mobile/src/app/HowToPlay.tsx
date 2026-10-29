@@ -60,7 +60,7 @@ const SECTIONS: {
     accent: "#b98cff",
     lines: [
       "Every online shot is replayed on our server, so nobody can fake a pot.",
-      "Computer opponents are always labelled HOUSE.",
+      "In Vs Computer the game itself is your opponent, marked HOUSE.",
       "Crates are earned, never sold. The odds are published under Settings.",
     ],
   },

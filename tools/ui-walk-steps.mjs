@@ -101,7 +101,7 @@ export const walkSteps = [
       await a.tap("Quit");
       await a.see("Play Online");
     });
-    await check("house rival: VS card, then forfeit", async () => {
+    await check("vs computer: VS card, then forfeit", async () => {
       await a.tap("Vs Computer");
       await a.tap("Enter Lagos");
       await a.see("House rival");
@@ -177,5 +177,33 @@ export const walkSteps = [
       await b.see("VICTORY");
       await b.tap("Leave table");
     });
+    await check(
+      "online: alone at the venue, an opponent still arrives",
+      async () => {
+        await a.see("Choose your venue");
+        await a.tap("Play a player online");
+        await a.tap("Enter Lagos");
+        await a.see("FINDING AN OPPONENT");
+        await a.see("WINNER TAKES", 14000);
+        await snap(a, "18-vs-regular");
+        await sleep(3600);
+        // Break if it is ours, then wait for the regular's own shot to arrive and play out.
+        const mine = await a.eval("!__cm.cpuTurn");
+        if (mine)
+          await a.eval("__cm.angle = 0.004; __cm.power = 1; __cm.shoot()");
+        await a.until("!__cm.running && __cm.localSeq >= 1", 30000);
+        if (await a.eval("__cm.cpuTurn"))
+          await a.until(
+            `!__cm.running && __cm.localSeq >= ${mine ? 2 : 1}`,
+            30000,
+          );
+        await snap(a, "19-regular-shot");
+        // Resigning from the menu leaves the table at once; the loss is settled on the server.
+        await a.tap("Table settings");
+        await a.tap("Quit match");
+        await a.tap("Resign");
+        await a.see("Choose your venue");
+      },
+    );
   },
 ];

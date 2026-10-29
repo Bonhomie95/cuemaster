@@ -1,3 +1,4 @@
+// @env HOUSE_WAIT_MS=1500
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Session, perform } from "../../mobile/src/game/session";

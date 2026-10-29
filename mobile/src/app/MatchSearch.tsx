@@ -21,13 +21,11 @@ import { Press, Pulse, Enter } from "./motion";
 import { online } from "../game/online";
 
 export type SearchKind = "queue" | "host" | "join";
-/** Seconds of searching before the house rival is offered as the main way forward. */
-const OFFER_RIVAL_AFTER = 12;
 
 /**
- * Finding a human opponent. The search is real: the server pairs the first two players waiting
- * at a venue. Nobody is dressed up as a person; if the room is quiet the player is offered a
- * house rival, named as one.
+ * Finding an opponent. The server pairs the first two players waiting at a venue and, when
+ * nobody arrives inside a few seconds, seats one of the club's regulars, so a search always
+ * ends in a match.
  */
 export default function MatchSearch({
   venue,
@@ -35,7 +33,6 @@ export default function MatchSearch({
   kind,
   code: invited = "",
   onCancel,
-  onRival,
 }: {
   venue: Venue | null;
   player: Player;
@@ -43,7 +40,6 @@ export default function MatchSearch({
   /** A code from an invite link: joined straight away. */
   code?: string;
   onCancel: () => void;
-  onRival: () => void;
 }) {
   useSyncExternalStore(online.subscribe, online.snapshot);
   const [seconds, setSeconds] = useState(0);
@@ -235,20 +231,6 @@ export default function MatchSearch({
                 : "")}
       </Text>
       <View style={s.actions}>
-        {kind === "queue" &&
-          (seconds >= OFFER_RIVAL_AFTER || !!online.error) && (
-            <Enter>
-              <Press
-                accessibilityRole="button"
-                accessibilityLabel="Play a house rival instead"
-                onPress={onRival}
-                style={s.primary}
-              >
-                <Feather name="cpu" size={16} color="#10233a" />
-                <Text style={s.primaryText}>Play a house rival instead</Text>
-              </Press>
-            </Enter>
-          )}
         <Press
           accessibilityRole="button"
           accessibilityLabel={waiting ? "Cancel search" : "Back to venues"}

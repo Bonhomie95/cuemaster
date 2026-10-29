@@ -8,6 +8,8 @@ import { localWinner } from "../../mobile/src/game/localMatch";
 import { cueById } from "../../mobile/src/game/cues";
 import { venues, levelOf } from "./catalog";
 import { crateAwardStage, publicCrate } from "./rewards";
+import { ensureHouse, pickHouse, houseTurn, HOUSE, between } from "./house";
+import { formSkill, type CpuStyle } from "../../mobile/src/game/cpu";
 
 /**
  * Online matches: two players, one table, the server as referee.
@@ -56,13 +58,31 @@ type Conn = {
   profile: Profile;
   cue: string;
   blocked: string[];
+  /** The last five results, newest last; sets the strength of a house opponent. */
+  form: number[];
   queued?: string;
+  /** Fires when nobody has arrived to play this player: a house player is seated instead. */
+  queueTimer?: ReturnType<typeof setTimeout>;
+  lastHouse?: string;
   room?: string;
   matchId?: string;
   alive: boolean;
   lastEmote: number;
 };
-type Seat = { conn: Conn | null; profile: Profile; cue: string };
+/** The house's side of a table: its strength, its style and the timers that pace it. */
+type HouseSeat = {
+  skill: number;
+  style: CpuStyle;
+  timers: ReturnType<typeof setTimeout>[];
+  lastEmote: number;
+  left: boolean;
+};
+type Seat = {
+  conn: Conn | null;
+  profile: Profile;
+  cue: string;
+  house?: HouseSeat;
+};
 type Match = {
   id: string;
   venueId: string;
@@ -148,6 +168,7 @@ export function installLive(
   >();
   const matches = new Map<string, Match>();
   const byPlayer = new Map<string, Match>();
+  void ensureHouse(db).catch((e) => console.error("House setup", e?.name));
 
   // A restart loses the tables in memory. Nobody should lose an entry fee to a deploy.
   void (async () => {
@@ -179,6 +200,8 @@ export function installLive(
     matches: u.stats?.onlineMatches || 0,
   });
   const leaveQueue = (conn: Conn) => {
+    clearTimeout(conn.queueTimer);
+    conn.queueTimer = undefined;
     if (!conn.queued) return;
     const q = queues.get(conn.queued) || [];
     queues.set(
@@ -207,17 +230,146 @@ export function installLive(
       return { error: `This table costs ${venue.entry} coins.` };
     conn.profile = profileOf(u);
     conn.cue = u.selectedCue || "club";
+    conn.form = u.form || [];
     return { venue };
+  }
+  const party = (c: Conn): Seat => ({
+    conn: c,
+    profile: c.profile,
+    cue: c.cue,
+  });
+  const houseWait = () =>
+    process.env.HOUSE_WAIT_MS
+      ? Number(process.env.HOUSE_WAIT_MS)
+      : between(HOUSE.waitMs);
+  /** Nobody arrived: seat one of the club's regulars, or keep waiting if every one is busy. */
+  async function seatHouse(conn: Conn, venueId: string) {
+    conn.queueTimer = undefined;
+    if (conn.queued !== venueId || conn.ws.readyState !== WebSocket.OPEN)
+      return;
+    const pick = await pickHouse(
+      db,
+      {
+        id: conn.profile.id,
+        trophies: conn.profile.trophies,
+        form: conn.form,
+        blocked: conn.blocked,
+      },
+      venueId,
+      byPlayer.keys(),
+      conn.lastHouse,
+    );
+    if (conn.queued !== venueId) return;
+    if (!pick) {
+      conn.queueTimer = setTimeout(() => void seatHouse(conn, venueId), 3000);
+      return;
+    }
+    leaveQueue(conn);
+    conn.lastHouse = pick.doc._id;
+    await startMatch(
+      venueId,
+      party(conn),
+      houseParty(pick.doc, pick.skill, pick.style),
+      false,
+    );
+  }
+  const houseParty = (doc: any, skill: number, style: CpuStyle): Seat => ({
+    conn: null,
+    profile: profileOf(doc),
+    cue: doc.selectedCue || "club",
+    house: { skill, style, timers: [], lastEmote: 0, left: false },
+  });
+  const houseLater = (house: HouseSeat, ms: number, fn: () => void) => {
+    const t = setTimeout(
+      () => {
+        house.timers = house.timers.filter((x) => x !== t);
+        fn();
+      },
+      Math.max(0, ms),
+    );
+    house.timers.push(t);
+  };
+  const houseSay = (m: Match, i: number, id: number) => {
+    const house = m.seats[i].house!;
+    if (Date.now() - house.lastEmote < 6000) return;
+    house.lastEmote = Date.now();
+    send(m.seats[1 - i].conn, { t: "emote", id });
+  };
+  /**
+   * The house takes its turn: it thinks for a few seconds, swings its cue onto the line in view
+   * of the opponent, draws back, and plays. Everything is paced to finish well inside the clock.
+   */
+  function driveHouse(m: Match, animationMs: number) {
+    const i = m.seats.findIndex((x) => x.house);
+    if (i < 0 || m.ended) return;
+    const house = m.seats[i].house!,
+      s = m.s;
+    if (s.progress.turn !== i) return;
+    const action = houseTurn(s, house.skill, house.style);
+    if (!action) return;
+    const quick = action.t !== "shot";
+    const think = Math.min(
+      between(quick ? HOUSE.quickMs : HOUSE.thinkMs),
+      turnSeconds(m) * 1000 - 2500,
+    );
+    const delay = animationMs + think;
+    if (action.t === "shot") {
+      const start = s.angle + (Math.random() - 0.5) * 0.5;
+      for (let k = 1; k <= 4; k++)
+        houseLater(house, delay - 1500 + k * 350, () => {
+          if (m.ended) return;
+          const t = k / 4;
+          send(m.seats[1 - i].conn, {
+            t: "aim",
+            angle: start + (action.angle - start) * t,
+            power:
+              k === 4 ? action.power * 0.9 : k === 3 ? action.power * 0.4 : 0,
+            side: action.side,
+            top: action.top,
+          });
+        });
+    }
+    houseLater(house, delay, () => {
+      if (!m.ended && s.progress.turn === i) apply(m, i, action, false);
+    });
+  }
+  /** After the rack: a word, sometimes a rematch offer, otherwise off to another table. */
+  function houseAfterEnd(m: Match, revealMs: number) {
+    const i = m.seats.findIndex((x) => x.house);
+    if (i < 0) return;
+    const house = m.seats[i].house!;
+    house.timers.forEach(clearTimeout);
+    house.timers = [];
+    if (Math.random() < HOUSE.emote.goodGame)
+      houseLater(house, revealMs + 1500, () => houseSay(m, i, 5));
+    const stillHere = () =>
+      !house.left &&
+      !m.rematch.has(1 - i) &&
+      m.seats[1 - i].conn?.matchId === m.id;
+    const leave = () =>
+      houseLater(house, between(HOUSE.leaveAfterMs), () => {
+        if (!stillHere()) return;
+        house.left = true;
+        send(m.seats[1 - i].conn, { t: "left" });
+      });
+    if (Math.random() < HOUSE.rematchOffer)
+      houseLater(house, revealMs + between([4000, 8000]), () => {
+        if (!stillHere()) return;
+        m.rematch.add(i);
+        send(m.seats[1 - i].conn, { t: "rematch" });
+        leave();
+      });
+    else leave();
   }
 
   async function startMatch(
     venueId: string,
-    a: Conn,
-    b: Conn,
+    a: Seat,
+    b: Seat,
     isPrivate: boolean,
   ) {
     const venue = venues.find((v) => v.id === venueId)!;
-    const charged: Conn[] = [];
+    const charged: Seat[] = [];
     for (const c of [a, b]) {
       const u = await users.findOneAndUpdate(
         {
@@ -235,7 +387,7 @@ export function installLive(
             { $inc: { coins: venue.entry } },
           );
         for (const x of [a, b])
-          send(x, {
+          send(x.conn, {
             t: "error",
             message:
               x === c
@@ -257,10 +409,7 @@ export function installLive(
       id: randomUUID(),
       venueId,
       entry: venue.entry,
-      seats: [
-        { conn: first, profile: first.profile, cue: first.cue },
-        { conn: second, profile: second.profile, cue: second.cue },
-      ],
+      seats: [{ ...first }, { ...second }],
       s,
       seq: 0,
       away: [undefined, undefined],
@@ -273,9 +422,10 @@ export function installLive(
     matches.set(m.id, m);
     for (const seat of m.seats) {
       byPlayer.set(seat.profile.id, m);
-      seat.conn!.matchId = m.id;
-      leaveQueue(seat.conn!);
-      closeRoom(seat.conn!);
+      if (!seat.conn) continue;
+      seat.conn.matchId = m.id;
+      leaveQueue(seat.conn);
+      closeRoom(seat.conn);
     }
     await records.insertOne({
       _id: m.id,
@@ -283,11 +433,13 @@ export function installLive(
       entry: venue.entry,
       players: m.seats.map((x) => x.profile.id),
       private: isPrivate,
+      house: m.seats.some((x) => !!x.house),
       status: "active",
       startedAt: new Date(),
     });
     schedule(m, INTRO_MS);
     m.seats.forEach((seat, i) => send(seat.conn, matchMessage(m, i)));
+    driveHouse(m, INTRO_MS);
   }
 
   function matchMessage(m: Match, seat: number, resume = false) {
@@ -365,6 +517,27 @@ export function installLive(
     for (const x of m.seats) send(x.conn, update);
     if (finished) void end(m, localWinner(s.progress), "rack", animationMs);
     else if (m.idle[seat] >= IDLE_LIMIT) void end(m, 1 - seat, "idle", 0);
+    else {
+      const h = m.seats.findIndex((x) => x.house);
+      if (
+        h >= 0 &&
+        !m.seats[seat].house &&
+        s.progress.shotPots.length >= 2 &&
+        Math.random() < HOUSE.emote.goodShot
+      )
+        houseLater(m.seats[h].house!, animationMs + 1200, () =>
+          houseSay(m, h, 0),
+        );
+      if (
+        h === seat &&
+        (s.progress.scratch || s.progress.foul) &&
+        Math.random() < HOUSE.emote.oops
+      )
+        houseLater(m.seats[h].house!, animationMs + 900, () =>
+          houseSay(m, h, 3),
+        );
+      driveHouse(m, animationMs);
+    }
     return null;
   }
 
@@ -396,6 +569,16 @@ export function installLive(
       const inc = (field: string, by: number) => ({
         $add: [{ $ifNull: [field, 0] }, by],
       });
+      // The last five results, newest last: what a house opponent's strength follows.
+      const form = (won: boolean) => ({
+        form: {
+          $slice: [
+            { $concatArrays: [{ $ifNull: ["$form", []] }, [won ? 1 : 0]] },
+            -5,
+          ],
+        },
+      });
+      const loser = 1 - winner;
       results[winner] = await users.findOneAndUpdate(
         { _id: m.seats[winner].profile.id },
         [
@@ -407,13 +590,15 @@ export function installLive(
               "stats.onlineMatches": inc("$stats.onlineMatches", 1),
               "stats.onlineWins": inc("$stats.onlineWins", 1),
               "stats.coinsWon": inc("$stats.coinsWon", pot),
-              ...award.fields,
+              // The house keeps its record but has no use for crates or form.
+              ...(m.seats[winner].house
+                ? {}
+                : { ...award.fields, ...form(true) }),
             },
           },
         ],
         { returnDocument: "after" },
       );
-      const loser = 1 - winner;
       results[loser] = await users.findOneAndUpdate(
         { _id: m.seats[loser].profile.id },
         [
@@ -425,19 +610,22 @@ export function installLive(
               },
               "stats.onlineMatches": inc("$stats.onlineMatches", 1),
               "stats.onlineLosses": inc("$stats.onlineLosses", 1),
+              ...(m.seats[loser].house ? {} : form(false)),
             },
           },
         ],
         { returnDocument: "after" },
       );
-      const crate = (results[winner]?.crates || []).find(
-        (c: any) => c.id === award.crate.id,
-      );
+      const crate = m.seats[winner].house
+        ? null
+        : (results[winner]?.crates || []).find(
+            (c: any) => c.id === award.crate.id,
+          );
       results[winner] = { doc: results[winner], crate };
       results[loser] = { doc: results[loser] };
-      m.seats.forEach((seat, i) =>
-        deps.onResult?.(seat.profile.id, i === winner),
-      );
+      m.seats.forEach((seat, i) => {
+        if (!seat.house) deps.onResult?.(seat.profile.id, i === winner);
+      });
     }
     await records.updateOne(
       { _id: m.id },
@@ -470,8 +658,12 @@ export function installLive(
         revealMs: delayMs,
       });
     });
+    houseAfterEnd(m, delayMs);
     // Keep the table around briefly for a rematch.
-    setTimeout(() => matches.delete(m.id), 120_000).unref();
+    setTimeout(() => {
+      matches.delete(m.id);
+      m.seats.forEach((x) => x.house?.timers.forEach(clearTimeout));
+    }, 120_000).unref();
   }
 
   function away(m: Match, seatIndex: number) {
@@ -485,8 +677,13 @@ export function installLive(
     });
     m.away[seatIndex] = setTimeout(() => {
       const other = m.seats[1 - seatIndex];
-      // Both gone: nobody won, so nobody pays.
-      void end(m, other.conn ? 1 - seatIndex : null, "disconnect", 0);
+      // Both gone: nobody won, so nobody pays. The house is never gone.
+      void end(
+        m,
+        other.conn || other.house ? 1 - seatIndex : null,
+        "disconnect",
+        0,
+      );
     }, RETURN_MS);
   }
 
@@ -512,6 +709,7 @@ export function installLive(
         profile: profileOf(u),
         cue: u.selectedCue || "club",
         blocked: u.blockedPlayers || [],
+        form: u.form || [],
         alive: true,
         lastEmote: 0,
       };
@@ -562,12 +760,19 @@ export function installLive(
             q.filter((c) => c !== rival),
           );
           rival.queued = undefined;
-          await startMatch(m.venueId, rival, conn, false);
+          clearTimeout(rival.queueTimer);
+          rival.queueTimer = undefined;
+          await startMatch(m.venueId, party(rival), party(conn), false);
         } else {
           q.push(conn);
           queues.set(m.venueId, q);
           conn.queued = m.venueId;
           send(conn, { t: "queued", venueId: m.venueId, online: online() });
+          // A search always ends in a match: a person who arrives in time, else the house.
+          conn.queueTimer = setTimeout(
+            () => void seatHouse(conn, m.venueId),
+            houseWait(),
+          );
         }
         break;
       }
@@ -631,7 +836,7 @@ export function installLive(
         if (check.error)
           return send(conn, { t: "error", message: check.error });
         rooms.delete(m.code);
-        await startMatch(room.venueId, room.host, conn, true);
+        await startMatch(room.venueId, party(room.host), party(conn), true);
         break;
       }
       case "act": {
@@ -670,6 +875,48 @@ export function installLive(
       case "rematch": {
         if (!match || !match.ended || seat < 0) break;
         const other = match.seats[1 - seat];
+        if (other.house) {
+          if (other.house.left)
+            return send(conn, {
+              t: "error",
+              message: "Your opponent has left the table.",
+            });
+          if (match.rematch.has(seat)) break;
+          match.rematch.add(seat);
+          const offered = match.rematch.has(1 - seat);
+          const accept = offered || Math.random() < HOUSE.rematchAccept;
+          const house = other.house;
+          house.timers.forEach(clearTimeout);
+          house.timers = [];
+          houseLater(house, offered ? 800 : between([1500, 4000]), () => {
+            void (async () => {
+              if (!accept) {
+                house.left = true;
+                return send(conn, { t: "left" });
+              }
+              match.rematch.clear();
+              const check = await eligible(conn, match.venueId);
+              if (check.error)
+                return send(conn, {
+                  t: "error",
+                  message: "Rematch unavailable: " + check.error,
+                });
+              const doc = await users.findOne({ _id: other.profile.id });
+              if (!doc) return;
+              await startMatch(
+                match.venueId,
+                party(conn),
+                houseParty(
+                  doc,
+                  formSkill(conn.form, check.venue!.level),
+                  house.style,
+                ),
+                false,
+              );
+            })();
+          });
+          break;
+        }
         if (!other.conn || other.conn.matchId !== match.id)
           return send(conn, {
             t: "error",
@@ -695,8 +942,8 @@ export function installLive(
         }
         await startMatch(
           match.venueId,
-          match.seats[0].conn!,
-          match.seats[1].conn!,
+          party(match.seats[0].conn!),
+          party(match.seats[1].conn!),
           match.private,
         );
         break;
@@ -707,6 +954,7 @@ export function installLive(
           const other = match.seats[1 - seat];
           if (other?.conn?.matchId === match.id)
             send(other.conn, { t: "left" });
+          other?.house?.timers.forEach(clearTimeout);
         }
         break;
     }

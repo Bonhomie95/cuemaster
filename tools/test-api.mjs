@@ -1,6 +1,6 @@
 // Fresh API rate-limit state and a disposable MongoDB database for every run.
 import { spawn } from "node:child_process";
-import { readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
@@ -38,6 +38,16 @@ try {
     .sort()) {
     const port = await freePort(),
       base = "http://127.0.0.1:" + port;
+    // A suite may pin settings of its own with a header comment: // @env KEY=VALUE KEY2=VALUE2
+    const header = (await readFile(cwd + "/tests/" + file, "utf8")).slice(
+      0,
+      2000,
+    );
+    const perSuite = Object.fromEntries(
+      [...header.matchAll(/^\/\/ @env (.+)$/gm)].flatMap((m) =>
+        m[1].split(/\s+/).map((kv) => kv.split("=")),
+      ),
+    );
     const env = {
       ...process.env,
       PORT: String(port),
@@ -51,6 +61,7 @@ try {
       ADS_PROVIDER: "admob-test",
       STORE_BILLING: "",
       NODE_ENV: "test",
+      ...perSuite,
     };
     server = spawn(process.execPath, ["--import", "tsx", "src/index.ts"], {
       cwd,

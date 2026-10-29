@@ -94,7 +94,9 @@ const PRIVACY = () => `
 const TERMS = () => `
 <p>CueMaster is provided by ${escape(ENTITY())}. By playing you accept these terms.</p>
 <h2>The game</h2>
-<p>CueMaster offers virtual pool, practice challenges, local pass-and-play and computer opponents whose difficulty adapts to your recent results. The current build does not provide live online human matchmaking.</p>
+<p>CueMaster offers virtual pool, practice challenges, local pass-and-play, computer opponents whose difficulty adapts to your recent results, and online matches.</p>
+<h2>Online opponents</h2>
+<p>An online match pairs you with another player waiting at the same venue. When no player is available within a short wait, CueMaster may seat you against a computer-controlled player drawn from a roster of named player profiles, whose strength is set from your recent results. Such matches are played under the same rules, on the same server, and award the same coins, trophies and crates as any other match. Coins and trophies remain virtual items with no cash value.</p>
 <h2>Your account</h2>
 <p>You must be 18 or older. Do not use another person's identity, exploit the software, manipulate challenge submissions, harass players or choose offensive names. Reports may lead to a name change or suspension after moderation.</p>
 <p>Guest progress depends on credentials held on your device. Connecting Google or Apple preserves access. Signing in to a previously registered account loads that account's progress; balances are not combined.</p>

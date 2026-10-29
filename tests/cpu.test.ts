@@ -78,3 +78,26 @@ test("CPU never acts after finish or when disabled", () => {
   for (let i = 0; i < 200; i++) s.updateCpu(1 / 60);
   assert.equal(s.shots, 0);
 });
+
+test("a house opponent's strength follows the last five results and the room", () => {
+  const { formSkill, FORM } = require("../mobile/src/game/cpu");
+  const fixed = () => 0.5;
+  const cold = formSkill([0, 0, 0, 0, 0], 1, fixed),
+    mixed = formSkill([1, 0, 1, 0, 1], 1, fixed),
+    hot = formSkill([1, 1, 1, 1, 1], 1, fixed),
+    fresh = formSkill([], 1, fixed);
+  assert.ok(cold < mixed && mixed < hot, "more wins, harder opponent");
+  assert.ok(
+    fresh > cold && fresh < mixed,
+    "a newcomer gets an easy first rack",
+  );
+  assert.ok(
+    formSkill([1, 1, 1, 1, 1], 7, fixed) > hot,
+    "higher rooms play harder",
+  );
+  // Only the last five count, and the result stays inside the planner's useful range.
+  assert.equal(formSkill([0, 0, 0, 0, 1, 1, 1, 1, 1], 1, fixed), hot);
+  for (const r of [0, 1])
+    assert.ok(formSkill([1, 1, 1, 1, 1], 9, () => r) <= FORM.max);
+  assert.ok(formSkill([0, 0, 0, 0, 0], 1, () => 0) >= FORM.min);
+});

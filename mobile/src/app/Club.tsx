@@ -813,10 +813,6 @@ function ClubBody() {
         kind={search.kind}
         code={search.code}
         onCancel={() => setSearch(null)}
-        onRival={() => {
-          online.cancel();
-          if (search.venue) void enterLocal(search.venue, "cpu");
-        }}
       />
     );
   if (launch && player)
