@@ -42,6 +42,7 @@ import { session, skins, encodeReplay } from "./src/game/session";
 import { flag, type Player } from "./src/app/api";
 import { Press, Enter } from "./src/app/motion";
 import { online } from "./src/game/online";
+import { setSound } from "./src/app/sound";
 import {
   VsIntro,
   ResultCard,
@@ -1837,10 +1838,7 @@ function Game({
                   <Button
                     label={session.sound ? "Sound on" : "Sound off"}
                     active={session.sound}
-                    onPress={() => {
-                      session.sound = !session.sound;
-                      session.notify();
-                    }}
+                    onPress={() => setSound(!session.sound)}
                   />
                   {!paidMatch && (
                     <Button

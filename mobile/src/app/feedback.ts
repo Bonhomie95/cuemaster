@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import * as Haptics from "expo-haptics";
+import { sfx, type Sound } from "./sound";
 
 /**
  * Touch feel for the club.
@@ -9,6 +10,7 @@ import * as Haptics from "expo-haptics";
  * never surface an error for a button press.
  */
 export const tap = () => {
+  sfx("tap", 0.35);
   if (Platform.OS === "web") return;
   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
 };
@@ -16,13 +18,16 @@ export const commit = () => {
   if (Platform.OS === "web") return;
   Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 };
-export const celebrate = () => {
+/** A success: the haptic, and the reward chime unless a moment has its own sound. */
+export const celebrate = (sound: Sound = "reward") => {
+  sfx(sound, 0.8);
   if (Platform.OS === "web") return;
   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(
     () => {},
   );
 };
 export const warn = () => {
+  sfx("error", 0.6);
   if (Platform.OS === "web") return;
   Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(
     () => {},

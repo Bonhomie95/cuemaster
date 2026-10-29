@@ -16,6 +16,7 @@ import { api, Player } from "./api";
 import { showRewardedVideo } from "./ads";
 import { celebrate } from "./feedback";
 import { remind } from "./notify";
+import { sfx } from "./sound";
 import { Press, Enter, CountUp, Pulse, CrateBurst } from "./motion";
 import { icons } from "./art";
 
@@ -252,6 +253,7 @@ export default function Rewards({
                                   onPlayer(r.player);
                                   setRevealed(false);
                                   setOpened(r);
+                                  sfx("whoosh", 0.8);
                                   await load();
                                 })
                               }
@@ -274,6 +276,7 @@ export default function Rewards({
                                     onPlayer(r.player);
                                     setRevealed(false);
                                     setOpened(r);
+                                    sfx("whoosh", 0.8);
                                     await load();
                                   })
                                 }
@@ -395,7 +398,7 @@ export default function Rewards({
               playing={!!opened}
               onDone={() => {
                 setRevealed(true);
-                celebrate();
+                celebrate("coins");
               }}
             >
               <Image

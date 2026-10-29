@@ -17,6 +17,7 @@ export { default as IconButton } from "./IconButton";
 import HomeLobby from "./HomeLobby";
 import { venueArt } from "./art";
 import type { DailyTab } from "./DailyRewards";
+import type { VenueMode } from "./MatchVenues";
 type Icon = React.ComponentProps<typeof Feather>["name"];
 type Page = "home" | "tables" | "practice" | "events";
 export type LobbyProps = {
@@ -26,7 +27,8 @@ export type LobbyProps = {
   selected: Venue;
   busy: boolean;
   onPage: (page: Page) => void;
-  onPlay: () => void;
+  /** Open the venues in a mode: online, a friend, the computer or pass and play. */
+  onPlay: (mode?: VenueMode) => void;
   onCues: () => void;
   onFree: () => void;
   onRewards: () => void;

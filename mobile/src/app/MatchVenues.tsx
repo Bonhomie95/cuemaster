@@ -27,6 +27,7 @@ export default function MatchVenues({
   onJoin,
   onShop,
   onClose,
+  initialMode = "online",
 }: {
   venues: Venue[];
   player: Player;
@@ -36,9 +37,10 @@ export default function MatchVenues({
   /** Short of an entry fee: the shop, where a video or a pack fixes it. */
   onShop: () => void;
   onClose: () => void;
+  initialMode?: VenueMode;
 }) {
   useSyncExternalStore(online.subscribe, online.snapshot);
-  const [mode, setMode] = useState<VenueMode>("online");
+  const [mode, setMode] = useState<VenueMode>(initialMode);
   // Landscape-locked, but the window can still report portrait numbers on device, which left
   // the venue cards taller than the screen. Derive the short edge rather than trusting height.
   const win = useWindowDimensions();

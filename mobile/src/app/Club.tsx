@@ -17,7 +17,7 @@ import { CpuOpponent } from "../game/cpu";
 import CueShop from "./CueShop";
 import * as Crypto from "expo-crypto";
 import Constants from "expo-constants";
-import MatchVenues from "./MatchVenues";
+import MatchVenues, { VenueMode } from "./MatchVenues";
 import { localWinner } from "../game/localMatch";
 import React, {
   useEffect,
@@ -245,6 +245,7 @@ function ClubBody() {
     "offers",
   );
   const [hubTab, setHubTab] = useState<DailyTab>("daily");
+  const [venueMode, setVenueMode] = useState<VenueMode>("online");
   const [page, setPage] = useState<Page>("home"),
     [adult, setAdult] = useState(false),
     [launch, setLaunch] = useState<Launch | null>(null),
@@ -326,7 +327,7 @@ function ClubBody() {
     }
     if (lastLevel.current !== null && player.level > lastLevel.current) {
       setLevelUp(player.level);
-      celebrate();
+      celebrate("levelup");
     }
     lastLevel.current = player.level;
   }, [player]);
@@ -1212,6 +1213,8 @@ function ClubBody() {
             />
           ) : page === "matches" ? (
             <MatchVenues
+              key={venueMode}
+              initialMode={venueMode}
               venues={catalog!.venues}
               player={player}
               busy={busy}
@@ -1241,7 +1244,10 @@ function ClubBody() {
               selected={selected!}
               busy={busy}
               onPage={setPage}
-              onPlay={() => setPage("matches")}
+              onPlay={(mode) => {
+                setVenueMode(mode || "online");
+                setPage("matches");
+              }}
               onCues={() => setPage("cues")}
               onFree={() => openGame({ kind: "free", drill: "open" })}
               onRewards={() => {

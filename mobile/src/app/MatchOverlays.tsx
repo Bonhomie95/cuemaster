@@ -14,6 +14,7 @@ import { portraits, icons } from "./art";
 import { flag } from "./api";
 import { Press, Enter, CountUp, Pulse } from "./motion";
 import { celebrate } from "./feedback";
+import { sfx } from "./sound";
 
 /**
  * The moments around a match: the VS card before the break, the result after the last ball,
@@ -43,6 +44,9 @@ export function VsIntro({
 }) {
   const [visible, setVisible] = useState(Date.now() < until);
   const enter = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (visible) sfx("match", 0.8);
+  }, []);
   const leave = useRef(new Animated.Value(1)).current;
   useEffect(() => {
     if (!visible) return;
@@ -234,7 +238,8 @@ export function ResultCard({
   status?: string;
 }) {
   useEffect(() => {
-    if (result.won) celebrate();
+    if (result.won) celebrate("win");
+    else if (!result.draw) sfx("lose", 0.7);
   }, [result.won]);
   const accent = result.won ? "#ffd05b" : result.draw ? "#9fc0d6" : "#7f96a8";
   return (
