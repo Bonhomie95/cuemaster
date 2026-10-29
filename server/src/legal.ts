@@ -1,6 +1,7 @@
 import type { Express } from "express";
-import { crateOdds } from "./rewards";
-import { DAILY } from "./daily";
+import { crateOdds, crateByTier } from "./rewards";
+import { DAILY, type Reward } from "./daily";
+import { LUCKY } from "../../mobile/src/physics/engine";
 
 /**
  * Public policy pages. Both stores require reachable URLs for privacy, terms, support and
@@ -104,7 +105,7 @@ const TERMS = () => `
 <p>Coins and rubies are virtual items. They are not cryptocurrency, not a deposit, and not a promise of cash redemption. They have no value outside the game, cannot be transferred between players and cannot be exchanged for money. Entry to any game or competition is paid in coins only.</p>
 <p>Winning a match seals a reward crate. A crate opens after its timer, or immediately if you spend rubies. Crate contents are random within a range that depends on the crate's type, and are decided by our service when the crate is opened, never by your device. Rubies change when a crate opens; they never change what is inside it.</p>
 <p>A crate's timer can also be shortened by watching a short advert. That is always optional.</p>
-<p>Where purchases are offered they are sold through Apple or Google, at the price their store shows, and are delivered as the coins, rubies or season pass the store names. Coins pay for entry fees, cues and tables. Rubies open crates early; they never buy coins, cues or tables. The pass unlocks the premium reward track for the season in which it is bought. Purchases are final except where the store's own refund rules or your local law say otherwise; refunds are handled by Apple or Google, not by us. We may change prices, pack sizes and crate contents, and will publish the current odds in the game.</p>
+<p>Where purchases are offered they are sold through Apple or Google, at the price their store shows, and are delivered as the coins, rubies or season pass the store names. Coins pay for entry fees, cues and tables. Rubies open crates early; they never buy coins, cues or tables. The pass unlocks the premium reward track for the season in which it is bought. The piggy bank fills with coins from the matches you finish; breaking it delivers the coins it holds at that moment and starts it again from empty. Purchases are final except where the store's own refund rules or your local law say otherwise; refunds are handled by Apple or Google, not by us. We may change prices, pack sizes and crate contents, and will publish the current odds in the game.</p>
 <p>Challenge awards are validated by our service; interrupted, invalid or duplicate submissions may earn nothing.</p>
 <h2>Competitions</h2>
 <p>Competitions charge their entry in coins and pay their prizes in coins. Prizes are credited automatically when the event closes, using the verified scores shown on the event board. An entry fee is not refunded if you do not finish.</p>
@@ -149,10 +150,18 @@ const DELETE_PAGE = () => `
  * fixed when earned; this page exists for the stores' age-rating questions and for players
  * who want to know.
  */
+const prizeText = (r: Reward) =>
+  [
+    r.coins && `${r.coins.toLocaleString("en")} coins`,
+    r.rubies && `${r.rubies} rubies`,
+    r.crate && `a ${crateByTier(r.crate).name}`,
+  ]
+    .filter(Boolean)
+    .join(" and ");
 const ODDS = () => {
   const crates = crateOdds();
   const wheelTotal = DAILY.wheel.reduce((n, w) => n + w.weight, 0);
-  return `<p>Every reward below is decided by the CueMaster server. Crates are earned by winning a match or collected from daily rewards; they cannot be bought. A crate's contents are fixed the moment it is earned, so opening it early with rubies or a video only saves time.</p>
+  return `<p>Every reward below is decided by the CueMaster server. Crates are earned by winning a match, finishing high in a weekly league or collecting daily rewards; they cannot be bought. A crate's contents are fixed the moment it is earned, so opening it early with rubies or a video only saves time.</p>
 <h2>Which crate a win seals</h2><ul>${crates
     .map(
       (c) =>
@@ -170,7 +179,13 @@ const ODDS = () => {
       (w) =>
         `<li>${escape(w.label)}: ${((100 * w.weight) / wheelTotal).toFixed(1)}%</li>`,
     )
-    .join("")}</ul>`;
+    .join("")}</ul>
+<h2>The Lucky Shot</h2><p>One free shot a day; up to ${DAILY.lucky.adPerDay} more for watching a video. Shots are never sold. Nothing here is drawn at random: the prize depends only on where the cue ball stops, as our server replays the shot on the game's own physics, and the rings drawn on the table are these rings. The smallest ring the centre of the cue ball stops inside pays:</p><ul>${LUCKY.rings
+    .map(
+      (r, i) =>
+        `<li>${escape(DAILY.lucky.prizes[i].label)}, within ${Math.round(r * 100)} cm of the centre spot: ${escape(prizeText(DAILY.lucky.prizes[i].reward))}</li>`,
+    )
+    .join("")}<li>Further out, or in a pocket: no prize</li></ul>`;
 };
 
 export function installLegal(app: Express) {

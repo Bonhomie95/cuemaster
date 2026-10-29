@@ -12,8 +12,9 @@ import {
 import * as T from "three";
 import meshData from "../../assets/models/table-mesh.json";
 import { session, skins } from "../game/session";
-import { R, H, W } from "../physics/engine";
+import { R, H, W, LUCKY } from "../physics/engine";
 import {
+  luckyColors,
   ballTexture,
   grain,
   shadowTexture,
@@ -752,6 +753,53 @@ function Camera() {
   });
   return null;
 }
+/**
+ * Lucky Shot prize rings round the centre spot, drawn from the numbers the server judges by.
+ * Only that table shows them; the bullseye glows on and off so the eye finds the target.
+ */
+function LuckyRings() {
+  const group = useRef<T.Group>(null);
+  const bull = useRef<T.Mesh>(null);
+  useFrame(({ clock }) => {
+    if (group.current) group.current.visible = session.drill === "lucky";
+    if (bull.current)
+      (bull.current.material as T.MeshBasicMaterial).opacity =
+        0.55 + 0.25 * Math.sin(clock.elapsedTime * 3);
+  });
+  return (
+    <group
+      ref={group}
+      visible={false}
+      position={[LUCKY.x, 0.0013, LUCKY.z]}
+      rotation={[-Math.PI / 2, 0, 0]}
+    >
+      {LUCKY.rings.map((r, i) => (
+        <React.Fragment key={r}>
+          <mesh ref={i ? undefined : bull} renderOrder={2}>
+            <ringGeometry args={[i ? LUCKY.rings[i - 1] : 0, r, 96]} />
+            <meshBasicMaterial
+              color={luckyColors[i]}
+              transparent
+              opacity={i ? 0.17 : 0.6}
+              depthWrite={false}
+              toneMapped={false}
+            />
+          </mesh>
+          <mesh renderOrder={3}>
+            <ringGeometry args={[r - 0.004, r, 96]} />
+            <meshBasicMaterial
+              color="#fff3cf"
+              transparent
+              opacity={0.85}
+              depthWrite={false}
+              toneMapped={false}
+            />
+          </mesh>
+        </React.Fragment>
+      ))}
+    </group>
+  );
+}
 /** Permanent head-string marking (owner brief), printed flat on the cloth. Brighter while it restricts placement. */
 function HeadString() {
   const mat = useRef<T.MeshBasicMaterial>(null);
@@ -895,6 +943,7 @@ export function Scene({
       <Table />
       <CityInlay city={session.skin} />
       <HeadString />
+      <LuckyRings />
       <Balls />
       <GhostBall />
       <Aim />

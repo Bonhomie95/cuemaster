@@ -2,7 +2,8 @@ import { assertProductionConfig, listenHost } from "./config";
 import { installLegal, legalConfigured } from "./legal";
 import { installRewards, crateAwardStage, publicCrate } from "./rewards";
 import { installDaily, track, addPassXp, DAILY } from "./daily";
-import { installStore, billingConfigured } from "./store";
+import { installStore, billingConfigured, piggyDeposit } from "./store";
+import { installLeagues, recordLeague } from "./leagues";
 import { installAds, adsConfigured } from "./ads";
 import { installLive } from "./live";
 import { installLinks } from "./links";
@@ -448,6 +449,9 @@ app.post("/local-matches/:id/finish", required, async (req: any, res) => {
                     -5,
                   ],
                 },
+                // Every finished computer match drops coins into the piggy bank; a forfeit is
+                // not a finished match.
+                ...(outcome === "forfeit" ? {} : { piggy: piggyDeposit(won) }),
                 "stats.cpuStreak": streak,
                 // The longest run of verified wins, kept for the profile and the leaderboard.
                 "stats.bestStreak": {
@@ -785,6 +789,7 @@ const replay = (drill: string, shots: any[], targets: number[]) =>
   referee({ drill, shots, targets }, 12000);
 const replayCpuMatch = (opponent: any, seed: number, actions: any[]) =>
   referee({ match: { opponent, seed, actions } }, 40000);
+const replayLucky = (shot: object) => referee({ lucky: shot }, 12000);
 app.post(
   "/practice/complete",
   required,
@@ -1043,7 +1048,8 @@ app.post(
 );
 installRewards(app, db, required, publicUser);
 installInvites(app, db, required, publicUser);
-installDaily(app, db, required, publicUser);
+installDaily(app, db, required, publicUser, replayLucky);
+installLeagues(app, db, required);
 installStore(app, db, required, publicUser);
 installAds(app, db, required);
 installPlatform(app, db, required);
@@ -1257,8 +1263,9 @@ const server = app.listen(port, host, () =>
 installLive(server, db, {
   authenticate: playerForToken,
   publicUser,
-  // An online result counts for missions, the pass and invites like a refereed CPU match.
-  onResult: (playerId, won) => {
+  // An online result counts for missions, the pass and invites like a refereed CPU match, and
+  // a matchmade one for the weekly league.
+  onResult: (playerId, won, match) => {
     void track(db, playerId, "match_played");
     void track(db, playerId, "online_played");
     if (won) void track(db, playerId, "match_won");
@@ -1268,5 +1275,6 @@ installLive(server, db, {
       DAILY.passXp.cpuMatch + (won ? DAILY.passXp.verifiedWin : 0),
     );
     void settleInvite(db, playerId).catch(() => {});
+    if (!match.private) void recordLeague(db, playerId, match.pot);
   },
 });

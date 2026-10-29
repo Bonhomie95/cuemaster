@@ -555,9 +555,23 @@ const cityDrills: Record<string, Ball[]> = {
   ],
 };
 export const cityDrillNames = Object.keys(cityDrills);
+/**
+ * Lucky Shot: the cue ball alone on the head spot, prize rings round the centre spot, innermost
+ * first, in metres. The table draws its rings from these numbers and the server judges by them.
+ * Straight on, the bullseye takes about 8.5% power; each 1% moves the stop by ~14 cm. The outer
+ * ring stops short of the city inlay round the foot spot.
+ */
+export const LUCKY = { x: 0, z: 0, rings: [0.06, 0.13, 0.22, 0.33] };
+/** The ring the cue ball came to rest in, innermost first; -1 off the rings or in a pocket. */
+export function luckyRing(b: Ball) {
+  if (b.pocketed) return -1;
+  const d = Math.hypot(b.x - LUCKY.x, b.z - LUCKY.z);
+  return LUCKY.rings.findIndex((r) => d <= r);
+}
 export function drill(name: string): Ball[] {
   if (name.startsWith("daily:")) return dailyLayout(name.slice(6));
   if (cityDrills[name]) return cityDrills[name].map((b) => ({ ...b }));
+  if (name === "lucky") return [ball(0, -H / 2, 0)];
   if (name === "break") return rack(41);
   if (name === "finish") return [ball(0, 0, 0.36), ball(8, 0, 0.05)];
   if (name === "pocket")

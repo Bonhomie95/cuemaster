@@ -102,6 +102,7 @@ export async function deletePlayer(db: Db, id: string) {
     db.collection("practiceTickets").deleteMany({ playerId: id }),
     db.collection("walletChallenges").deleteMany({ playerId: id }),
     db.collection("entries").deleteMany({ playerId: id }),
+    db.collection("leagueEntries").deleteMany({ playerId: id }),
     db
       .collection("reports")
       .deleteMany({ $or: [{ playerId: id }, { reporterId: id }] }),

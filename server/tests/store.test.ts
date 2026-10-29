@@ -476,6 +476,70 @@ test("iOS: a signed StoreKit transaction credits once; forged, foreign or edited
   await call("/me", "DELETE", { confirm: "DELETE" });
 });
 
+test("iOS: breaking the piggy bank pays what it holds right then, once, and empties it", async () => {
+  const call = await guest(await billingApi());
+  const account = (await call("/store")).body.accountToken;
+  let transactionId = 3000000000;
+  const transaction = () =>
+    new CompactSign(
+      Buffer.from(
+        JSON.stringify({
+          transactionId: String(++transactionId),
+          bundleId: "com.bonhomie.cuemaster",
+          productId: "piggy.break",
+          type: "Consumable",
+          quantity: 1,
+          appAccountToken: account,
+          environment: "Sandbox",
+          purchaseDate: Date.now(),
+          signedDate: Date.now(),
+        }),
+      ),
+    )
+      .setProtectedHeader({ alg: "ES256", x5c: chains.apple.x5c })
+      .sign(chains.apple.key);
+  const claim = (t: string) =>
+    call("/store/claim", "POST", {
+      platform: "ios",
+      productId: "piggy.break",
+      transaction: t,
+    });
+  // Two lost computer matches put coins in the bank, the way a player fills it.
+  for (let i = 0; i < 2; i++) {
+    const started = await call("/local-matches/start", "POST", {
+      venueId: "heritage",
+      requestId: randomUUID(),
+      mode: "cpu",
+    });
+    await call(`/local-matches/${started.body.match.id}/finish`, "POST", {
+      outcome: "lost",
+    });
+  }
+  const bank = (await call("/store")).body.piggy;
+  assert.equal(bank.coins, 2 * bank.lost);
+
+  const paid = await transaction();
+  const first = await claim(paid);
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  assert.equal(first.body.credited, true);
+  assert.deepEqual(first.body.grants, { coins: bank.coins });
+  assert.equal(first.body.player.coins, 1000 - 2 * 50 + bank.coins);
+  assert.equal((await call("/store")).body.piggy.coins, 0);
+  const replay = await claim(paid);
+  assert.equal(replay.body.credited, false, "a replay breaks nothing twice");
+  assert.deepEqual(replay.body.grants, { coins: bank.coins });
+  assert.equal(replay.body.player.coins, first.body.player.coins);
+  // A paid break is always credited, even when there is nothing left in the bank.
+  const empty = await claim(await transaction());
+  assert.equal(empty.body.credited, true);
+  assert.deepEqual(empty.body.grants, { coins: 0 });
+  assert.deepEqual(
+    (await call("/store")).body.history.map((h: any) => h.productId),
+    ["piggy.break", "piggy.break"],
+  );
+  await call("/me", "DELETE", { confirm: "DELETE" });
+});
+
 test("Android: a Play purchase credits once and is consumed; it must be paid and made by this player", async () => {
   const call = await guest(await billingApi());
   const account = (await call("/store")).body.accountToken;

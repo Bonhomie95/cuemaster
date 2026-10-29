@@ -2,60 +2,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Session, perform } from "../../mobile/src/game/session";
+import { guestToken as guest, me, connect } from "./liveClient";
 const base = process.env.TEST_API_URL || "http://127.0.0.1:4000";
-
-async function guest() {
-  const r = await fetch(base + "/auth/guest", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ adultConfirmed: true }),
-  });
-  assert.equal(r.status, 201);
-  return (await r.json()).token as string;
-}
-async function me(token: string) {
-  const r = await fetch(base + "/me", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  return r.json();
-}
-/** A socket with an inbox, so a test can wait for the next message of a given type. */
-async function connect(token: string) {
-  const ws = new WebSocket(base.replace(/^http/, "ws") + "/live");
-  const inbox: any[] = [];
-  const waiting: { type: string; resolve: (m: any) => void }[] = [];
-  ws.onmessage = (e) => {
-    const m = JSON.parse(String(e.data));
-    const i = waiting.findIndex((w) => w.type === m.t);
-    if (i >= 0) waiting.splice(i, 1)[0].resolve(m);
-    else inbox.push(m);
-  };
-  await new Promise((resolve, reject) => {
-    ws.onopen = resolve;
-    ws.onerror = reject;
-  });
-  const next = (type: string, ms = 8000) => {
-    const i = inbox.findIndex((m) => m.t === type);
-    if (i >= 0) return Promise.resolve(inbox.splice(i, 1)[0]);
-    return new Promise<any>((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error(`No ${type} message within ${ms} ms`)),
-        ms,
-      );
-      waiting.push({
-        type,
-        resolve: (m) => {
-          clearTimeout(timer);
-          resolve(m);
-        },
-      });
-    });
-  };
-  const send = (m: any) => ws.send(JSON.stringify(m));
-  send({ t: "hello", token });
-  await next("welcome");
-  return { ws, send, next };
-}
 
 test("two players are matched, the server referees every shot, and the winner takes the pot", async () => {
   const [ta, tb] = [await guest(), await guest()];

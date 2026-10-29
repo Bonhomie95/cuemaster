@@ -4,6 +4,7 @@
 //   npm run dev                      # API on :4000, web build on :8081
 //   node tools/ui-walk.mjs           # the walk; exits 1 on the first failure
 //   node tools/ui-walk.mjs --store   # the walk at store sizes, PNGs in artifacts/store-screenshots
+//   CDP_PORT=9344 WEB_URL=http://localhost:8093 node tools/ui-walk.mjs   # beside another walk
 //
 // Two pages on two origins (localhost and 127.0.0.1) are two separate players, so the online
 // match is played for real between them. Controls are found by their accessibility labels,
@@ -34,13 +35,15 @@ const CHROME =
   process.env.CHROME ||
   "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// Chrome's debugging port; a second checkout walking at the same time needs its own.
+const CDP = process.env.CDP_PORT || "9334";
 
 const profile = await mkdtemp(join(tmpdir(), "cuemaster-walk-"));
 const chrome = spawn(
   CHROME,
   [
     "--headless=new",
-    "--remote-debugging-port=9334",
+    `--remote-debugging-port=${CDP}`,
     `--user-data-dir=${profile}`,
     "--use-angle=metal",
     "--enable-unsafe-swiftshader",
@@ -52,7 +55,7 @@ const chrome = spawn(
 let version;
 for (let i = 0; i < 50 && !version; i++) {
   await sleep(200);
-  version = await fetch("http://127.0.0.1:9334/json/version")
+  version = await fetch(`http://127.0.0.1:${CDP}/json/version`)
     .then((r) => r.json())
     .catch(() => null);
 }
@@ -76,7 +79,7 @@ async function open(url, size) {
   });
   browser.close();
   const target = (
-    await fetch("http://127.0.0.1:9334/json/list").then((r) => r.json())
+    await fetch(`http://127.0.0.1:${CDP}/json/list`).then((r) => r.json())
   ).find((t) => t.id === created.targetId);
   const ws = new WebSocket(target.webSocketDebuggerUrl);
   await new Promise((r) => (ws.onopen = r));

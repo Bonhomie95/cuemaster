@@ -11,7 +11,7 @@ import {
 import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
 import { Player } from "./api";
-import { loadStore, buy } from "./billing";
+import { loadStore, buy, type Piggy } from "./billing";
 import { Press, Enter, Pulse } from "./motion";
 import { icons } from "./art";
 import { celebrate } from "./feedback";
@@ -108,7 +108,7 @@ export default function Shop({
   };
   const products = (store?.products || []).filter((p) =>
     tab === "offers"
-      ? p.kind === "bundle" || p.kind === "pass"
+      ? p.kind === "bundle" || p.kind === "pass" || p.kind === "piggy"
       : p.kind === tab,
   );
   return (
@@ -173,13 +173,23 @@ export default function Shop({
         >
           {products.map((p, i) => (
             <Enter key={p.id} index={i} style={{ alignSelf: "stretch" }}>
-              <Card
-                art={artFor(p, i)}
-                product={p}
-                available={store.available && p.available !== false}
-                busy={buying === p.id}
-                onBuy={() => void purchase(p)}
-              />
+              {p.kind === "piggy" ? (
+                <PiggyCard
+                  product={p}
+                  piggy={store.piggy}
+                  available={store.available && p.available !== false}
+                  busy={buying === p.id}
+                  onBuy={() => void purchase(p)}
+                />
+              ) : (
+                <Card
+                  art={artFor(p, i)}
+                  product={p}
+                  available={store.available && p.available !== false}
+                  busy={buying === p.id}
+                  onBuy={() => void purchase(p)}
+                />
+              )}
             </Enter>
           ))}
           {tab !== "rubies" && Platform.OS !== "web" && (
@@ -307,6 +317,91 @@ function Card({
   );
 }
 
+/**
+ * The piggy bank: coins from every finished match pile up behind a lock, and one purchase
+ * breaks it open. The pile grows with the bank, and the button only sells from the minimum up.
+ */
+function PiggyCard({
+  product: p,
+  piggy,
+  available,
+  busy,
+  onBuy,
+}: {
+  product: Product;
+  piggy: Piggy;
+  available: boolean;
+  busy: boolean;
+  onBuy: () => void;
+}) {
+  const ready = piggy.coins >= piggy.minimum,
+    full = piggy.coins >= piggy.cap,
+    accent = "#ff9ec4";
+  return (
+    <View style={[s.card, { borderColor: `${accent}66` }]}>
+      <LinearGradient
+        pointerEvents="none"
+        colors={[`${accent}33`, "#00000000"]}
+        style={StyleSheet.absoluteFill}
+      />
+      <Pulse active={full} style={s.art}>
+        <Image
+          source={
+            icons.coins[Math.min(3, Math.floor((4 * piggy.coins) / piggy.cap))]
+          }
+          style={[s.artImage, !ready && { opacity: 0.55 }]}
+        />
+        {!ready && (
+          <View style={s.lock}>
+            <Feather name="lock" size={14} color="#fffdf3" />
+          </View>
+        )}
+      </Pulse>
+      <Text style={s.cardTitle}>{p.label}</Text>
+      <Text
+        style={s.grant}
+        accessibilityLabel={`Piggy bank holds ${piggy.coins} coins`}
+      >
+        ◉ {piggy.coins.toLocaleString()} / {piggy.cap.toLocaleString()}
+      </Text>
+      <View style={s.track}>
+        <View
+          style={[
+            s.fill,
+            {
+              width: `${Math.min(100, (100 * piggy.coins) / piggy.cap)}%`,
+              backgroundColor: accent,
+            },
+          ]}
+        />
+      </View>
+      <Text style={[s.grant, { color: "#a9c4d6", fontSize: 11 }]}>
+        {full
+          ? "Full: break it to keep filling"
+          : ready
+            ? "Ready to break"
+            : `Breaks open at ${piggy.minimum.toLocaleString()}`}
+        {"\n"}+{piggy.won} a win · +{piggy.lost} a loss
+      </Text>
+      <Press
+        accessibilityRole="button"
+        accessibilityLabel={`Break the piggy bank for ${p.price || `$${p.usd}`}`}
+        disabled={!available || busy}
+        onPress={onBuy}
+        style={[s.buy, { backgroundColor: available ? accent : "#1a2b3b" }]}
+      >
+        {busy ? (
+          <ActivityIndicator color="#10233a" />
+        ) : (
+          <Text style={[s.buyText, !available && { color: "#8fa8bb" }]}>
+            {p.price || `$${p.usd.toFixed(2)}`}
+          </Text>
+        )}
+      </Press>
+    </View>
+  );
+}
+
 const s = StyleSheet.create({
   root: { flex: 1, minHeight: 0, paddingTop: 10, paddingBottom: 4 },
   head: {
@@ -374,6 +469,24 @@ const s = StyleSheet.create({
   ribbonText: { color: "#10233a", fontSize: 10, fontWeight: "900" },
   art: { height: 76, alignItems: "center", justifyContent: "center" },
   artImage: { width: 84, height: 84 },
+  lock: {
+    position: "absolute",
+    bottom: 4,
+    right: 38,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#10233acc",
+  },
+  track: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#ffffff14",
+    overflow: "hidden",
+  },
+  fill: { height: 6, borderRadius: 3 },
   cardTitle: { color: "#fffdf3", fontSize: 15, fontWeight: "900" },
   grant: { color: "#ffe9a8", fontSize: 12, fontWeight: "800" },
   buy: {

@@ -18,9 +18,12 @@ const unit = () => {
 };
 
 export type RewardOutcome = "granted" | "dismissed" | "unavailable";
-/** What a video pays for: an hour off a started crate, or one extra spin of the daily wheel. */
+/** What a video pays for: an hour off a started crate, one extra spin or Lucky Shot, or coins. */
 export type RewardFor =
-  { crateId: string } | { purpose: "spin" } | { purpose: "coins" };
+  | { crateId: string }
+  | { purpose: "spin" }
+  | { purpose: "lucky" }
+  | { purpose: "coins" };
 
 /** A bare string is a crate id, as the crate screen has always passed it. */
 export async function showRewardedVideo(

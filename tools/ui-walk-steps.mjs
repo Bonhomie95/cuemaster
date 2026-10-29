@@ -22,6 +22,7 @@ export const walkSteps = [
         ["Settings", "Sound & play"],
         ["Invite friends", "You both get"],
         ["Leaderboard", "Trophies come from online wins"],
+        ["Leagues", "Not on this week's table yet"],
       ]) {
         await a.tap("More");
         await a.tap(tile);
@@ -66,6 +67,29 @@ export const walkSteps = [
       await snap(a, "13-wheel");
       await a.see("You won", 12000);
     });
+    await check(
+      "lucky shot: the home's daily button opens it, and the free shot pays its ring",
+      async () => {
+        await a.tap("Close daily rewards");
+        // The button routes by what is waiting, so let the day's board load first.
+        await a.see("Day 1");
+        await a.tap("Daily rewards");
+        await a.see("Your free shot is ready");
+        await snap(a, "13b-lucky");
+        await a.tap("Take the shot");
+        await a.see("POWER");
+        await sleep(2500);
+        // Straight at the centre spot at 8.5% power: the referee's replay stops it in the bullseye.
+        await a.eval("__cm.angle = 0; __cm.power = 0.085; __cm.shoot()");
+        await sleep(1200);
+        await snap(a, "13c-lucky-rolling");
+        await a.see("Bullseye!", 20000);
+        await sleep(700);
+        await snap(a, "13d-lucky-bullseye");
+        await a.tap("Back to daily rewards");
+        await a.see("No shots left today");
+      },
+    );
     await check("missions and the pass", async () => {
       await a.tap("Missions");
       await a.see(/Finish all three|Claim bonus/);
@@ -84,6 +108,8 @@ export const walkSteps = [
       await a.see("Pile of coins");
       await a.tap("Offers");
       await a.see("Starter pack");
+      await a.see("Piggy bank");
+      await a.see("0 / 5,000");
       await snap(a, "17-shop-offers");
       await a.tap("Close shop");
       await a.see("Play Online");
@@ -177,6 +203,24 @@ export const walkSteps = [
       await b.see("VICTORY");
       await b.tap("Leave table");
     });
+    await check(
+      "leagues and piggy bank: online results reach both",
+      async () => {
+        // The matchmade match put both players in this week's Bronze league; the friend room
+        // did not count there, but both matches filled the piggy bank (lost 40, then won 100).
+        await b.tap("More");
+        await b.tap("Leagues");
+        await b.see(/Bronze · league 1 of \d/);
+        await b.see("LagosAce");
+        await snap(b, "18-leagues");
+        await b.tap("Home");
+        await b.tap("Shop");
+        await b.see("Piggy bank");
+        await b.see("140 / 5,000");
+        await snap(b, "19-piggy");
+        await b.tap("Close shop");
+      },
+    );
     await check(
       "online: alone at the venue, an opponent still arrives",
       async () => {

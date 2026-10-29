@@ -495,7 +495,9 @@ export class Session {
     this.message =
       name === "spin"
         ? "Explore draw, follow, and sidespin."
-        : "Make your opening statement.";
+        : name === "lucky"
+          ? "Stop the cue ball inside the rings."
+          : "Make your opening statement.";
     this.resetTurnClock();
     this.notify();
   }
@@ -858,7 +860,13 @@ export class Session {
           this.progress.finished = true;
         this.running = false;
         this.resetTurnClock();
-        if (!this.matchRules && !this.progress.shotPots.length && !this.cpu)
+        // The Lucky Shot has nothing to pot, so a coach note about the pocket would mislead.
+        if (
+          !this.matchRules &&
+          !this.progress.shotPots.length &&
+          !this.cpu &&
+          this.drill !== "lucky"
+        )
           this.coach = this.coachNote();
         this.placement =
           !this.progress.finished &&
