@@ -63,11 +63,18 @@ debugging disabled when testing Expo GL.
 
 ## Available flows
 
+- **Online 1 vs 1** (`server/src/live.ts`, `mobile/src/game/online.ts`): players waiting at the same venue are paired over a WebSocket; the server replays every shot on the shared engine and sends both phones the resulting table, owns the shot clock, and settles the pot (both entries), a crate, XP and trophies in one write. Rematch, quick chat (six fixed lines), a 45-second return window after a dropped connection, and a refund when both players vanish. When nobody is waiting the player is offered a computer opponent, labelled HOUSE.
+- **Friend tables**: a five-letter room code, shared as a tappable `https://<api>/join/CODE` link that opens the app (`server/src/links.ts`).
+- **Invite codes**: both players get 500 coins and 10 rubies once the newcomer finishes three matches (`server/src/invites.ts`).
+- **Daily loop** (`server/src/daily.ts`, `mobile/src/app/DailyRewards.tsx`): a 7-day login streak, free coins every four hours, a daily prize wheel (+3 video spins), three daily missions with a bonus crate, and the 28-day CueMaster Pass (30 tiers, free and premium tracks). Local reminders for crates, free coins and lapsed players (`mobile/src/app/notify.ts`).
+- **Shop** (`mobile/src/app/Shop.tsx`): coin packs, ruby packs, a one-time starter pack, the season's premium pass, and three free-coin videos a day.
+- **Home and menus**: picture cards for each way to play, daily rewards and the shop in side columns, everything else under More (profile, leaderboard by trophies or level, invites, tournaments, practice, tables, cues, settings, How to play). New players pick a name and flag, and get a three-step coaching overlay on their first table.
+- **Sound**: every table and interface sound is synthesised by `tools/build_sounds.py`; one switch in Settings silences both.
 - Branded native splash, Blender opening artwork, guest entry and a club home. Offline practice remains accessible when the API is unavailable.
 - Profile name, country, two original avatars, persistent account progress and account deletion.
 - Six table finishes with server-enforced level locks and saved equipment selection.
 - Six practice challenges, verified first-clear XP/coins, repeatable free practice, daily gifts.
-- Reward crates: a win seals one of six crate tiers, four slots, one unlock at a time, opened on the timer or early with rubies. Contents are rolled on the server and the odds are published in the app.
+- Reward crates: a win seals one of six crate tiers, four slots, one unlock at a time, opened on the timer, up to three videos (an hour each), or early with rubies at one ruby per hour left; a premium pass halves every timer. Contents are rolled when the crate is earned, so a paid speed-up only buys time, and the odds are published at `/legal/odds`.
 - Two currencies: coins, the soft currency, pay entry fees, cues and tables; rubies, the premium currency, open crates early. Real money buys both, plus a one-time starter pack and the season's premium pass, through Apple and Google billing only. Purchases stay off until `STORE_BILLING` is set.
 - Optional rewarded video takes an hour off a crate. It ships on Google's public AdMob test units, and the hour is granted by AdMob's signed server callback, never by the device. Non-personalised ads only; no advertising identifier, no tracking prompt.
 - Coin competitions with optional coin entry fees, server-replayed scores, a persistent leaderboard, and ranked coin prizes that settle automatically when the event closes.
@@ -84,11 +91,13 @@ debugging disabled when testing Expo GL.
 - Physics coach: after a missed practice shot the footer says what the engine saw, in degrees off the nearest pocket, with aim-fuller or aim-thinner advice.
 - Living landmarks: each city inlay carries an animated light, and London keeps its clock hand.
 
-Drag cloth to aim, pull the left power handle down and release to shoot. Returning to zero cancels. Spin opens the cue-ball picker. The menu contains camera, practice, collection, restart, replay and return-to-club controls. After an unranked shot, ▶ REPLAY re-runs it in slow motion.
+Drag cloth to aim, turn the AIM wheel on the right for fine corrections, pull the cue on the left down and release to shoot. Returning to zero cancels. Spin opens the cue-ball picker. The menu contains camera, practice, collection, restart, replay and return-to-club controls. After an unranked shot, ▶ REPLAY re-runs it in slow motion.
 
 ## Art and implementation
 
-`mobile/assets/models/cuemaster-table.blend` and `mobile/assets/lounge/lounge.blend` are editable originals. Rebuild table and club images with `tools/build_table.py`, `tools/build_lounge.py` and `tools/build_hero.py` (welcome art) using Blender's background mode. `tools/build_details.py` creates original procedural ball textures and audio; it requires Pillow.
+`mobile/assets/models/cuemaster-table.blend` and `mobile/assets/lounge/lounge.blend` are editable originals. Rebuild table and club images with `tools/build_table.py`, `tools/build_lounge.py` and `tools/build_hero.py` (welcome art) using Blender's background mode. `tools/build_details.py` creates the ball-number masks (Pillow). `tools/build_icons.py` renders the coin, ruby, pack, crate, gift and pass art from Blender primitives (`blender -b --python tools/build_icons.py`), and `tools/build_sounds.py` synthesises every sound (numpy).
+
+`node tools/ui-walk.mjs` (with `npm run dev` running) plays the whole app in headless Chrome as two players: every page, the daily systems, the shop, a computer match, an online match between the two players (checking both phones end on the same table) and a friend room. It fails on any console error or missing control; `--store` saves store-size screenshots to `artifacts/store-screenshots/`.
 
 `mobile/src/app` contains club screens, API client and provider integration. `mobile/TableGame.tsx` contains the match screen. `server/src/catalog.ts` defines progression, venues and events. `server/src/verify.ts` replays the same engine used by the client before granting rewards.
 
@@ -125,4 +134,4 @@ or once players have entered, and every deletion is kept in a permanent audit lo
 
 ## Release boundary
 
-This is a working local club/practice/preseason build. Online opponents, regulation competitive foul adjudication, live brackets, paid skin purchases, wallet custody and crypto payouts are not implemented. No funds are collected. Google/Apple live login needs owner-controlled OAuth/App ID setup. See [service setup](docs/SERVICES.md) and [validation](docs/VALIDATION.md) for exact checks and remaining gates. Historical GDD claims about deleted code do not describe this build.
+Online 1 vs 1 and friend tables are live; live brackets, clubs, paid skin purchases, wallet custody and crypto payouts are not implemented. The match server keeps queues and tables in one process's memory: run a single always-on instance (Render's free plan sleeps and is not suitable for launch). No funds are collected. Google/Apple live login needs owner-controlled OAuth/App ID setup. See [service setup](docs/SERVICES.md) and [validation](docs/VALIDATION.md) for exact checks and remaining gates. Historical GDD claims about deleted code do not describe this build.
