@@ -17,9 +17,9 @@ on each service, is `docs/release/OWNER-CHECKLIST.md` in the main checkout.
 - **Live server and policy pages** at `https://cuemaster-api.onrender.com`: privacy, terms,
   support, account deletion and reward odds under `/legal/`. The update with the 14 cities
   (250 to a billion), the city unlocks and the video fixes went live on 9 November.
-- **Expo project** `bonhomie95/cuemaster` is created and linked, and the first iPhone build
-  (`beta` profile) was started from this Mac with `--auto-submit`, so it goes to TestFlight by
-  itself once you have signed in to Apple in the Terminal.
+- **Expo project** `bonhomie95/cuemaster` is created and linked. Testing runs on the iPhone
+  simulator and the Android emulator for now; the TestFlight upload (section 3, step 3) waits
+  until you want it.
 - **iPhone only** for this release, so no iPad screenshots are needed (iPads run it in iPhone
   mode). **Guest play only** until you set up Google or Apple sign-in: the sign-in buttons stay
   hidden until then, which both stores accept. **Paid packs stay hidden** on a platform until
@@ -94,8 +94,8 @@ it today. An organization account (registered with a D-U-N-S number) skips that 
 2. **Create the app:** Apps → + → New App → iOS → name `CueMaster: 3D Pool Billiards` → primary
    language English (U.S.) → bundle ID `com.bonhomie.cuemaster` → SKU `cuemaster-ios` → Full
    access → Create. If the bundle ID is not offered yet, do step 3 first; EAS registers it.
-3. **Build the iPhone app (started for you; You only sign in):** the Terminal tab "iPhone build"
-   runs `npx eas-cli build -p ios --profile beta --auto-submit` in `mobile/`. Answer **Yes** to
+3. **Build the iPhone app (when you want TestFlight; You sign in):** run
+   `npx eas-cli build -p ios --profile beta --auto-submit` in `mobile/` (or ask me to start it). Answer **Yes** to
    logging in to your Apple account (Apple ID, password, two-factor code), pick **Bonhomie LLC**,
    and accept the defaults to create the distribution certificate, the provisioning profile and
    an App Store Connect API key. If it asks for an app name, use `CueMaster: 3D Pool Billiards`.
