@@ -38,6 +38,23 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Chrome's debugging port; a second checkout walking at the same time needs its own.
 const CDP = process.env.CDP_PORT || "9334";
 
+// Each store size walks in a Chrome of its own: back to back in one browser, the second size
+// opened already signed in and never reached the welcome page.
+if (store && !only) {
+  let code = 0;
+  for (const [i, size] of SIZES.entries()) {
+    // The API allows 120 requests a minute per address; let one size's window pass.
+    if (i) await sleep(61_000);
+    const run = spawn(
+      process.execPath,
+      [fileURLToPath(import.meta.url), "--store", `--size=${size.name}`],
+      { stdio: "inherit" },
+    );
+    code ||= await new Promise((r) => run.on("exit", (c) => r(c ?? 1)));
+  }
+  process.exit(code);
+}
+
 const profile = await mkdtemp(join(tmpdir(), "cuemaster-walk-"));
 const chrome = spawn(
   CHROME,
@@ -276,10 +293,7 @@ const { walkSteps } = await import("./ui-walk-steps.mjs");
 
 let failed = false;
 try {
-  for (const [i, size] of SIZES.entries()) {
-    // The API allows 120 requests a minute per address, and one size's online steps use most
-    // of that: let the window pass before the next size starts.
-    if (i) await sleep(61_000);
+  for (const size of SIZES) {
     console.log(`Walking at ${size.name}`);
     await walk(size);
   }

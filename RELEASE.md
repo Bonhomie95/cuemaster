@@ -15,7 +15,11 @@ on each service, is `docs/release/OWNER-CHECKLIST.md` in the main checkout.
   feature graphic (1024×500) and icon (512×512), and 8 App Store screenshots for the 6.9″ iPhone
   (2868×1320). All are the real game.
 - **Live server and policy pages** at `https://cuemaster-api.onrender.com`: privacy, terms,
-  support, account deletion and reward odds under `/legal/`.
+  support, account deletion and reward odds under `/legal/`. The update with the 14 cities
+  (250 to a billion), the city unlocks and the video fixes went live on 9 November.
+- **Expo project** `bonhomie95/cuemaster` is created and linked, and the first iPhone build
+  (`beta` profile) was started from this Mac with `--auto-submit`, so it goes to TestFlight by
+  itself once you have signed in to Apple in the Terminal.
 - **iPhone only** for this release, so no iPad screenshots are needed (iPads run it in iPhone
   mode). **Guest play only** until you set up Google or Apple sign-in: the sign-in buttons stay
   hidden until then, which both stores accept. **Paid packs stay hidden** on a platform until
@@ -90,22 +94,16 @@ it today. An organization account (registered with a D-U-N-S number) skips that 
 2. **Create the app:** Apps → + → New App → iOS → name `CueMaster: 3D Pool Billiards` → primary
    language English (U.S.) → bundle ID `com.bonhomie.cuemaster` → SKU `cuemaster-ios` → Full
    access → Create. If the bundle ID is not offered yet, do step 3 first; EAS registers it.
-3. **Build the iPhone app (You, in Terminal, about 45 minutes, mostly waiting):**
-   ```
-   cd ~/Documents/DEV/mobile/cuemaster/mobile
-   npx eas-cli login
-   npx eas-cli init
-   npx eas-cli build -p ios --profile beta
-   npx eas-cli submit -p ios --latest
-   ```
-   `login` uses your Expo account. `init` creates the CueMaster project on Expo; if it says it
-   could not add the project ID to the config, send me the ID it prints. During `build`, answer
-   **Yes** to logging in to your Apple account (Apple ID, password, two-factor code) and Yes to
-   creating the distribution certificate and provisioning profile. The build runs in Expo's
-   cloud; the Terminal shows a link to follow it. `submit` uploads it to App Store Connect
-   (choose CueMaster if asked); Apple processes it in 10–30 minutes and emails you.
-   The `beta` profile keeps Google's test adverts, which is right for TestFlight. The build you
-   send to App Review uses `--profile production`, after your AdMob IDs are in the app.
+3. **Build the iPhone app (started for you; You only sign in):** the Terminal tab "iPhone build"
+   runs `npx eas-cli build -p ios --profile beta --auto-submit` in `mobile/`. Answer **Yes** to
+   logging in to your Apple account (Apple ID, password, two-factor code), pick **Bonhomie LLC**,
+   and accept the defaults to create the distribution certificate, the provisioning profile and
+   an App Store Connect API key. If it asks for an app name, use `CueMaster: 3D Pool Billiards`.
+   The build runs in Expo's cloud (the Terminal shows a link to follow it), then uploads itself
+   to App Store Connect; Apple processes it in 10–30 minutes and emails you. To run it again
+   later, use the same command. The `beta` profile keeps Google's test adverts, which is right
+   for TestFlight; the build you send to App Review uses `--profile production`, after your
+   AdMob IDs are in the app.
 4. **TestFlight:** your app → TestFlight → Internal Testing → + → add yourself → install the
    TestFlight app on your iPhone → open the invite → install CueMaster.
 5. **In-app purchases:** your app → Monetization → In-App Purchases → + → type **Consumable** →
@@ -130,9 +128,8 @@ it today. An organization account (registered with a D-U-N-S number) skips that 
 
 1. The four AdMob IDs (two app IDs, two rewarded unit IDs).
 2. Whether your Play account is personal or organization.
-3. The Expo project ID, if `eas init` asks you to add it by hand.
-4. "Products are created" for each store, so purchases can be switched on.
-5. Later, if you turn on sign-in: the Google iOS client ID and URL scheme (section 6).
+3. "Products are created" for each store, so purchases can be switched on.
+4. Later, if you turn on sign-in: the Google iOS client ID and URL scheme (section 6).
 
 With the AdMob IDs I put them in the app, build the production Android file (version code 3),
 and you run `npx eas-cli build -p ios --profile production` then `submit` again.
