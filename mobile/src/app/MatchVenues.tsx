@@ -133,13 +133,10 @@ export default function MatchVenues({
               />
               <Text style={s.name}>{v.name}</Text>
               <Text style={s.copy}>{v.subtitle}</Text>
+              {/* The prize is the number that matters; the entry comes off when the rack
+                  starts, as players expect. Pass & play pays no pot, so it shows the fee. */}
               <Text style={s.fee}>
-                ◉ {coinsShort(v.entry)} entry
-                {mode !== "local" && (
-                  <Text style={s.win}>
-                    {"  "}· win {coinsShort(v.entry * 2)}
-                  </Text>
-                )}
+                ◉ {coinsShort(mode === "local" ? v.entry : v.entry * 2)}
               </Text>
               <Press
                 accessibilityRole="button"
@@ -219,7 +216,6 @@ const s = StyleSheet.create({
   art: { width: "100%", borderRadius: 7, flexShrink: 1, minHeight: 40 },
   name: { fontSize: 17, fontWeight: "600", color: "#f2efe3", marginTop: 8 },
   fee: { fontSize: 15, color: "#e5c78c", marginVertical: 8, marginTop: "auto" },
-  win: { fontSize: 12, color: "#24dbb3", fontWeight: "700" },
   join: { backgroundColor: "#24dbb3", borderColor: "#7ff0d6" },
   button: {
     minHeight: 44,

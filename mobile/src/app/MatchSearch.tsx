@@ -101,8 +101,7 @@ export default function MatchSearch({
       </Text>
       {venue && (
         <Text style={s.title}>
-          {venue.name} · ◉ {coinsShort(venue.entry)} entry · win{" "}
-          {coinsShort(venue.entry * 2)}
+          {venue.name} · ◉ {coinsShort(venue.entry * 2)}
         </Text>
       )}
       {kind === "join" ? (

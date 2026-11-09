@@ -143,7 +143,7 @@ export const walkSteps = [
       await a.eval(
         `[...document.querySelectorAll("div")].filter((d) => d.scrollWidth > d.clientWidth + 200).forEach((d) => (d.scrollLeft = d.scrollWidth))`,
       );
-      await a.see("1B entry");
+      await a.see("◉ 2B");
       await a.tap("Dismiss message"); // the "Match forfeited." toast, for a clean picture
       await sleep(700);
       await snap(a, "06b-venues");
