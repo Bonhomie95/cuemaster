@@ -21,7 +21,7 @@ export const walkSteps = [
         ["How to play", "8-ball in a minute"],
         ["Settings", "Sound & play"],
         ["Invite friends", "You both get"],
-        ["Leaderboard", "Trophies come from online wins"],
+        ["Leaderboard", "My country"],
         ["Leagues", "Not on this week's table yet"],
       ]) {
         await a.tap("More");
@@ -79,6 +79,8 @@ export const walkSteps = [
         await a.tap("Take the shot");
         await a.see("POWER");
         await sleep(2500);
+        // The hint banner would sit in the store screenshot of this table.
+        await a.tap("Dismiss message");
         // Straight at the centre spot at 8.5% power: the referee's replay stops it in the bullseye.
         await a.eval("__cm.angle = 0; __cm.power = 0.085; __cm.shoot()");
         await sleep(1200);
@@ -137,6 +139,14 @@ export const walkSteps = [
       await a.tap("Quit match");
       await a.tap("Quit");
       await a.see("Choose your venue");
+      // The far end of the ladder: the high-stakes cities, up to Monaco's billion-coin table.
+      await a.eval(
+        `[...document.querySelectorAll("div")].filter((d) => d.scrollWidth > d.clientWidth + 200).forEach((d) => (d.scrollLeft = d.scrollWidth))`,
+      );
+      await a.see("1B entry");
+      await a.tap("Dismiss message"); // the "Match forfeited." toast, for a clean picture
+      await sleep(700);
+      await snap(a, "06b-venues");
     });
   },
   async ({ a, b, check, enter, snap, sleep }) => {

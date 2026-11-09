@@ -16,7 +16,7 @@ import { Press, Enter, Pulse } from "./motion";
 import { icons } from "./art";
 import { celebrate } from "./feedback";
 import { api } from "./api";
-import { showRewardedVideo } from "./ads";
+import { showRewardedVideo, untilGranted, useVideo } from "./ads";
 
 type Product = Awaited<ReturnType<typeof loadStore>>["products"][number];
 /** Bigger packs get bigger piles: the art is the first thing that says "more". */
@@ -51,6 +51,8 @@ export default function Shop({
   const [error, setError] = useState("");
   const [buying, setBuying] = useState("");
   const [notice, setNotice] = useState("");
+  // Free coins appear only once a video is loaded (and while today's are not used up).
+  const coinVideo = useVideo(tab === "rubies" ? null : { purpose: "coins" });
   const refresh = () =>
     loadStore()
       .then(setStore)
@@ -90,15 +92,15 @@ export default function Shop({
     setError("");
     setNotice("");
     try {
-      const outcome = await showRewardedVideo({ purpose: "coins" });
-      if (outcome === "unavailable")
-        throw new Error("No video is available right now. Try again shortly.");
-      if (outcome === "granted") {
-        // AdMob's signed callback grants the coins; give it a moment, then read back.
-        await new Promise((r) => setTimeout(r, 1200));
-        onPlayer(await api<Player>("/me"));
+      const before = player.coins;
+      if ((await showRewardedVideo({ purpose: "coins" })) === "granted") {
+        // The server grants the coins; read back until they show.
+        await untilGranted(async () => {
+          const p = await api<Player>("/me");
+          onPlayer(p);
+          return p.coins > before;
+        });
         celebrate();
-        setNotice("Free coins added.");
       }
     } catch (e) {
       setError((e as Error).message);
@@ -106,10 +108,15 @@ export default function Shop({
       setBuying("");
     }
   };
-  const products = (store?.products || []).filter((p) =>
-    tab === "offers"
-      ? p.kind === "bundle" || p.kind === "pass" || p.kind === "piggy"
-      : p.kind === tab,
+  // A phone whose store is not switched on shows no prices it cannot sell; the web build shows
+  // them for inspection.
+  const sells = Platform.OS === "web" || !!store?.available;
+  const products = (store?.products || []).filter(
+    (p) =>
+      sells &&
+      (tab === "offers"
+        ? p.kind === "bundle" || p.kind === "pass" || p.kind === "piggy"
+        : p.kind === tab),
   );
   return (
     <View style={s.root}>
@@ -192,7 +199,7 @@ export default function Shop({
               )}
             </Enter>
           ))}
-          {tab !== "rubies" && Platform.OS !== "web" && (
+          {tab !== "rubies" && coinVideo && (
             <Enter index={products.length} style={{ alignSelf: "stretch" }}>
               <View style={[s.card, { borderColor: "#24dbb355" }]}>
                 <LinearGradient
@@ -204,8 +211,7 @@ export default function Shop({
                   <Feather name="play-circle" size={32} color="#24dbb3" />
                 </View>
                 <Text style={s.cardTitle}>Free coins</Text>
-                <Text style={s.grant}>◉ 150 coins per video</Text>
-                <Text style={[s.grant, { color: "#a9c4d6" }]}>Three a day</Text>
+                <Text style={s.grant}>◉ 150 coins</Text>
                 <Press
                   accessibilityRole="button"
                   accessibilityLabel="Watch a video for free coins"
@@ -222,20 +228,22 @@ export default function Shop({
               </View>
             </Enter>
           )}
-          {!products.length && (
+          {!products.length && (tab === "rubies" || !coinVideo) && (
             <Text style={s.empty}>
-              Nothing here right now. Check back soon.
+              {tab === "rubies"
+                ? "Rubies come from daily rewards and the pass."
+                : "Win matches and collect daily rewards for more coins."}
             </Text>
           )}
         </ScrollView>
       )}
-      <Text style={s.fine}>
-        {store && !store.available
-          ? Platform.OS === "web"
-            ? "Purchases work in the iOS and Android apps."
-            : "The store is not available on this device right now."
-          : "Charged by your app store in your local currency. Coins and rubies are virtual items with no cash value."}
-      </Text>
+      {!!products.length && (
+        <Text style={s.fine}>
+          {store?.available
+            ? "Charged by your app store in your local currency. Coins and rubies are virtual items with no cash value."
+            : "Purchases work in the iOS and Android apps."}
+        </Text>
+      )}
     </View>
   );
 }
@@ -377,11 +385,10 @@ function PiggyCard({
       </View>
       <Text style={[s.grant, { color: "#a9c4d6", fontSize: 11 }]}>
         {full
-          ? "Full: break it to keep filling"
+          ? "Full"
           : ready
             ? "Ready to break"
-            : `Breaks open at ${piggy.minimum.toLocaleString()}`}
-        {"\n"}+{piggy.won} a win · +{piggy.lost} a loss
+            : `Opens at ${piggy.minimum.toLocaleString()}`}
       </Text>
       <Press
         accessibilityRole="button"

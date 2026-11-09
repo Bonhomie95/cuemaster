@@ -34,7 +34,8 @@ const stop = async () => {
 };
 try {
   for (const file of (await readdir(cwd + "/tests"))
-    .filter((f) => f.endsWith(".test.ts"))
+    // `npm run test:api -- live` runs only the suites whose file name contains "live".
+    .filter((f) => f.endsWith(".test.ts") && f.includes(process.argv[2] || ""))
     .sort()) {
     const port = await freePort(),
       base = "http://127.0.0.1:" + port;

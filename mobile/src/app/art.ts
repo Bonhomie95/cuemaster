@@ -6,7 +6,29 @@ export const venueArt: Record<string, any> = {
   midnight: require("../../assets/lounge/midnight.jpg"),
   jade: require("../../assets/lounge/jade.jpg"),
   champion: require("../../assets/lounge/champion.jpg"),
+  capetown: require("../../assets/lounge/capetown.jpg"),
+  rio: require("../../assets/lounge/rio.jpg"),
+  cairo: require("../../assets/lounge/cairo.jpg"),
+  mumbai: require("../../assets/lounge/mumbai.jpg"),
+  rome: require("../../assets/lounge/rome.jpg"),
+  sydney: require("../../assets/lounge/sydney.jpg"),
+  singapore: require("../../assets/lounge/singapore.jpg"),
+  monaco: require("../../assets/lounge/monaco.jpg"),
 };
+/**
+ * The entry screen's backgrounds, rendered by tools/build_entry.sh: the club room at different
+ * venues and angles. One is drawn per launch, so every opening looks a little different.
+ */
+const entries = [
+  welcome,
+  require("../../assets/entry/london.jpg"),
+  require("../../assets/entry/tokyo.jpg"),
+  require("../../assets/entry/dubai.jpg"),
+  require("../../assets/entry/rio.jpg"),
+  require("../../assets/entry/cairo.jpg"),
+  require("../../assets/entry/monaco.jpg"),
+];
+export const entryArt = entries[Math.floor(Math.random() * entries.length)];
 export const portraits = [
   require("../../assets/avatars/player-natural.png"),
   require("../../assets/avatars/opponent-natural.png"),

@@ -47,4 +47,5 @@ artifacts/*.app/
 *.aab
 /artifacts/ui-walk/
 /artifacts/store-screenshots/
+/artifacts/store-listing/
 /artifacts/release/

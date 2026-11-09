@@ -37,13 +37,17 @@ for loc,energy,size,color in [((0,-.1,3.2),380,3,(.82,.91,1)),((-2,1,1.5),330,2,
  bpy.ops.object.light_add(type='AREA',location=loc);o=bpy.context.object;o.data.energy=energy;o.data.shape='RECTANGLE';o.data.size=size;o.data.size_y=.55;o.data.color=color;o.rotation_euler=(Vector((0,0,0))-o.location).to_track_quat('-Z','Y').to_euler()
 bpy.ops.object.camera_add(location=(2.7,-3.1,2.65));cam=bpy.context.object;cam.rotation_euler=(Vector((0,0,-.12))-cam.location).to_track_quat('-Z','Y').to_euler();cam.data.lens=46;scene.camera=cam
 scene.render.resolution_percentage=100;scene.render.image_settings.file_format='JPEG';scene.render.image_settings.quality=92
-scene.render.resolution_x=1600;scene.render.resolution_y=1000;scene.render.filepath=os.path.join(OUT,'welcome.jpg');bpy.ops.render.render(write_still=True)
+# ONLY=capetown,rio renders just those venue cards, leaving the existing art byte-for-byte.
+ONLY=[n for n in os.environ.get('ONLY','').split(',') if n]
+if not ONLY:
+ scene.render.resolution_x=1600;scene.render.resolution_y=1000;scene.render.filepath=os.path.join(OUT,'welcome.jpg');bpy.ops.render.render(write_still=True)
 scene.render.resolution_x=720;scene.render.resolution_y=440
 # Runtime skin colours (session.ts), deepened a little because the AgX view lifts bright cloth.
 def lin(h,k=1):
  c=[int(h[i:i+2],16)/255 for i in (1,3,5)];return tuple(k*(x/12.92 if x<=.04045 else ((x+.055)/1.055)**2.4) for x in c)
 scene.view_settings.look='AgX - Punchy'
-for name,cloth,cushion,wood in [('heritage','#07845b','#10523e','#38241b'),('riviera','#087fab','#18516c','#202730'),('regent','#a53154','#572231','#292023'),('midnight','#4242a4','#191d43','#111525'),('jade','#079c75','#074937','#153e32'),('champion','#8b6430','#60441f','#16191b')]:
+for name,cloth,cushion,wood in [('heritage','#07845b','#10523e','#38241b'),('riviera','#087fab','#18516c','#202730'),('regent','#a53154','#572231','#292023'),('midnight','#4242a4','#191d43','#111525'),('jade','#079c75','#074937','#153e32'),('champion','#8b6430','#60441f','#16191b'),('capetown','#84346f','#4d1d41','#241a1f'),('rio','#c0581f','#6f3214','#2a1a12'),('cairo','#24509e','#142d5e','#8a6a42'),('mumbai','#0e8a8f','#08494c','#3a1c1c'),('rome','#5f7a32','#34441b','#b8a888'),('sydney','#1e6fd9','#13468a','#a89a82'),('singapore','#7a3ea6','#43215e','#1d1726'),('monaco','#5d6570','#343a42','#0f1012')]:
+ if ONLY and name not in ONLY:continue
  for key,color in [('cloth',lin(cloth,.62)),('cushion',lin(cushion,.62)),('wood',lin(wood))]:bpy.data.materials.get(key).node_tree.nodes.get('Principled BSDF').inputs['Base Color'].default_value=(*color,1)
  scene.render.filepath=os.path.join(OUT,name+'.jpg');bpy.ops.render.render(write_still=True)
-bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT,'lounge.blend'))
+if not ONLY:bpy.ops.wm.save_as_mainfile(filepath=os.path.join(OUT,'lounge.blend'))

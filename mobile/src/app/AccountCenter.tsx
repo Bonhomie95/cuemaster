@@ -353,11 +353,6 @@ export default function AccountCenter({
               }}
             />
           </View>
-          <Text style={s.copy}>
-            {metric === "trophies"
-              ? "Trophies come from online wins: +24 for a win, −16 for a loss."
-              : "Ranked by server-verified XP from matches, drills and events."}
-          </Text>
           {!!selected && (
             <Card>
               <Text style={s.heading}>{selected.name}</Text>

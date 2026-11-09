@@ -1,14 +1,16 @@
 const { assertReleaseConfig } = require("./release-config.cjs");
 const { ids } = require("./ads.cjs");
 module.exports = ({ config }) => {
-  if (process.env.CUEMASTER_RELEASE === "1") assertReleaseConfig(process.env);
+  // `npx eas-cli init` writes the project id into app.json; an env var can still override it.
+  const projectId =
+    process.env.EAS_PROJECT_ID || config.extra?.eas?.projectId || undefined;
+  if (process.env.CUEMASTER_RELEASE === "1")
+    assertReleaseConfig(process.env, projectId);
   return {
     ...config,
     extra: {
       ...config.extra,
-      ...(process.env.EAS_PROJECT_ID
-        ? { eas: { projectId: process.env.EAS_PROJECT_ID } }
-        : {}),
+      ...(projectId ? { eas: { ...config.extra?.eas, projectId } } : {}),
       // The rewarded unit the app asks for at runtime; the plugin below only registers the app.
       admob: {
         androidRewarded: ids().androidRewarded,

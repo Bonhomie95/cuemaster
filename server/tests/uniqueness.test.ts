@@ -46,7 +46,7 @@ test("daily shot, replay XP, leader ghosts and verified CPU wins", async () => {
     .token;
   try {
     const catalog = (await call("/catalog")).body;
-    assert.equal(catalog.cityChallenges.length, 12);
+    assert.equal(catalog.cityChallenges.length, 2 * catalog.venues.length);
     const daily = (await call("/daily")).body;
     assert.match(daily.drill, /^daily:\d{4}-\d{2}-\d{2}$/);
     assert.equal(daily.leaderReplay, null);

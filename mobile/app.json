@@ -7,7 +7,7 @@
     "icon": "./assets/club-icon.png",
     "userInterfaceStyle": "dark",
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "bundleIdentifier": "com.bonhomie.cuemaster",
       "usesAppleSignIn": true,
       "privacyManifests": {
@@ -90,12 +90,16 @@
     },
     "android": {
       "package": "com.bonhomie.cuemaster",
+      "versionCode": 2,
       "blockedPermissions": [
         "android.permission.RECORD_AUDIO",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.SYSTEM_ALERT_WINDOW",
-        "com.google.android.gms.permission.AD_ID"
+        "com.google.android.gms.permission.AD_ID",
+        "android.permission.ACCESS_ADSERVICES_AD_ID",
+        "android.permission.ACCESS_ADSERVICES_ATTRIBUTION",
+        "android.permission.ACCESS_ADSERVICES_TOPICS"
       ],
       "icon": "./assets/club-icon.png",
       "adaptiveIcon": {

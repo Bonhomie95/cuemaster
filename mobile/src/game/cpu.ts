@@ -50,14 +50,15 @@ export const FORM = {
   base: 0.3,
   span: 0.45,
   newcomer: 0.4,
-  perVenueLevel: 0.03,
+  perVenue: 0.03,
   jitter: 0.05,
   min: 0.25,
   max: 0.9,
 };
 export function formSkill(
   form: readonly number[],
-  venueLevel = 1,
+  /** The table's place on the ladder, 1 for Lagos: higher rooms seat stronger regulars. */
+  venueTier = 1,
   random = Math.random,
 ) {
   const recent = form.slice(-5);
@@ -67,7 +68,7 @@ export function formSkill(
   const skill =
     FORM.base +
     FORM.span * rate +
-    FORM.perVenueLevel * Math.max(0, venueLevel - 1) +
+    FORM.perVenue * Math.max(0, venueTier - 1) +
     (random() - 0.5) * 2 * FORM.jitter;
   return Math.max(FORM.min, Math.min(FORM.max, skill));
 }

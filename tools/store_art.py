@@ -15,12 +15,13 @@ BOLD = "/System/Library/Fonts/Supplemental/Arial Black.ttf"
 SEMI = "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
 PICKS = [
     ("01-home", "Pool, your way", "Online, friends, computer rivals and practice"),
-    ("09-online-break", "Real physics. Every shot.", "Spin, cushions and throw, played out for real"),
+    ("06b-venues", "From Lagos to Monaco", "14 cities, up to a billion-coin table"),
+    ("09-online-break", "Spin it. Bank it. Sink it.", "Every cushion and spin plays out on the cloth"),
     ("08-vs-online", "Play the world", "1 vs 1 online. The winner takes the pot"),
     ("10-victory", "Win coins, crates, trophies", "Every win seals a reward crate"),
     ("13-wheel", "Free spin every day", "Plus free coins every four hours"),
+    ("13c-lucky-rolling", "The Lucky Shot", "One free skill shot a day at the prize rings"),
     ("11-friend-room", "Challenge your friends", "Send a link, play a private table"),
-    ("15-pass", "A season pass of rewards", "30 tiers of coins, rubies and crates"),
 ]
 
 

@@ -39,7 +39,7 @@ import { createAudioPlayer, setAudioModeAsync } from "expo-audio";
 import { tableHost, useTableHost, stageHeight } from "./src/render/TableHost";
 import CompatibilityTable from "./src/render/CompatibilityTable";
 import { session, skins, encodeReplay } from "./src/game/session";
-import { flag, type Player } from "./src/app/api";
+import { coinsShort, flag, type Player } from "./src/app/api";
 import { Press, Enter } from "./src/app/motion";
 import { online } from "./src/game/online";
 import { setSound } from "./src/app/sound";
@@ -1032,7 +1032,7 @@ function Game({
               caption: `LV ${online.match.opponent.level} · ${online.match.opponent.trophies} trophies`,
             }}
             title={`${online.match.venue.name.toUpperCase()} · ${online.match.private ? "FRIENDLY" : "ONLINE"}`}
-            stake={`WINNER TAKES ◉ ${online.match.pot.toLocaleString()}`}
+            stake={`WINNER TAKES ◉ ${coinsShort(online.match.pot)}`}
           />
         )}
         {!!cpuIntro && session.cpu && (
@@ -1050,7 +1050,7 @@ function Game({
               caption: `House rival · ${session.cpu.tier}`,
             }}
             title={modeLabel.toUpperCase()}
-            stake={`WINNER TAKES ◉ ${(entryFee * 2).toLocaleString()}`}
+            stake={`WINNER TAKES ◉ ${coinsShort(entryFee * 2)}`}
           />
         )}
         <Tutorial
@@ -1752,9 +1752,9 @@ function Game({
                 {!!exitError && <Text style={s.description}>{exitError}</Text>}
                 <Text style={s.description}>
                   {isOnline
-                    ? `Resigning counts as a loss. ${session.opponentName} takes the ${entryFee * 2}-coin pot.`
+                    ? `Resigning counts as a loss. ${session.opponentName} takes the ${coinsShort(entryFee * 2)}-coin pot.`
                     : paidMatch
-                      ? `Counts as a loss. ${entryFee} coins stay paid.`
+                      ? `Counts as a loss. ${coinsShort(entryFee)} coins stay paid.`
                       : "You will leave this rack and lose your current progress."}
                 </Text>
                 <Button label="Keep playing" onPress={() => setPanel(null)} />

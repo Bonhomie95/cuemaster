@@ -10,7 +10,15 @@ import {
 } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
-import { Catalog, Player, Venue, Challenge, Tournament, todayKey } from "./api";
+import {
+  Catalog,
+  Player,
+  Venue,
+  Challenge,
+  Tournament,
+  todayKey,
+  lockOf,
+} from "./api";
 import IconButton from "./IconButton";
 import { Press, Enter } from "./motion";
 export { default as IconButton } from "./IconButton";
@@ -26,6 +34,8 @@ export type LobbyProps = {
   catalog: Catalog;
   selected: Venue;
   busy: boolean;
+  /** Purchases are switched on for this platform, so paid offers may be shown. */
+  canBuy: boolean;
   onPage: (page: Page) => void;
   /** Open the venues in a mode: online, a friend, the computer or pass and play. */
   onPlay: (mode?: VenueMode) => void;
@@ -152,66 +162,71 @@ export default function Lobby(p: LobbyProps) {
         contentContainerStyle={s.track}
       >
         {p.page === "tables" &&
-          p.catalog.venues.map((v, i) => (
-            <Enter key={v.id} index={i} style={[s.card, frame]}>
-              <Image
-                source={venueArt[v.id]}
-                style={[s.tableArt, short && { minHeight: 25 }]}
-              />
-              <View style={s.cardDetails}>
-                <Badge
-                  icon={
-                    v.level > p.player.level
-                      ? "lock"
-                      : p.selected.id === v.id
-                        ? "check"
-                        : "unlock"
-                  }
-                  text={
-                    v.level > p.player.level
-                      ? `LEVEL ${v.level}`
-                      : p.selected.id === v.id
-                        ? "EQUIPPED"
-                        : "UNLOCKED"
-                  }
+          p.catalog.venues.map((v, i) => {
+            const lock = lockOf(p.player, v);
+            return (
+              <Enter key={v.id} index={i} style={[s.card, frame]}>
+                <Image
+                  source={venueArt[v.id]}
+                  style={[s.tableArt, short && { minHeight: 25 }]}
                 />
-                <Text
-                  style={[s.title, short && { fontSize: 18 }]}
-                  numberOfLines={1}
-                >
-                  {v.name}
-                </Text>
-                <Text style={s.copy} numberOfLines={1}>
-                  {v.subtitle}
-                </Text>
-                <CardAction
-                  icon={
-                    v.level > p.player.level
-                      ? "lock"
-                      : p.selected.id === v.id
-                        ? "check"
-                        : "arrow-right"
-                  }
-                  tone={
-                    v.level > p.player.level
-                      ? "locked"
-                      : p.selected.id === v.id
-                        ? "muted"
-                        : "primary"
-                  }
-                  label={
-                    v.level > p.player.level
-                      ? `Unlocks at level ${v.level}`
-                      : p.selected.id === v.id
-                        ? "Equipped"
-                        : `Equip ${v.name}`
-                  }
-                  disabled={p.busy || p.selected.id === v.id}
-                  onPress={() => p.onEquip(v)}
-                />
-              </View>
-            </Enter>
-          ))}
+                <View style={s.cardDetails}>
+                  <Badge
+                    icon={
+                      lock
+                        ? "lock"
+                        : p.selected.id === v.id
+                          ? "check"
+                          : "unlock"
+                    }
+                    text={
+                      lock
+                        ? v.level > p.player.level
+                          ? `LEVEL ${v.level}`
+                          : "LOCKED"
+                        : p.selected.id === v.id
+                          ? "EQUIPPED"
+                          : "UNLOCKED"
+                    }
+                  />
+                  <Text
+                    style={[s.title, short && { fontSize: 18 }]}
+                    numberOfLines={1}
+                  >
+                    {v.name}
+                  </Text>
+                  <Text style={s.copy} numberOfLines={1}>
+                    {v.subtitle}
+                  </Text>
+                  <CardAction
+                    icon={
+                      lock
+                        ? "lock"
+                        : p.selected.id === v.id
+                          ? "check"
+                          : "arrow-right"
+                    }
+                    tone={
+                      lock
+                        ? "locked"
+                        : p.selected.id === v.id
+                          ? "muted"
+                          : "primary"
+                    }
+                    label={
+                      lock
+                        ? lock
+                        : p.selected.id === v.id
+                          ? "Equipped"
+                          : `Equip ${v.name}`
+                    }
+                    disabled={p.busy || p.selected.id === v.id}
+                    onPress={() => p.onEquip(v)}
+                  />
+                </View>
+              </Enter>
+            );
+          })}
         {p.page === "practice" && (
           <>
             <Enter index={0} style={[s.card, frame, s.padded]}>
@@ -234,9 +249,7 @@ export default function Lobby(p: LobbyProps) {
                   leader's run plays beside you as a ghost.
                 </Text>
                 <Text style={s.reward}>
-                  {dailyDone
-                    ? "Improve your score anytime"
-                    : "+50 XP · verified by the referee"}
+                  {dailyDone ? "Improve your score anytime" : "+50 XP"}
                 </Text>
                 <CardAction
                   icon="play"
@@ -319,7 +332,7 @@ export default function Lobby(p: LobbyProps) {
             {(p.catalog.cityChallenges || []).map((c, i) => {
               const done = p.player.completed.includes("practice:" + c.id);
               const venue = p.catalog.venues.find((v) => v.id === c.city);
-              const locked = !!venue && venue.level > p.player.level;
+              const locked = !!venue && !!lockOf(p.player, venue);
               return (
                 <Enter key={c.id} index={i} style={[s.card, frame, s.padded]}>
                   <View style={s.between}>
@@ -333,7 +346,9 @@ export default function Lobby(p: LobbyProps) {
                         done
                           ? "STAMPED"
                           : locked
-                            ? `LEVEL ${venue?.level}`
+                            ? venue && venue.level > p.player.level
+                              ? `LEVEL ${venue.level}`
+                              : "LOCKED"
                             : "TRICK SHOT"
                       }
                     />

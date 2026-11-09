@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { winVerifiedRack } from "./playCpu";
 const base = process.env.TEST_API_URL || "http://127.0.0.1:4000";
 test("MongoDB account, locks, rewards, event scores and account lifecycle", async () => {
   let token = "";
@@ -81,6 +82,20 @@ test("MongoDB account, locks, rewards, event scores and account lifecycle", asyn
     assert.equal(duplicate.body.reward.xp, 20);
     assert.equal(duplicate.body.reward.coins, 0);
     assert.equal(duplicate.body.player.xp, 120);
+    // Level 2 is not enough for London: it also asks for two refereed wins in Lagos.
+    const london = await call("/me/table", "POST", { tableId: "riviera" });
+    assert.equal(london.status, 403);
+    assert.equal(london.body.error, "Win 2 in Lagos · 0/2");
+    await winVerifiedRack(call);
+    assert.equal(
+      (await call("/me")).body.locks.riviera,
+      "Win 2 in Lagos · 1/2",
+    );
+    await winVerifiedRack(call);
+    const opened = (await call("/me")).body;
+    assert.equal(opened.venueWins.heritage, 2);
+    assert.equal(opened.locks.riviera, undefined);
+    assert.equal(opened.locks.regent, "Level 3 required");
     assert.equal(
       (await call("/me/table", "POST", { tableId: "riviera" })).body
         .selectedTable,
@@ -93,6 +108,12 @@ test("MongoDB account, locks, rewards, event scores and account lifecycle", asyn
         })
       ).status,
       409,
+    );
+    // Players are shown only events that run: no "coming soon" cards, no USDC prize event.
+    const listed = (await call("/catalog")).body.tournaments;
+    assert.ok(listed.some((t: any) => t.id === "precision-preseason"));
+    assert.ok(
+      !listed.some((t: any) => t.status === "announced" || t.kind === "crypto"),
     );
     assert.equal(
       (
@@ -130,7 +151,8 @@ test("MongoDB account, locks, rewards, event scores and account lifecycle", asyn
         (r: any) => r.name === "Integration Tester",
       ),
     );
-    assert.equal((await call("/me")).body.xp, 220);
+    // 220 from practice and the event, 60 from the two Lagos wins that opened London.
+    assert.equal((await call("/me")).body.xp, 280);
   } finally {
     assert.equal(
       (await call("/me", "DELETE", { confirm: "DELETE" })).status,

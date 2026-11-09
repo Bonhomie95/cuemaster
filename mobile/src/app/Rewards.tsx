@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import {
   Image,
   ActivityIndicator,
-  useWindowDimensions,
   Modal,
   Pressable,
   ScrollView,
@@ -13,7 +12,7 @@ import {
 import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
 import { api, Player } from "./api";
-import { showRewardedVideo } from "./ads";
+import { showRewardedVideo, untilGranted, useVideo } from "./ads";
 import { celebrate } from "./feedback";
 import { remind } from "./notify";
 import { sfx } from "./sound";
@@ -107,14 +106,11 @@ function Button({
 export default function Rewards({
   player,
   onClose,
-  onShop,
   backLabel = "Back to profile",
   onPlayer,
 }: {
   player: Player;
   onClose: () => void;
-  /** Rubies are bought in the shop; the crates page points there. */
-  onShop?: () => void;
   backLabel?: string;
   onPlayer: (p: Player) => void;
 }) {
@@ -125,10 +121,6 @@ export default function Rewards({
     [opened, setOpened] = useState<any>(null),
     [revealed, setRevealed] = useState(false),
     [now, setNow] = useState(Date.now());
-  // Landscape-locked, so the short edge is the real height. On a phone the slots have to give
-  // up their padding or the buttons fall off the bottom of the card.
-  const win = useWindowDimensions();
-  const compact = Math.min(win.width, win.height) < 520;
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
@@ -160,6 +152,14 @@ export default function Rewards({
   const crates: Crate[] = data?.crates || [];
   const slots = data?.slots || 4;
   const unlocking = crates.some((c) => c.unlocking && !isReady(c, now));
+  // One crate unlocks at a time, so at most one can take a video; its button shows only once
+  // a video is loaded and ready to play.
+  const active = crates.find((c) => c.unlocking && !isReady(c, now));
+  const video = useVideo(
+    data?.videoUnlock && active?.videosLeft && data.videosLeft
+      ? { crateId: active.id }
+      : null,
+  );
   return (
     <ScrollView contentContainerStyle={s.page}>
       <View style={s.header}>
@@ -189,13 +189,6 @@ export default function Rewards({
         <ActivityIndicator color="#ffd184" />
       ) : (
         <>
-          {!compact && (
-            <Text style={s.copy}>
-              Win a match and you seal a crate. One crate unlocks at a time —
-              wait it out, or spend rubies to open it now. Crates hold coins;
-              rubies are a rare bonus.
-            </Text>
-          )}
           <View style={s.slots}>
             {Array.from({ length: slots }, (_, i) => crates[i]).map(
               (crate, i) => (
@@ -281,35 +274,28 @@ export default function Rewards({
                                   })
                                 }
                               />
-                              {!!data.videoUnlock && (
+                              {video && crate.id === active?.id && (
                                 <Button
                                   icon="play-circle"
-                                  label={
-                                    busy
-                                      ? "Loading video…"
-                                      : `Watch · −1h (${Math.min(data.videosLeft, crate.videosLeft)})`
-                                  }
-                                  disabled={
-                                    busy ||
-                                    !data.videosLeft ||
-                                    !crate.videosLeft
-                                  }
+                                  label="Watch · −1h"
+                                  disabled={busy}
                                   onPress={() =>
                                     void work(async () => {
-                                      const outcome = await showRewardedVideo(
-                                        crate.id,
-                                      );
-                                      if (outcome === "unavailable")
-                                        throw new Error(
-                                          "No video is available right now. Try again shortly.",
+                                      const before = crate.readyAt;
+                                      const outcome = await showRewardedVideo({
+                                        crateId: crate.id,
+                                      });
+                                      if (outcome !== "granted") return;
+                                      // The server takes the hour off; read back until it shows.
+                                      await untilGranted(async () => {
+                                        const d = await api("/me/crates");
+                                        setData(d);
+                                        return (
+                                          d.crates?.find(
+                                            (c: Crate) => c.id === crate.id,
+                                          )?.readyAt !== before
                                         );
-                                      // The hour is taken off by the ad network's signed
-                                      // callback, so give it a moment before reading back.
-                                      if (outcome === "granted")
-                                        await new Promise((r) =>
-                                          setTimeout(r, 1200),
-                                        );
-                                      await load();
+                                      });
                                     })
                                   }
                                 />
@@ -365,23 +351,6 @@ export default function Rewards({
               ),
             )}
           </View>
-          {!!onShop && (
-            <Press
-              accessibilityRole="button"
-              accessibilityLabel="Get rubies in the shop"
-              onPress={onShop}
-              style={s.shopRow}
-            >
-              <Image source={icons.rubies[1]} style={s.shopArt} />
-              <View style={{ flex: 1 }}>
-                <Text style={s.heading}>Can't wait?</Text>
-                <Text style={s.copy}>
-                  Rubies open a crate now: one ruby for each hour left.
-                </Text>
-              </View>
-              <Feather name="chevron-right" size={20} color="#ffd05b" />
-            </Press>
-          )}
         </>
       )}
 

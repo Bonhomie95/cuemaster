@@ -8,7 +8,7 @@ import {
   StyleSheet,
   useWindowDimensions,
 } from "react-native";
-import { Player, Venue } from "./api";
+import { Player, Venue, coinsShort, lockOf } from "./api";
 import { venueArt } from "./art";
 import { Press, Enter } from "./motion";
 import { online } from "../game/online";
@@ -122,7 +122,7 @@ export default function MatchVenues({
         contentContainerStyle={s.rail}
       >
         {venues.map((v, i) => {
-          const locked = player.level < v.level,
+          const lock = lockOf(player, v),
             poor = player.coins < v.entry;
           return (
             <Enter key={v.id} index={i} style={s.card}>
@@ -134,33 +134,34 @@ export default function MatchVenues({
               <Text style={s.name}>{v.name}</Text>
               <Text style={s.copy}>{v.subtitle}</Text>
               <Text style={s.fee}>
-                ◉ {v.entry.toLocaleString()} entry
+                ◉ {coinsShort(v.entry)} entry
                 {mode !== "local" && (
                   <Text style={s.win}>
-                    {"  "}· win {(v.entry * 2).toLocaleString()}
+                    {"  "}· win {coinsShort(v.entry * 2)}
                   </Text>
                 )}
               </Text>
               <Press
                 accessibilityRole="button"
-                accessibilityLabel={`Enter ${v.name} for ${v.entry} coins`}
-                disabled={busy || locked}
+                accessibilityLabel={
+                  lock
+                    ? `${v.name} is locked. ${lock}`
+                    : `Enter ${v.name} for ${v.entry.toLocaleString()} coins`
+                }
+                disabled={busy || !!lock}
                 onPress={() => (poor ? onShop() : onEnter(v, mode))}
                 style={[
                   s.button,
                   // Locked and unaffordable rooms are states, not offers: they stay dark.
-                  locked || poor ? s.quiet : s.primary,
+                  lock || poor ? s.quiet : s.primary,
                   busy && { opacity: 0.5 },
                 ]}
               >
                 <Text
-                  style={[
-                    s.buttonText,
-                    (locked || poor) && { color: "#9fb6c7" },
-                  ]}
+                  style={[s.buttonText, (lock || poor) && { color: "#9fb6c7" }]}
                 >
-                  {locked
-                    ? `Level ${v.level} required`
+                  {lock
+                    ? lock
                     : poor
                       ? "Get coins"
                       : busy
@@ -178,10 +179,6 @@ export default function MatchVenues({
           );
         })}
       </ScrollView>
-      <Text style={s.note}>
-        One fee per rack. The winner takes both entries and seals a crate.
-        Quitting forfeits.
-      </Text>
     </View>
   );
 }

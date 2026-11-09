@@ -18,7 +18,8 @@ import { DAILY } from "./daily";
  *
  * Google's verifier keys: https://gstatic.com/admob/reward/verifier-keys.json
  * A callback cannot reach a laptop, so in development a ticket may also be redeemed by the app
- * that owns it. Production refuses that path outright — see `clientRedeemAllowed`.
+ * that owns it. Production refuses that path unless the owner opens it for a test period —
+ * see `clientRedeemAllowed`.
  */
 const KEYS_URL =
   process.env.ADS_VERIFIER_KEYS_URL ||
@@ -57,8 +58,15 @@ export async function verifyAdCallback(rawQuery: string) {
     .verify(key.pem, Buffer.from(signature, "base64url"));
 }
 export const adsConfigured = () => !!process.env.ADS_PROVIDER;
-/** Only a deployment that cannot receive AdMob callbacks may let the app redeem its own ticket. */
-export const clientRedeemAllowed = () => process.env.NODE_ENV !== "production";
+/**
+ * Who may let the app redeem its own ticket: a deployment AdMob cannot call back into (a
+ * laptop), and production only while ADS_CLIENT_REDEEM=1. That switch is for a test period on
+ * Google's sample ad units, which never call back, so testers' videos would otherwise pay
+ * nothing. While it is on, a modified app could claim a video it skipped; the daily caps still
+ * bound what any player can collect. Turn it off once real ad units with the callback ship.
+ */
+export const clientRedeemAllowed = (env = process.env) =>
+  env.NODE_ENV !== "production" || env.ADS_CLIENT_REDEEM === "1";
 
 export function installAds(app: Express, db: Db, required: RequestHandler) {
   const tickets = db.collection<any>("adTickets"),

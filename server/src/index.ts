@@ -4,7 +4,7 @@ import { installRewards, crateAwardStage, publicCrate } from "./rewards";
 import { installDaily, track, addPassXp, DAILY } from "./daily";
 import { installStore, billingConfigured, piggyDeposit } from "./store";
 import { installLeagues, recordLeague } from "./leagues";
-import { installAds, adsConfigured } from "./ads";
+import { installAds, adsConfigured, clientRedeemAllowed } from "./ads";
 import { installLive } from "./live";
 import { installLinks } from "./links";
 import { installInvites, settleInvite } from "./invites";
@@ -38,6 +38,7 @@ import {
   drillTargets,
   tournaments,
   levelOf,
+  venueLock,
   dailyKey,
   REPLAY_XP,
   DAILY_REPLAY_XP_LIMIT,
@@ -47,6 +48,10 @@ import {
 import { replayMatch } from "../../mobile/src/game/session";
 import { verifyIdentity } from "./auth";
 assertProductionConfig(process.env);
+if (process.env.NODE_ENV === "production" && clientRedeemAllowed())
+  console.warn(
+    "ADS_CLIENT_REDEEM=1: rewarded videos pay on the app's word. Remove it once real AdMob units with the server callback ship.",
+  );
 const port = Number(process.env.PORT || 4000);
 const client = new MongoClient(
   process.env.MONGODB_URI || "mongodb://127.0.0.1:27028",
@@ -175,6 +180,14 @@ const publicUser = (u: any) => ({
   selectedCue: u.selectedCue || "club",
   completed: u.completed || [],
   selectedTable: u.selectedTable,
+  venueWins: u.venueWins || {},
+  // Every table is on show; this says what each locked one still asks for.
+  locks: Object.fromEntries(
+    venues.flatMap((v) => {
+      const lock = venueLock(u, v);
+      return lock ? [[v.id, lock]] : [];
+    }),
+  ),
   stats: u.stats || { finishes: 0, shots: 0 },
   starterBought: !!u.starterBought,
   passPremiumSeason: u.passPremiumSeason ?? null,
@@ -227,6 +240,11 @@ app.get("/config", (_req, res) =>
     onlineMatchmaking: true,
     legal: legalConfigured(),
     rubyStore: billingConfigured(),
+    // Per platform, so a phone whose store is not switched on hides its paid offers.
+    billing: {
+      ios: billingConfigured("ios"),
+      android: billingConfigured("android"),
+    },
     ads: adsConfigured(),
     urls: {
       privacy: publicUrl("/legal/privacy"),
@@ -242,9 +260,15 @@ app.get("/catalog", async (_req, res) =>
     venues,
     challenges,
     cityChallenges,
+    // Players see events that run: an announcement is a "coming soon" card store review reads
+    // as placeholder content, and a USDC event advertises a real-money prize that does not
+    // exist. Both stay in the admin console and appear once opened.
     tournaments: (
       await events
-        .find({ status: { $ne: "draft" } })
+        .find({
+          status: { $nin: ["draft", "announced"] },
+          kind: { $ne: "crypto" },
+        })
         .limit(100)
         .toArray()
     ).map(publicEvent),
@@ -311,8 +335,8 @@ app.post("/local-matches/start", required, async (req: any, res) => {
       error:
         "This entry request has already been used. Choose the venue again.",
     });
-  if (levelOf(u.xp) < v.level)
-    return res.status(403).json({ error: `Unlocks at level ${v.level}.` });
+  const lock = venueLock(u, v);
+  if (lock) return res.status(403).json({ error: lock });
   const match = {
     id: requestId,
     venueId: v.id,
@@ -470,6 +494,10 @@ app.post("/local-matches/:id/finish", required, async (req: any, res) => {
                 xp: { $add: [{ $ifNull: ["$xp", 0] }, CPU_WIN_XP] },
                 "stats.coinsWon": {
                   $add: [{ $ifNull: ["$stats.coinsWon", 0] }, pot],
+                },
+                // A refereed win at a table counts toward opening the next one.
+                [`venueWins.${match.venueId}`]: {
+                  $add: [{ $ifNull: [`$venueWins.${match.venueId}`, 0] }, 1],
                 },
               }
             : {}),
@@ -664,8 +692,8 @@ app.post("/me/table", required, async (req: any, res) => {
   const { tableId } = z.object({ tableId: z.string() }).parse(req.body);
   const table = venues.find((t) => t.id === tableId);
   if (!table) return res.status(404).json({ error: "Table not found." });
-  if (levelOf(req.player.xp) < table.level)
-    return res.status(403).json({ error: `Unlocks at level ${table.level}.` });
+  const lock = venueLock(req.player, table);
+  if (lock) return res.status(403).json({ error: lock });
   const u = await users.findOneAndUpdate(
     { _id: req.player._id },
     { $set: { selectedTable: table.id } },
@@ -717,7 +745,7 @@ app.post(
       table = venues.find((v) => v.id === tableId);
     if (!challenge || !table)
       return res.status(404).json({ error: "Challenge or table not found." });
-    if (levelOf(req.player.xp) < table.level)
+    if (venueLock(req.player, table))
       return res.status(403).json({ error: "This table is still locked." });
     const ticket = {
       _id: randomUUID(),

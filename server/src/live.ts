@@ -6,7 +6,7 @@ import { z } from "zod";
 import { Session, perform, type Action } from "../../mobile/src/game/session";
 import { localWinner } from "../../mobile/src/game/localMatch";
 import { cueById } from "../../mobile/src/game/cues";
-import { venues, levelOf } from "./catalog";
+import { venues, venueLock, levelOf } from "./catalog";
 import { crateAwardStage, publicCrate } from "./rewards";
 import { ensureHouse, pickHouse, houseTurn, HOUSE, between } from "./house";
 import { formSkill, type CpuStyle } from "../../mobile/src/game/cpu";
@@ -230,10 +230,12 @@ export function installLive(
     if (!venue) return { error: "Venue not found." };
     const u = await users.findOne({ _id: conn.profile.id });
     if (!u || u.suspended) return { error: "Please sign in again." };
-    if (levelOf(u.xp || 0) < venue.level)
-      return { error: `Unlocks at level ${venue.level}.` };
+    const lock = venueLock(u, venue);
+    if (lock) return { error: lock };
     if ((u.coins || 0) < venue.entry)
-      return { error: `This table costs ${venue.entry} coins.` };
+      return {
+        error: `This table costs ${venue.entry.toLocaleString("en-US")} coins.`,
+      };
     conn.profile = profileOf(u);
     conn.cue = u.selectedCue || "club";
     conn.form = u.form || [];
@@ -397,7 +399,7 @@ export function installLive(
             t: "error",
             message:
               x === c
-                ? `This table costs ${venue.entry} coins.`
+                ? `This table costs ${venue.entry.toLocaleString("en-US")} coins.`
                 : "Your opponent could not cover the entry. Nothing was charged.",
           });
         return;
@@ -603,6 +605,15 @@ export function installLive(
                     piggy: piggyDeposit(true),
                     ...award.fields,
                     ...form(true),
+                    // A public win counts toward opening the next table; a friend's room does not.
+                    ...(m.private
+                      ? {}
+                      : {
+                          [`venueWins.${m.venueId}`]: inc(
+                            `$venueWins.${m.venueId}`,
+                            1,
+                          ),
+                        }),
                   }),
             },
           },
@@ -924,7 +935,7 @@ export function installLive(
                 party(conn),
                 houseParty(
                   doc,
-                  formSkill(conn.form, check.venue!.level),
+                  formSkill(conn.form, venues.indexOf(check.venue!) + 1),
                   house.style,
                 ),
                 false,

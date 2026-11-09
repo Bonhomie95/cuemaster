@@ -553,6 +553,93 @@ const cityDrills: Record<string, Ball[]> = {
     ball(2, H / 2, -W / 2),
     ball(3, -H / 2, W / 2),
   ],
+  // Cape Town: table top — the 1 waits in the jaws of the far side pocket.
+  "capetown-1": [ball(0, -H / 2, W / 3), ball(1, 0.12, -W + 3 * R)],
+  // Cape Town: lion's head — one ball by each far corner.
+  "capetown-2": [
+    ball(0, -H / 2, 0),
+    ball(1, H - 5 * R, W - 5 * R),
+    ball(2, H - 5 * R, -W + 5 * R),
+  ],
+  // Rio: cable car — a long pot down the rail.
+  "rio-1": [ball(0, -H / 2, W - 4 * R), ball(1, H / 2, W - 3 * R)],
+  // Rio: carnival run — three targets spread round the table, a decoy in the way.
+  "rio-2": [
+    ball(0, 0, 0),
+    ball(1, -H + 6 * R, W - 6 * R),
+    ball(2, H - 6 * R, -W + 6 * R),
+    ball(3, H / 2, W - 4 * R),
+    ball(9, -H / 2, -W / 2),
+  ],
+  // Cairo: pyramid point — a small pyramid of blockers stands before the 1.
+  "cairo-1": [
+    ball(0, -H / 2, -W / 2),
+    ball(12, 0, 0),
+    ball(13, 2 * R * 0.87, R),
+    ball(14, 2 * R * 0.87, -R),
+    ball(1, H - 8 * R, -W + 8 * R),
+  ],
+  // Cairo: desert stars — two pots at opposite ends.
+  "cairo-2": [
+    ball(0, -H / 3, W / 3),
+    ball(1, H / 4, W - 5 * R),
+    ball(2, -H + 7 * R, -W + 6 * R),
+  ],
+  // Mumbai: gateway — the 1 sits in the side pocket's jaws between two guards.
+  "mumbai-1": [
+    ball(0, 0.05, -W / 3),
+    ball(12, 0.05 - 3.2 * R, W - 3 * R),
+    ball(13, 0.05 + 3.2 * R, W - 3 * R),
+    ball(1, 0.05, W - 2.5 * R),
+  ],
+  // Mumbai: monsoon combo — the 3 and the 1 line up on the corner.
+  "mumbai-2": [ball(0, -H / 2, 0), ball(3, 0, 0), ball(1, H / 2, W / 4)],
+  // Rome: arena cut — a fine cut down the long rail.
+  "rome-1": [ball(0, -H / 2, -W / 4), ball(1, H - 8 * R, -W + 2.2 * R)],
+  // Rome: seven hills — three corners to clear with the 8 in the middle.
+  "rome-2": [
+    ball(0, -H / 2, 0),
+    ball(8, 0, 0),
+    ball(1, H - 5 * R, W - 4 * R),
+    ball(2, -H + 5 * R, W - 4 * R),
+    ball(3, H - 5 * R, -W + 4 * R),
+  ],
+  // Sydney: harbour bridge — a long cut across the cloth.
+  "sydney-1": [ball(0, -H + 5 * R, W / 2), ball(1, H / 3, -W / 4)],
+  // Sydney: opera sails — three balls in a row across the table.
+  "sydney-2": [
+    ball(0, -H / 2, 0),
+    ball(1, H / 3, -W / 2),
+    ball(2, H / 3, 0),
+    ball(3, H / 3, W / 2),
+  ],
+  // Singapore: marina draw — a side-pocket cut, then the near corner.
+  "singapore-1": [
+    ball(0, -H / 2, -W / 2),
+    ball(1, 0, -W + 3 * R),
+    ball(8, -H / 4, W / 3),
+    ball(2, -H + 6 * R, -W + 5 * R),
+  ],
+  // Singapore: garden lights — one ball by every corner.
+  "singapore-2": [
+    ball(0, 0, 0),
+    ball(1, -H + 5 * R, -W + 5 * R),
+    ball(2, H - 5 * R, W - 5 * R),
+    ball(3, -H + 5 * R, W - 5 * R),
+    ball(4, H - 5 * R, -W + 5 * R),
+  ],
+  // Monaco: grand prix — the 1 rides the far end rail.
+  "monaco-1": [ball(0, -H / 2, 0.1), ball(1, H - 2.5 * R, W / 2)],
+  // Monaco: high roller — five pots round the 8.
+  "monaco-2": [
+    ball(0, -H / 2, 0),
+    ball(8, 0, 0),
+    ball(1, H - 5 * R, W - 5 * R),
+    ball(2, H - 5 * R, -W + 5 * R),
+    ball(3, 0.06, W - 3 * R),
+    ball(4, 0.06, -W + 3 * R),
+    ball(5, -H + 5 * R, W - 5 * R),
+  ],
 };
 export const cityDrillNames = Object.keys(cityDrills);
 /**

@@ -61,6 +61,18 @@ for (let i = 0; i < 50 && !version; i++) {
 }
 if (!version) throw Error("Chrome did not start.");
 
+/** One command to the browser itself (not a tab). */
+async function browserSend(method, params = {}) {
+  const browser = new WebSocket(version.webSocketDebuggerUrl);
+  await new Promise((r) => (browser.onopen = r));
+  const result = await new Promise((resolve) => {
+    browser.onmessage = (e) => resolve(JSON.parse(e.data).result);
+    browser.send(JSON.stringify({ id: 1, method, params }));
+  });
+  browser.close();
+  return result;
+}
+
 /** One browser tab, driven over the DevTools protocol. */
 async function open(url, size) {
   // Each player gets a window of their own: a background tab stops animating (no frames, no
@@ -192,7 +204,12 @@ async function open(url, size) {
       await mkdir(dir, { recursive: true });
       await writeFile(join(dir, `${name}.png`), Buffer.from(data, "base64"));
     },
-    close: () => ws.close(),
+    // Close the window too: a page left running keeps its session and writes it back to
+    // storage, so the next size would open signed in instead of at the welcome page.
+    close: () => {
+      ws.close();
+      return browserSend("Target.closeTarget", { targetId: created.targetId });
+    },
   };
   return page;
 }
@@ -206,6 +223,13 @@ async function walk(size) {
     store ? "store-screenshots" : "ui-walk",
     size.name,
   );
+  // Sizes share one Chrome profile: forget the last size's guests so this one starts at the
+  // welcome page too.
+  for (const origin of [WEB, WEB2])
+    await browserSend("Storage.clearDataForOrigin", {
+      origin: new URL(origin).origin,
+      storageTypes: "all",
+    });
   const a = await open(WEB, size);
   const b = await open(WEB2, size);
   const pages = { a, b };
@@ -241,8 +265,8 @@ async function walk(size) {
         ),
     );
     if (errors.length) console.log("Console errors:\n  " + errors.join("\n  "));
-    a.close();
-    b.close();
+    await a.close();
+    await b.close();
     if (errors.length) throw Error(`${errors.length} console error(s)`);
   }
   return checks;
@@ -252,7 +276,10 @@ const { walkSteps } = await import("./ui-walk-steps.mjs");
 
 let failed = false;
 try {
-  for (const size of SIZES) {
+  for (const [i, size] of SIZES.entries()) {
+    // The API allows 120 requests a minute per address, and one size's online steps use most
+    // of that: let the window pass before the next size starts.
+    if (i) await sleep(61_000);
     console.log(`Walking at ${size.name}`);
     await walk(size);
   }

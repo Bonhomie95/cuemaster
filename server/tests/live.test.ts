@@ -58,6 +58,9 @@ test("two players are matched, the server referees every shot, and the winner ta
   assert.ok(endOther.crate, "an online win seals a crate");
   const [holderToken, otherToken] = holder === a ? [ta, tb] : [tb, ta];
   assert.equal((await me(otherToken)).coins, 1050);
+  // A public win counts toward the next table; the loser's count does not move.
+  assert.equal((await me(otherToken)).venueWins.heritage, 1);
+  assert.equal((await me(holderToken)).venueWins.heritage, undefined);
   assert.equal((await me(otherToken)).trophies, 24);
   assert.equal((await me(holderToken)).coins, 950);
   assert.equal((await me(holderToken)).stats.onlineLosses, 1);
@@ -97,13 +100,15 @@ test("a private room pairs friends by code and checks the entry", async () => {
   assert.match((await b.next("error")).message, /expired/);
   // A venue above the player's level is refused before anyone is charged.
   b.send({ t: "room", venueId: "champion" });
-  assert.match((await b.next("error")).message, /level 7/);
+  assert.match((await b.next("error")).message, /Level 7 required/);
   b.send({ t: "join", code: room.code });
   const [ma, mb] = await Promise.all([a.next("match"), b.next("match")]);
   assert.equal(ma.private, true);
   assert.equal(mb.id, ma.id);
   a.send({ t: "resign" });
   await Promise.all([a.next("end"), b.next("end")]);
+  // A friend's room pays the pot but opens no tables: wins there are too easy to arrange.
+  assert.deepEqual((await me(tb)).venueWins, {});
   a.ws.close();
   b.ws.close();
 });

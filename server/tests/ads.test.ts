@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createSign, generateKeyPairSync, randomUUID } from "node:crypto";
 import { createServer } from "node:http";
-import { signedPortion } from "../src/ads";
+import { signedPortion, clientRedeemAllowed } from "../src/ads";
 import { winVerifiedRack } from "./playCpu";
 
 test("only AdMob's own signature over the exact query string is accepted", async () => {
@@ -141,4 +141,13 @@ test("concurrent signed redemptions cannot race past the daily video limit", asy
   const more = await call("/ads/reward-ticket", "POST", { crateId: crate.id });
   assert.equal(more.status, 409, "a crate out of videos refuses a new ticket");
   await call("/me", "DELETE", { confirm: "DELETE" });
+});
+
+test("production pays videos only on AdMob's callback unless the owner opens a test period", () => {
+  assert.equal(clientRedeemAllowed({ NODE_ENV: "production" }), false);
+  assert.equal(
+    clientRedeemAllowed({ NODE_ENV: "production", ADS_CLIENT_REDEEM: "1" }),
+    true,
+  );
+  assert.equal(clientRedeemAllowed({ NODE_ENV: "development" }), true);
 });

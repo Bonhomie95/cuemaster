@@ -114,7 +114,6 @@ export default function Leagues({ onPlay }: { onPlay: () => void }) {
   const league = data.league;
   const tier = league?.tier ?? data.tier;
   const color = TIER[tier];
-  const crate = league?.crate ?? data.leagues[tier].crate;
   const mine = league?.standings.find((r) => r.you);
   const up = league?.promote ?? 10,
     down = league?.relegate ?? 10;
@@ -163,20 +162,20 @@ export default function Leagues({ onPlay }: { onPlay: () => void }) {
           ))}
         </View>
         <Text style={s.copy}>
-          <Feather name="trending-up" size={12} color="#24dbb3" />{" "}
-          {up === 1
-            ? `The top player moves up and wins a ${crate.name}`
-            : `Top ${up} move up and win a ${crate.name}`}
-        </Text>
-        <Text style={s.copy}>
-          <Feather name="trending-down" size={12} color="#ff8a8a" />{" "}
-          {down
-            ? `Bottom ${down} move${down === 1 ? "s" : ""} down`
-            : "Nobody drops from a league this small"}
+          <Feather name="trending-up" size={12} color="#24dbb3" /> Top {up} up
+          {down ? (
+            <>
+              {"  "}
+              <Feather
+                name="trending-down"
+                size={12}
+                color="#ff8a8a"
+              /> Bottom {down} down
+            </>
+          ) : null}
         </Text>
         <Text style={s.small}>
-          Ranked by coins won from online pots. Ends in{" "}
-          {ends(Date.parse(data.week.endsAt) - now)}.
+          Ends in {ends(Date.parse(data.week.endsAt) - now)}
         </Text>
         {data.last && (
           <View style={s.last}>

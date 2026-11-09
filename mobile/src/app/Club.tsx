@@ -67,15 +67,28 @@ import {
   ProviderConfig,
   LuckyResult,
   flag,
+  lockOf,
+  coinsShort,
 } from "./api";
 import { signInProvider } from "./identity";
-import { welcome, venueArt, portraits, clubRoom } from "./art";
+import { welcome, entryArt, venueArt, portraits, clubRoom } from "./art";
 import ProviderButton from "./ProviderButton";
 import Lobby, { IconButton } from "./Lobby";
 import TableGame, { MatchResult } from "../../TableGame";
 import { session } from "../game/session";
 import type { LeaderReplay } from "./api";
 void SplashScreen.preventAutoHideAsync().catch(() => {});
+/** The least time the entry screen shows, so its art registers before the club opens. */
+const ENTRY_MS = 1500;
+/** One line under the entry screen's spinner, drawn per launch like its background. */
+const TIPS = [
+  "Win in one city to open the next.",
+  "Monaco's table costs a billion coins. Every run starts in Lagos.",
+  "The referee replays every shot, so every win is real.",
+  "Clear both trick shots in a city to stamp your passport.",
+  "Your flag sits beside your name at every table.",
+];
+const tip = TIPS[Math.floor(Math.random() * TIPS.length)];
 type Page =
   | "home"
   | "tables"
@@ -108,7 +121,7 @@ type Launch = {
   opponent?: CpuOpponent;
   venue?: Venue;
 };
-const money = (n: number) => n.toLocaleString();
+const money = (n: number) => coinsShort(n, 1_000_000);
 function Action({
   label,
   onPress,
@@ -251,6 +264,22 @@ function ClubBody() {
       googleWebClientId: "",
       cashPayouts: false,
     });
+  // Offer only a sign-in that can work: the server must have the provider set up, and on iPhone
+  // Google also needs its client id in this build and Sign in with Apple beside it (App Store
+  // guideline 4.8). A button that only says "awaiting setup" is a review rejection.
+  const signIns = {
+    google:
+      config.google &&
+      (Platform.OS !== "ios" ||
+        (!!process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID && config.apple)),
+    apple: config.apple && (Platform.OS === "ios" || Platform.OS === "web"),
+  };
+  const anySignIn = signIns.google || signIns.apple;
+  // Paid offers appear only where purchases are switched on. The web build is for inspection
+  // and cannot buy, so it shows them as they will look.
+  const sells =
+    Platform.OS === "web" ||
+    !!(Platform.OS === "ios" ? config.billing?.ios : config.billing?.android);
   const [rewardsFrom, setRewardsFrom] = useState<Page>("profile");
   const [shopTab, setShopTab] = useState<"offers" | "rubies" | "coins">(
     "offers",
@@ -273,6 +302,7 @@ function ClubBody() {
   const [naming, setNaming] = useState(false);
   const [levelUp, setLevelUp] = useState<number | null>(null);
   const lastLevel = useRef<number | null>(null);
+  const lastLocks = useRef<Record<string, string> | null>(null);
   const retryVerification = useRef<(() => void) | null>(null);
   const [name, setName] = useState(""),
     [country, setCountry] = useState(""),
@@ -283,6 +313,7 @@ function ClubBody() {
   const bootstrap = async () => {
     setBoot(true);
     setError("");
+    const started = Date.now();
     try {
       const [cat, cfg] = await Promise.all([
         // Render's free service can take close to a minute to wake after idle.
@@ -309,8 +340,12 @@ function ClubBody() {
     } catch (e) {
       setError((e as Error).message);
     } finally {
+      // Long enough to see the entry art on a fast connection, never longer than the boot.
+      await new Promise((r) =>
+        setTimeout(r, Math.max(0, ENTRY_MS - (Date.now() - started))),
+      );
       setBoot(false);
-      void SplashScreen.hideAsync();
+      void SplashScreen.hideAsync().catch(() => {});
       // Bake the table textures while the player is still in the club, so a table opens at once.
       const warmStart = Date.now();
       void warmTextures().then(() => {
@@ -334,13 +369,22 @@ function ClubBody() {
     // baseline silently; only a level gained while playing is celebrated.
     if (!player) {
       lastLevel.current = null;
+      lastLocks.current = null;
       return;
     }
     if (lastLevel.current !== null && player.level > lastLevel.current) {
       setLevelUp(player.level);
       celebrate("levelup");
+    } else if (lastLocks.current) {
+      // A table opened by wins rather than by a level: say so, the level card covers the rest.
+      const opened = catalog?.venues.find(
+        (v) => lastLocks.current![v.id] && !player.locks?.[v.id],
+      );
+      if (opened)
+        setToast(`${opened.name} is open. A new table, bigger stakes.`);
     }
     lastLevel.current = player.level;
+    lastLocks.current = player.locks || null;
   }, [player]);
   useEffect(() => {
     launchRef.current = launch;
@@ -658,7 +702,7 @@ function ClubBody() {
   const equip = (v: Venue) =>
     work(async () => {
       if (!player) return;
-      if (player.level < v.level) {
+      if (lockOf(player, v)) {
         setLocked(v);
         return;
       }
@@ -781,6 +825,8 @@ function ClubBody() {
       </View>
     </Modal>
   );
+  const levelVenue = catalog?.venues.find((v) => v.level === levelUp),
+    levelLock = levelVenue && player ? lockOf(player, levelVenue) : null;
   const levelModal = (
     <Modal
       supportedOrientations={["landscape"]}
@@ -796,8 +842,10 @@ function ClubBody() {
           </Pulse>
           <Text style={u.modalTitle}>Level {levelUp}</Text>
           <Text style={u.body}>
-            {catalog?.venues.find((v) => v.level === levelUp)
-              ? `${catalog.venues.find((v) => v.level === levelUp)!.name} is open. A new room, a new table.`
+            {levelVenue
+              ? levelLock
+                ? `${levelVenue.name} is in reach: ${levelLock}.`
+                : `${levelVenue.name} is open. A new room, a new table.`
               : "Your rating is climbing. Keep the run going."}
           </Text>
           <Action label="Keep playing" onPress={() => setLevelUp(null)} />
@@ -903,11 +951,11 @@ function ClubBody() {
           playerStats={player.stats}
           modeLabel={
             launch.kind === "local" || launch.kind === "online"
-              ? `${launch.venue?.name} · ${launch.venue?.entry} coins`
+              ? `${launch.venue?.name} · ${coinsShort(launch.venue?.entry || 0)} coins`
               : launch.label || launch.challenge?.name || "LOCAL PRACTICE"
           }
           allowedSkins={catalog!.venues
-            .filter((v) => v.level <= player.level)
+            .filter((v) => !lockOf(player, v))
             .map((v) => v.skin)}
         />
         {topMessage}
@@ -941,19 +989,29 @@ function ClubBody() {
   if (boot || error)
     return (
       <ImageBackground
-        source={welcome}
+        source={entryArt}
         imageStyle={{ width: "100%", height: "100%" }}
         style={u.fill}
+        // The native splash is a plain logo; hand over to the art the moment it is on screen.
+        onLoadEnd={() => void SplashScreen.hideAsync().catch(() => {})}
       >
-        <LinearGradient colors={["#07111a55", "#07111aee"]} style={u.loading}>
+        <StatusBar hidden />
+        <LinearGradient
+          colors={["#07111a40", "#07111a99", "#07111af2"]}
+          locations={[0, 0.45, 1]}
+          style={u.loading}
+        >
           <Text style={u.logoLarge}>
             CUE<Text style={{ color: "#e8c589" }}>MASTER</Text>
           </Text>
-          <Text style={u.kicker}>REAL PHYSICS. REAL RIVALS.</Text>
+          <Text style={u.kicker}>FROM LAGOS TO MONACO</Text>
           {boot ? (
             <>
               <ActivityIndicator color="#dfbd7a" style={{ marginTop: 35 }} />
               <Text style={u.body}>Opening the club…</Text>
+              <Text style={[u.fine, { textAlign: "center", maxWidth: 420 }]}>
+                {tip}
+              </Text>
             </>
           ) : (
             <>
@@ -977,12 +1035,15 @@ function ClubBody() {
         </LinearGradient>
       </ImageBackground>
     );
+  const cities = catalog?.venues.length || 14,
+    first = catalog?.venues[0]?.name || "Lagos",
+    last = catalog?.venues.at(-1)?.name || "Monaco";
   if (!player)
     return (
       <View style={u.fill}>
         <StatusBar hidden />
         <ImageBackground
-          source={welcome}
+          source={entryArt}
           imageStyle={{ width: "100%", height: "100%" }}
           resizeMode="cover"
           style={u.fill}
@@ -1019,9 +1080,11 @@ function ClubBody() {
                 accessibilityRole="header"
                 style={[u.welcomeTitle, compact && u.welcomeTitleCompact]}
               >
-                Real physics.{"\n"}Real rivals.
+                Start in {first}.{"\n"}Finish in {last}.
               </Text>
-              <Text style={u.welcomeKicker}>PLAY FOR YOUR FLAG</Text>
+              <Text style={u.welcomeKicker}>
+                {cities} CITIES · A BILLION-COIN FINAL TABLE
+              </Text>
               <Pressable
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: adult }}
@@ -1061,16 +1124,19 @@ function ClubBody() {
                 </LinearGradient>
               </Pressable>
               <Text style={u.fine}>
-                Progress saves on this device. Link an account any time to keep
-                it everywhere.
+                {anySignIn
+                  ? "Progress saves on this device. Link an account any time to keep it everywhere."
+                  : "Progress saves on this device."}
               </Text>
               <View style={[u.row, { flexWrap: "wrap", gap: 10 }]}>
-                <ProviderButton
-                  provider="google"
-                  onPress={() => login("google")}
-                  disabled={busy}
-                />
-                {(Platform.OS === "ios" || Platform.OS === "web") && (
+                {signIns.google && (
+                  <ProviderButton
+                    provider="google"
+                    onPress={() => login("google")}
+                    disabled={busy}
+                  />
+                )}
+                {signIns.apple && (
                   <ProviderButton
                     provider="apple"
                     onPress={() => login("apple")}
@@ -1087,12 +1153,12 @@ function ClubBody() {
                 { top: insets.top + 22, right: insets.right + 22 },
               ]}
               accessible
-              accessibilityLabel="Real cushion physics. Six city venues. Verified challenges."
+              accessibilityLabel="Play for your flag. Win to open each city. Every shot refereed."
             >
               {[
-                ["activity", "Real cushion physics"],
-                ["map-pin", "6 city venues"],
-                ["award", "Verified challenges"],
+                ["flag", "Play for your flag"],
+                ["unlock", "Win to open each city"],
+                ["shield", "Every shot refereed"],
               ].map(([icon, label]) => (
                 <View key={label} style={u.welcomeChip}>
                   <Feather name={icon as any} size={13} color="#ffd05b" />
@@ -1220,10 +1286,14 @@ function ClubBody() {
               onPlayer={setPlayer}
               initialTab={hubTab}
               onClose={() => setPage("home")}
-              onBuyPremium={() => {
-                setShopTab("offers");
-                setPage("shop");
-              }}
+              onBuyPremium={
+                sells
+                  ? () => {
+                      setShopTab("offers");
+                      setPage("shop");
+                    }
+                  : undefined
+              }
               onLucky={startLucky}
             />
           ) : page === "shop" ? (
@@ -1245,10 +1315,6 @@ function ClubBody() {
                     ? "Back"
                     : "Back to club"
               }
-              onShop={() => {
-                setShopTab("rubies");
-                setPage("shop");
-              }}
               onClose={() => setPage(rewardsFrom)}
             />
           ) : page === "wallet" ||
@@ -1327,6 +1393,7 @@ function ClubBody() {
               catalog={catalog!}
               selected={selected!}
               busy={busy}
+              canBuy={sells}
               onPage={setPage}
               onPlay={(mode) => {
                 setVenueMode(mode || "online");
@@ -1404,9 +1471,8 @@ function ClubBody() {
                         <View>
                           <Text style={u.statValue}>
                             {
-                              catalog!.venues.filter(
-                                (v) => v.level <= player.level,
-                              ).length
+                              catalog!.venues.filter((v) => !lockOf(player, v))
+                                .length
                             }
                           </Text>
                           <Text style={u.fine}>TABLES OPEN</Text>
@@ -1542,12 +1608,14 @@ function ClubBody() {
                         )
                       }
                     />
-                    <NavRow
-                      icon="credit-card"
-                      label="USDC rewards"
-                      detail="Payout address · payouts not active"
-                      onPress={() => setPage("wallet")}
-                    />
+                    {config.cashPayouts && (
+                      <NavRow
+                        icon="credit-card"
+                        label="USDC rewards"
+                        detail="Payout address · payouts not active"
+                        onPress={() => setPage("wallet")}
+                      />
+                    )}
                     <NavRow
                       icon="slash"
                       label="Blocked players"
@@ -1556,20 +1624,24 @@ function ClubBody() {
                     />
                   </View>
                   <View style={[u.feature, { flex: 1, minWidth: 240 }]}>
-                    <Text style={u.cardTitle}>Keep your progress.</Text>
-                    <Text style={u.body}>
-                      {player.guest
-                        ? "Connect a new Google or Apple account to preserve this guest profile. Signing into an existing account loads its saved progress."
-                        : "Your progress is stored with your connected account."}
-                    </Text>
+                    {player.guest && anySignIn && (
+                      <>
+                        <Text style={u.cardTitle}>Keep your progress.</Text>
+                        <Text style={u.body}>
+                          Connect an account to keep this profile on any phone.
+                        </Text>
+                      </>
+                    )}
                     <View style={{ gap: 10, marginTop: 16 }}>
-                      <ProviderButton
-                        provider="google"
-                        connected={player.providers.includes("google")}
-                        disabled={busy}
-                        onPress={() => login("google")}
-                      />
-                      {(Platform.OS === "ios" || Platform.OS === "web") && (
+                      {signIns.google && (
+                        <ProviderButton
+                          provider="google"
+                          connected={player.providers.includes("google")}
+                          disabled={busy}
+                          onPress={() => login("google")}
+                        />
+                      )}
+                      {signIns.apple && (
                         <ProviderButton
                           provider="apple"
                           connected={player.providers.includes("apple")}
@@ -1578,13 +1650,12 @@ function ClubBody() {
                         />
                       )}
                     </View>
-                    <View style={u.divider} />
-                    <Text style={u.cardTitle}>Your account, your choice.</Text>
-                    <Text style={u.body}>
-                      Guest access is tied to this device. Sign in before
-                      signing out if you want to keep access to your guest
-                      progress.
-                    </Text>
+                    {anySignIn && <View style={u.divider} />}
+                    {player.guest && (
+                      <Text style={u.body}>
+                        Signing out ends this guest profile for good.
+                      </Text>
+                    )}
                     <Action
                       secondary
                       label="Sign out"
@@ -1711,18 +1782,39 @@ function ClubBody() {
                 source={locked ? venueArt[locked.id] : welcome}
                 style={u.modalImage}
               />
-              <Tag gold>LEVEL {locked?.level}</Tag>
+              <Tag gold>
+                {locked && player.level < locked.level
+                  ? `LEVEL ${locked.level}`
+                  : "LOCKED"}
+              </Tag>
               <Text style={u.modalTitle}>{locked?.name}</Text>
-              <Text style={u.body}>
-                Earn {Math.max(0, ((locked?.level || 1) - 1) * 100 - player.xp)}{" "}
-                more XP to open this room. Practice challenges award 100 XP on
-                your first completion.
-              </Text>
+              {locked && player.level < locked.level ? (
+                <Text style={u.body}>
+                  Earn {Math.max(0, (locked.level - 1) * 100 - player.xp)} more
+                  XP to reach this room. Practice challenges award 100 XP on
+                  your first completion.
+                </Text>
+              ) : (
+                <Text style={u.body}>
+                  {locked ? lockOf(player, locked) : ""}. Wins the referee
+                  checks count: computer matches and public online matches.
+                  Friend rooms and pass & play do not.
+                </Text>
+              )}
               <Action
-                label="Visit practice lab"
+                label={
+                  locked && player.level < locked.level
+                    ? "Visit practice lab"
+                    : "Play to unlock"
+                }
                 onPress={() => {
                   setLocked(null);
-                  setPage("practice");
+                  if (locked && player.level < locked.level)
+                    setPage("practice");
+                  else {
+                    setVenueMode("cpu");
+                    setPage("matches");
+                  }
                 }}
               />
               <Action secondary label="Close" onPress={() => setLocked(null)} />

@@ -26,7 +26,7 @@ import {
 } from "./api";
 import { H, W, LUCKY } from "../physics/engine";
 import { luckyColors } from "../render/textures";
-import { showRewardedVideo } from "./ads";
+import { showRewardedVideo, untilGranted, useVideo } from "./ads";
 import { celebrate, tap, warn } from "./feedback";
 import { Press, Enter, CountUp, Pulse, PageFade } from "./motion";
 import IconButton from "./IconButton";
@@ -397,11 +397,11 @@ export function StreakCalendar(props: DailyProps) {
             {claimedToday ? `Day ${day} collected` : `Day ${day} is waiting`}
           </Text>
         </View>
-        <Text style={s.small}>
-          {claimedToday
-            ? `Day ${(day % rewards.length) + 1} unlocks tomorrow`
-            : "Miss a day and the week starts again"}
-        </Text>
+        {claimedToday && (
+          <Text style={s.small}>
+            Day {(day % rewards.length) + 1} unlocks tomorrow
+          </Text>
+        )}
       </View>
       <View style={s.week}>
         {rewards.map((reward, i) => {
@@ -818,9 +818,13 @@ export function SpinWheel(props: DailyProps) {
     loop.start();
     return () => loop.stop();
   }, [spinning, glow]);
+  // The video button shows only once a video is loaded; hooks first, before the loading return.
+  const video = useVideo(
+    today?.spin.ads && today.spin.adSpinsLeft ? { purpose: "spin" } : null,
+  );
 
   if (!today) return <Loading error={error} />;
-  const { free, tokens, adSpinsLeft, ads, segments } = today.spin;
+  const { free, tokens, segments } = today.spin;
   const spins = free + tokens;
   const canSpin = spins > 0 && !spinning && !busy;
 
@@ -864,15 +868,8 @@ export function SpinWheel(props: DailyProps) {
   const watch = () =>
     run(async () => {
       setWon(null);
-      const outcome = await showRewardedVideo({ purpose: "spin" });
-      if (outcome === "unavailable")
-        throw new Error("No video is available right now. Try again shortly.");
-      if (outcome === "dismissed") return;
-      // The spin is granted by the ad network's signed callback, so give it a moment to land.
-      for (let i = 0; i < 5; i++) {
-        await new Promise((r) => setTimeout(r, 1200));
-        if ((await reload()).spin.tokens > tokens) return;
-      }
+      if ((await showRewardedVideo({ purpose: "spin" })) !== "granted") return;
+      await untilGranted(async () => (await reload()).spin.tokens > tokens);
     });
 
   return (
@@ -898,11 +895,11 @@ export function SpinWheel(props: DailyProps) {
                 ? `${tokens} earned spin${tokens === 1 ? "" : "s"} ready`
                 : "No spins left today"}
         </Text>
-        <Text style={s.copy}>
-          One free spin every day
-          {ads ? ", and a short video earns another" : ""}. A fresh free spin in{" "}
-          {left(Date.parse(today.resetsAt) - now)}.
-        </Text>
+        {!spins && (
+          <Text style={s.copy}>
+            Next free spin in {left(Date.parse(today.resetsAt) - now)}.
+          </Text>
+        )}
         <View style={s.actions}>
           <Pulse active={canSpin}>
             <Button
@@ -915,17 +912,11 @@ export function SpinWheel(props: DailyProps) {
               onPress={spin}
             />
           </Pulse>
-          {ads && (
+          {video && (
             <Button
               icon="play-circle"
-              label={
-                busy
-                  ? "Loading video…"
-                  : adSpinsLeft
-                    ? `Watch a video for another spin · ${adSpinsLeft} left`
-                    : "Today's video spins are used"
-              }
-              disabled={busy || spinning || !adSpinsLeft}
+              label="Watch · free spin"
+              disabled={busy || spinning}
               onPress={watch}
             />
           )}
@@ -1047,20 +1038,16 @@ export function LuckyShot(props: DailyProps & { onShoot?: () => void }) {
     Math.max(220, Math.min(340, Math.max(win.width, win.height) * 0.36)),
   );
   const now = useNow(30000);
+  const video = useVideo(
+    today?.lucky.ads && today.lucky.adShotsLeft ? { purpose: "lucky" } : null,
+  );
   if (!today) return <Loading error={error} />;
-  const { free, tokens, adShotsLeft, ads, rings } = today.lucky;
+  const { free, tokens, rings } = today.lucky;
   const shots = free + tokens;
   const watch = () =>
     run(async () => {
-      const outcome = await showRewardedVideo({ purpose: "lucky" });
-      if (outcome === "unavailable")
-        throw new Error("No video is available right now. Try again shortly.");
-      if (outcome === "dismissed") return;
-      // The shot is granted by the ad network's signed callback, so give it a moment to land.
-      for (let i = 0; i < 5; i++) {
-        await new Promise((r) => setTimeout(r, 1200));
-        if ((await reload()).lucky.tokens > tokens) return;
-      }
+      if ((await showRewardedVideo({ purpose: "lucky" })) !== "granted") return;
+      await untilGranted(async () => (await reload()).lucky.tokens > tokens);
     });
   return (
     <View style={s.split}>
@@ -1076,10 +1063,7 @@ export function LuckyShot(props: DailyProps & { onShoot?: () => void }) {
               ? `${tokens} shot${tokens === 1 ? "" : "s"} ready`
               : "No shots left today"}
         </Text>
-        <Text style={s.copy}>
-          Stop the cue ball inside the rings. It all comes down to pace: the
-          server replays your shot and pays the ring it stops in.
-        </Text>
+        <Text style={s.copy}>Stop the cue ball in the rings.</Text>
         <View style={{ gap: 4 }}>
           {rings.map((r, i) => (
             <View key={r.radius} style={s.ringRow}>
@@ -1106,17 +1090,11 @@ export function LuckyShot(props: DailyProps & { onShoot?: () => void }) {
               onPress={() => props.onShoot?.()}
             />
           </Pulse>
-          {ads && (
+          {video && (
             <Button
               icon="play-circle"
-              label={
-                busy
-                  ? "Loading video…"
-                  : adShotsLeft
-                    ? `Watch a video for another shot · ${adShotsLeft} left`
-                    : "Today's video shots are used"
-              }
-              disabled={busy || !adShotsLeft}
+              label="Watch · another shot"
+              disabled={busy}
               onPress={watch}
             />
           )}
@@ -1511,14 +1489,6 @@ export function PassTrack({
   const p = today.pass;
   const last = p.rewards.length;
   const into = p.xp - p.tier * p.xpPerTier;
-  const value = p.rewards.reduce(
-    (t, row) => ({
-      coins: t.coins + row.premium.coins,
-      rubies: t.rubies + row.premium.rubies,
-      crates: t.crates + (row.premium.crate ? 1 : 0),
-    }),
-    { coins: 0, rubies: 0, crates: 0 },
-  );
   const claim = (n: number, lane: "free" | "premium") =>
     run(async () => {
       const r = await api<DailyClaim>("/me/pass/claim", "POST", {
@@ -1594,13 +1564,6 @@ export function PassTrack({
               color={C.purple}
             />
             <Text style={[s.laneText, { color: C.purple }]}>PREMIUM</Text>
-            {!p.premium && (
-              <Text style={s.laneValue}>
-                {value.rubies} rubies{"\n"}
-                {value.coins.toLocaleString()} coins{"\n"}
-                {value.crates} crates
-              </Text>
-            )}
           </View>
         </View>
         <ScrollView
@@ -1757,15 +1720,9 @@ export function DailyHub({
           })}
         </View>
         <View style={s.grow} />
+        {/* Coins and rubies are already in the top bar; repeating them here pushed the close
+            button off an iPhone's screen once its safe-area margins were counted. */}
         {today && <FreeGift {...shared} />}
-        {!narrow && (
-          <View style={s.balance}>
-            <Feather name="circle" size={12} color={C.gold} />
-            <CountUp value={player.coins} style={s.balanceText} />
-            <Feather name="hexagon" size={12} color={C.ruby} />
-            <CountUp value={player.rubies || 0} style={s.balanceText} />
-          </View>
-        )}
         <IconButton icon="x" label="Close daily rewards" onPress={onClose} />
       </View>
       {today ? (

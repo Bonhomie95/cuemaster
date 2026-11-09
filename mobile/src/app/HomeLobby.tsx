@@ -113,7 +113,7 @@ export default function HomeLobby(p: LobbyProps) {
     },
     // The one-time starter pack, shown until it is bought: the cheapest first purchase is the
     // one most players ever make, so it earns a card of its own.
-    ...(p.player.starterBought
+    ...(p.player.starterBought || !p.canBuy
       ? []
       : [
           {

@@ -2,7 +2,7 @@ import React from "react";
 import { Image, StyleSheet, Text, View } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
-import { Player } from "./api";
+import { Player, coinsShort } from "./api";
 import { portraits, icons } from "./art";
 import { Press, CountUp } from "./motion";
 
@@ -80,6 +80,7 @@ export function CurrencyPill({
       <Image source={coins ? icons.coin : icons.ruby} style={s.icon} />
       <CountUp
         value={value}
+        format={(n) => coinsShort(n, 1_000_000)}
         style={[s.value, { color: coins ? "#ffe9a8" : "#ffd7db" }]}
       />
       <View style={s.plus}>

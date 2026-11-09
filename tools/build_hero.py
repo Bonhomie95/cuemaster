@@ -3,13 +3,36 @@
 blender -b mobile/assets/models/cuemaster-table.blend --python tools/build_hero.py
 Writes mobile/assets/lounge/hero.jpg. Balls use the game's enlarged radius and the same
 number masks as the runtime texture, so the art matches what people then play.
+
+The entry screen's backgrounds are variants of the same room (see tools/build_entry.sh):
+HERO_SKIN picks a venue finish, HERO_SHOT the camera, HERO_LAYOUT the balls ("game" or a fresh
+"rack"), HERO_OUT the file. With none of them set this renders hero.jpg exactly as before.
 """
 import bpy, os, json, math
 import numpy as np
 from mathutils import Vector
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-OUT = os.path.join(ROOT, "mobile/assets/lounge/hero.jpg")
+OUT = os.environ.get("HERO_OUT") or os.path.join(ROOT, "mobile/assets/lounge/hero.jpg")
+SKIN = os.environ.get("HERO_SKIN") or "heritage"
+SHOT = os.environ.get("HERO_SHOT") or "eye"
+LAYOUT = os.environ.get("HERO_LAYOUT") or "game"
+# Runtime finishes (session.ts): cloth, cushion, wood.
+SKINS = {
+    "riviera": ("#087fab", "#18516c", "#202730"),
+    "regent": ("#a53154", "#572231", "#292023"),
+    "midnight": ("#4242a4", "#191d43", "#111525"),
+    "jade": ("#079c75", "#074937", "#153e32"),
+    "champion": ("#8b6430", "#60441f", "#16191b"),
+    "capetown": ("#84346f", "#4d1d41", "#241a1f"),
+    "rio": ("#c0581f", "#6f3214", "#2a1a12"),
+    "cairo": ("#24509e", "#142d5e", "#8a6a42"),
+    "mumbai": ("#0e8a8f", "#08494c", "#3a1c1c"),
+    "rome": ("#5f7a32", "#34441b", "#b8a888"),
+    "sydney": ("#1e6fd9", "#13468a", "#a89a82"),
+    "singapore": ("#7a3ea6", "#43215e", "#1d1726"),
+    "monaco": ("#5d6570", "#343a42", "#0f1012"),
+}
 R = json.load(open(os.path.join(ROOT, "mobile/src/physics/table.json")))["radius"]
 NUMBERS = json.load(open(os.path.join(ROOT, "mobile/assets/models/numbers.json")))
 HEX = ["#faf9f2", "#e8af16", "#1646a4", "#bd2627", "#622d87", "#e0651f", "#176a45", "#752329",
@@ -44,10 +67,15 @@ def mat(name, color, rough=0.5, metal=0.0, emit=0.0):
 
 # Lagos venue finish, matching the runtime skin.
 # Slightly deeper than the runtime hex: Cycles' filmic view lifts bright cloth towards mint.
-for key, hexc in [("cloth", "#02603a"), ("cushion", "#0b3f2f"), ("wood", "#3a2519")]:
+finish = [("cloth", lin("#02603a")), ("cushion", lin("#0b3f2f")), ("wood", lin("#3a2519"))]
+if SKIN != "heritage":
+    cloth_hex, cushion_hex, wood_hex = SKINS[SKIN]
+    deep = lambda h, k: tuple(k * x for x in lin(h))
+    finish = [("cloth", deep(cloth_hex, 0.5)), ("cushion", deep(cushion_hex, 0.5)), ("wood", deep(wood_hex, 0.9))]
+for key, color in finish:
     m = bpy.data.materials.get(key)
     if m:
-        principled(m).inputs["Base Color"].default_value = (*lin(hexc), 1)
+        principled(m).inputs["Base Color"].default_value = (*color, 1)
 cloth = bpy.data.materials.get("cloth")
 if cloth:
     nodes, links, bs = cloth.node_tree.nodes, cloth.node_tree.links, principled(cloth)
@@ -108,17 +136,27 @@ def ball(i, x, y, spin=0.0):
     return o
 
 
-# A game in progress: cue ball in the foreground lined up on the 3 into the far corner.
 H, W = 1.27, 0.635
-ball(0, -0.52, -0.16, 0.4)
-ball(3, 0.42, 0.04, 1.2)
-for i, (x, y, s) in {1: (0.86, -0.3, 0.3), 9: (0.62, 0.34, 2.0), 11: (1.02, 0.12, 1.6), 6: (0.2, -0.42, 0.9),
-                     8: (0.95, -0.02, 1.8), 14: (0.05, 0.36, 2.6), 5: (-0.18, 0.02, 0.2), 10: (1.12, 0.44, 1.1),
-                     2: (0.74, -0.12, 2.2), 13: (-0.62, 0.42, 0.7)}.items():
-    ball(i, x, y, s)
+if LAYOUT == "rack":
+    # The moment before the break: a fresh rack on the foot spot, the 8 in the middle.
+    CUE, TARGET = (-0.62, 0.05), (0.635, 0.0)
+    ball(0, *CUE, 0.4)
+    rows = [[1], [10, 2], [3, 8, 11], [12, 4, 13, 5], [6, 14, 7, 15, 9]]
+    for r, row in enumerate(rows):
+        for k, i in enumerate(row):
+            ball(i, 0.635 + r * 2 * R * 0.868, (k - r / 2) * 2 * R * 1.004, 0.3 + i * 0.7)
+else:
+    # A game in progress: cue ball in the foreground lined up on the 3 into the far corner.
+    CUE, TARGET = (-0.52, -0.16), (0.42, 0.04)
+    ball(0, *CUE, 0.4)
+    ball(3, *TARGET, 1.2)
+    for i, (x, y, s) in {1: (0.86, -0.3, 0.3), 9: (0.62, 0.34, 2.0), 11: (1.02, 0.12, 1.6), 6: (0.2, -0.42, 0.9),
+                         8: (0.95, -0.02, 1.8), 14: (0.05, 0.36, 2.6), 5: (-0.18, 0.02, 0.2), 10: (1.12, 0.44, 1.1),
+                         2: (0.74, -0.12, 2.2), 13: (-0.62, 0.42, 0.7)}.items():
+        ball(i, x, y, s)
 
-# Cue resting in the shooter's hand position, aimed through the cue ball at the 3.
-aim = Vector((0.42 + 0.52, 0.04 + 0.16, 0)).normalized()
+# Cue resting in the shooter's hand position, aimed through the cue ball at its target.
+aim = Vector((TARGET[0] - CUE[0], TARGET[1] - CUE[1], 0)).normalized()
 shaft = mat("Maple shaft", lin("#d8bd8c"), 0.35)
 butt = mat("Ebony butt", lin("#1b1411"), 0.3)
 ferrule = mat("Ferrule", lin("#f4eedd"), 0.3)
@@ -128,7 +166,7 @@ for length, r0, r1, m, start in [(0.012, 0.0062, 0.0062, ferrule, 0.02), (0.72, 
     o = bpy.context.object
     bpy.ops.object.shade_smooth()
     o.data.materials.append(m)
-    centre = Vector((-0.52, -0.16, R + 0.004)) - aim * (R + start + length / 2)
+    centre = Vector((*CUE, R + 0.004)) - aim * (R + start + length / 2)
     centre.z += (start + length / 2) * math.sin(0.06)
     o.location = centre
     o.rotation_euler = (-aim).to_track_quat("Z", "Y").to_euler()
@@ -193,14 +231,22 @@ rim.data.size = 2.5
 rim.data.color = (0.62, 0.78, 1.0)
 rim.rotation_euler = (Vector((0, 0, 0)) - rim.location).to_track_quat("-Z", "Y").to_euler()
 
-# Camera at the shooter's eye, behind the cue ball, table filling the right of frame.
-bpy.ops.object.camera_add(location=(-2.15, -1.62, 0.86))
+# Camera presets: location, look-at, lens, shift. The table always sits right of frame, so the
+# welcome copy on the left stays on dark room. "eye" is the shooter's eye behind the cue ball.
+SHOTS = {
+    "eye": ((-2.15, -1.62, 0.86), (0.3, 0.28, 0.24), 30, -0.16),
+    "break": ((-2.45, 0.4, 0.66), (0.62, -0.06, 0.0), 34, -0.12),
+    "high": ((-1.7, -2.3, 2.3), (0.3, 0.1, 0.0), 30, -0.14),
+    "rail": ((-2.35, -0.95, 0.34), (1.05, -0.12, 0.04), 32, -0.12),
+}
+cam_at, cam_to, lens, shift = SHOTS[SHOT]
+bpy.ops.object.camera_add(location=cam_at)
 cam = bpy.context.object
-cam.rotation_euler = (Vector((0.3, 0.28, 0.24)) - cam.location).to_track_quat("-Z", "Y").to_euler()
-cam.data.lens = 30
-cam.data.shift_x = -0.16
+cam.rotation_euler = (Vector(cam_to) - cam.location).to_track_quat("-Z", "Y").to_euler()
+cam.data.lens = lens
+cam.data.shift_x = shift
 cam.data.dof.use_dof = True
-cam.data.dof.focus_distance = (Vector((-0.52, -0.16, R)) - cam.location).length * 1.12
+cam.data.dof.focus_distance = (Vector((*CUE, R)) - cam.location).length * 1.12
 cam.data.dof.aperture_fstop = 2.2
 scene.camera = cam
 

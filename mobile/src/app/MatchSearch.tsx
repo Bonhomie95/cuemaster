@@ -15,7 +15,7 @@ import {
   Share,
 } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
-import { API, Player, Venue } from "./api";
+import { API, Player, Venue, coinsShort } from "./api";
 import { portraits, venueArt } from "./art";
 import { Press, Pulse, Enter } from "./motion";
 import { online } from "../game/online";
@@ -101,8 +101,8 @@ export default function MatchSearch({
       </Text>
       {venue && (
         <Text style={s.title}>
-          {venue.name} · ◉ {venue.entry.toLocaleString()} entry · win{" "}
-          {(venue.entry * 2).toLocaleString()}
+          {venue.name} · ◉ {coinsShort(venue.entry)} entry · win{" "}
+          {coinsShort(venue.entry * 2)}
         </Text>
       )}
       {kind === "join" ? (
@@ -227,7 +227,7 @@ export default function MatchSearch({
               : online.status === "queued"
                 ? online.online > 1
                   ? `${online.online.toLocaleString()} players online`
-                  : "Looking for a player at this table"
+                  : ""
                 : "")}
       </Text>
       <View style={s.actions}>

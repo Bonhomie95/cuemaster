@@ -19,6 +19,10 @@ export type Player = {
   selectedCue?: string;
   completed: string[];
   selectedTable: string;
+  /** What each locked table still asks for, by venue id; an open table has no entry. */
+  locks?: Record<string, string>;
+  /** Refereed wins per table; enough at one table opens the next. */
+  venueWins?: Record<string, number>;
   /** The one-time starter pack has been bought. */
   starterBought?: boolean;
   /** The season id whose premium pass this player owns, if any. */
@@ -47,10 +51,14 @@ export type Venue = {
   name: string;
   subtitle: string;
   level: number;
+  /** Refereed wins needed at the table before this one. */
+  wins?: number;
   skin: number;
   entry: number;
   mood: string;
 };
+// Kept apart from this file's React Native imports so the tests can load them.
+export { lockOf, coinsShort } from "./ladder";
 export type Challenge = {
   id: string;
   name: string;
@@ -186,6 +194,8 @@ export type ProviderConfig = {
   onlineMatchmaking?: boolean;
   legal?: boolean;
   rubyStore?: boolean;
+  /** Purchases switched on for each platform; the shop hides paid offers where they are off. */
+  billing?: { ios: boolean; android: boolean };
   urls?: {
     privacy: string;
     terms: string;

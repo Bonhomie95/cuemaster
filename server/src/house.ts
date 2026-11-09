@@ -190,7 +190,7 @@ export async function pickHouse(
   return {
     doc,
     style: (doc.houseStyle || "steady") as CpuStyle,
-    skill: formSkill(player.form, venue?.level || 1, random),
+    skill: formSkill(player.form, venues.indexOf(venue!) + 1 || 1, random),
   };
 }
 
