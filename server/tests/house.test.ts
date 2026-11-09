@@ -73,7 +73,7 @@ test("with nobody waiting, a house player is seated after the wait and plays its
     assert.equal(opponent.house, true);
     assert.equal(m.opponent.name, opponent.name);
     assert.ok(!("house" in m.opponent), "nothing in the match says house");
-    assert.equal(m.pot, 100);
+    assert.equal(m.pot, 500);
 
     // Whoever breaks, the house plays within its clock and lines the shot up first.
     if (m.seat === 1) {

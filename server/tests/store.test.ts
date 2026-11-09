@@ -523,7 +523,7 @@ test("iOS: breaking the piggy bank pays what it holds right then, once, and empt
   assert.equal(first.status, 200, JSON.stringify(first.body));
   assert.equal(first.body.credited, true);
   assert.deepEqual(first.body.grants, { coins: bank.coins });
-  assert.equal(first.body.player.coins, 1000 - 2 * 50 + bank.coins);
+  assert.equal(first.body.player.coins, 1000 - 2 * 250 + bank.coins);
   assert.equal((await call("/store")).body.piggy.coins, 0);
   const replay = await claim(paid);
   assert.equal(replay.body.credited, false, "a replay breaks nothing twice");

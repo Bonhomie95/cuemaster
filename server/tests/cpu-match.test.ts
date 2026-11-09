@@ -30,7 +30,7 @@ test("CPU entries preserve rivals on retry and update separate adaptive records 
     const skill = first.match.opponent.skill;
     const retry = await call("/local-matches/start", "POST", request);
     assert.deepEqual(retry.match.opponent, first.match.opponent);
-    assert.equal(retry.player.coins, 950);
+    assert.equal(retry.player.coins, 750);
     await Promise.all(
       [1, 2].map(() =>
         call(`/local-matches/${request.requestId}/finish`, "POST", {
@@ -44,13 +44,13 @@ test("CPU entries preserve rivals on retry and update separate adaptive records 
     assert.equal(p.stats.localLosses, undefined);
     // A win only counts once the referee replays the record against the same rival seed.
     let won = false,
-      spent = 50;
+      spent = 250;
     for (let i = 0; i < 6 && !won; i++) {
       const second = await call("/local-matches/start", "POST", {
         ...request,
         requestId: randomUUID(),
       });
-      spent += 50;
+      spent += 250;
       assert.ok(second.match.opponent.skill < skill);
       const played = playCpuMatch(second.match.opponent, second.match.seed);
       const result = await call(
@@ -64,7 +64,7 @@ test("CPU entries preserve rivals on retry and update separate adaptive records 
       won = result.verified;
       if (played.winner === 0) assert.ok(won, "a played-out win verifies");
       // A verified win takes the pot: both entries.
-      assert.equal(result.pot, won ? 100 : 0);
+      assert.equal(result.pot, won ? 500 : 0);
     }
     assert.ok(won, "the planner beat the rival within six racks");
     p = await call("/me");
@@ -73,7 +73,7 @@ test("CPU entries preserve rivals on retry and update separate adaptive records 
     assert.equal(p.stats.cpuWins, 1);
     const board = await call("/leaderboard");
     assert.ok(board.players.some((r: any) => r.bestStreak === 1));
-    assert.equal(p.coins, 1000 - spent + 100);
+    assert.equal(p.coins, 1000 - spent + 500);
   } finally {
     await call("/me", "DELETE", { confirm: "DELETE" });
   }

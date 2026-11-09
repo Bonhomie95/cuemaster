@@ -58,6 +58,8 @@ test(
   async () => {
     const token = await guestToken();
     const id = (await me(token)).id;
+    // A new wallet holds four 250-coin Lagos entries; this walks through more racks than that.
+    await (await players()).updateOne({ _id: id }, { $set: { coins: 10_000 } });
     const match = async (
       mode: "cpu" | "local",
       outcome: string,

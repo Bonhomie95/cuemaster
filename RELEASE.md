@@ -33,9 +33,9 @@ on each service, is `docs/release/OWNER-CHECKLIST.md` in the main checkout.
    verification → callback URL `https://cuemaster-api.onrender.com/ads/reward`. Send me the four
    IDs; they are not secret.
    Until those IDs are in, the test builds play Google's sample videos, which never call the
-   server back, so a watched video would pay nothing. For the test period, Render →
-   `cuemaster-api` → Environment → add `ADS_CLIENT_REDEEM` = `1` so testers' videos pay; delete
-   it when the build with your own IDs ships.
+   server back, so a watched video would pay nothing. `ADS_CLIENT_REDEEM` = `1` is therefore set
+   in Render → `cuemaster-api` → Environment (since 9 November) so testers' videos pay; delete it
+   when the build with your own IDs ships.
 3. **Expo account (free).** expo.dev/signup. Expo's cloud builds and signs the iPhone app for the
    App Store, so you never handle Apple certificates yourself.
 
@@ -239,7 +239,7 @@ PLAY YOUR WAY
 FOURTEEN CITIES, ONE BILLION-COIN TABLE
 Lagos, London, Paris, Tokyo, Dubai, New York, Cape Town, Rio de Janeiro, Cairo, Mumbai, Rome,
 Sydney, Singapore and Monaco, each with its own table, landmark and trick shots. Coins are not
-enough: win at one city to open the next, and climb from a 50-coin entry to a billion.
+enough: win at one city to open the next, and climb from a 250-coin entry to a billion.
 
 EVERY DAY THERE IS SOMETHING TO WIN
 • Daily login rewards, free coins every four hours and a free spin of the prize wheel

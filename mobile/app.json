@@ -164,7 +164,17 @@
     "backgroundColor": "#070f18",
     "assetBundlePatterns": [
       "assets/**/*"
-    ]
+    ],
+    "extra": {
+      "admob": {
+        "androidRewarded": "ca-app-pub-3940256099942544/5224354917",
+        "iosRewarded": "ca-app-pub-3940256099942544/1712485313"
+      },
+      "eas": {
+        "projectId": "9818ed48-95ff-40c9-8f87-6c6d1894584e"
+      }
+    },
+    "owner": "bonhomie95"
   },
   "react-native-google-mobile-ads": {
     "android_app_id": "ca-app-pub-3940256099942544~3347511713",

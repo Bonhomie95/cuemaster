@@ -33,10 +33,10 @@ test("venue fees are atomic, level gated, retry safe and forfeit is recorded onc
       call("/local-matches/start", "POST", req),
     ]);
     assert.ok(entries.some((r) => r.status === 201));
-    assert.equal((await call("/me")).body.coins, 950);
+    assert.equal((await call("/me")).body.coins, 750);
     assert.equal(
       (await call("/local-matches/start", "POST", req)).body.player.coins,
-      950,
+      750,
     );
     assert.equal(
       (
@@ -54,10 +54,10 @@ test("venue fees are atomic, level gated, retry safe and forfeit is recorded onc
     await Promise.all([finish(), finish()]);
     const me = (await call("/me")).body;
     assert.equal(me.stats.localLosses, 1);
-    assert.equal(me.coins, 950);
+    assert.equal(me.coins, 750);
     assert.equal((await call("/local-matches/active")).body, null);
-    // Exhaust a level-one wallet without allowing negative balances.
-    for (let i = 0; i < 19; i++) {
+    // Exhaust a level-one wallet without allowing negative balances: 750 is three Lagos entries.
+    for (let i = 0; i < 3; i++) {
       const r = { venueId: "heritage", requestId: randomUUID() };
       assert.equal((await call("/local-matches/start", "POST", r)).status, 201);
       await call(`/local-matches/${r.requestId}/finish`, "POST", {

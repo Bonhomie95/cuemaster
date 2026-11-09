@@ -13,11 +13,11 @@ test("two players are matched, the server referees every shot, and the winner ta
   b.send({ t: "queue", venueId: "heritage" });
   const [ma, mb] = await Promise.all([a.next("match"), b.next("match")]);
   assert.equal(ma.id, mb.id);
-  assert.equal(ma.pot, 100);
+  assert.equal(ma.pot, 500);
   assert.notEqual(ma.seat, mb.seat);
   assert.equal(ma.opponent.id, (await me(tb)).id);
-  assert.equal((await me(ta)).coins, 950, "entry charged once");
-  assert.equal((await me(tb)).coins, 950);
+  assert.equal((await me(ta)).coins, 750, "entry charged once");
+  assert.equal((await me(tb)).coins, 750);
 
   const breaker = ma.seat === 0 ? a : b,
     waiter = ma.seat === 0 ? b : a;
@@ -52,17 +52,17 @@ test("two players are matched, the server referees every shot, and the winner ta
     holder.next("end"),
     other.next("end"),
   ]);
-  assert.equal(endOther.pot, 100);
+  assert.equal(endOther.pot, 500);
   assert.equal(endHolder.pot, 0);
   assert.equal(endOther.trophies, 24);
   assert.ok(endOther.crate, "an online win seals a crate");
   const [holderToken, otherToken] = holder === a ? [ta, tb] : [tb, ta];
-  assert.equal((await me(otherToken)).coins, 1050);
+  assert.equal((await me(otherToken)).coins, 1250);
   // A public win counts toward the next table; the loser's count does not move.
   assert.equal((await me(otherToken)).venueWins.heritage, 1);
   assert.equal((await me(holderToken)).venueWins.heritage, undefined);
   assert.equal((await me(otherToken)).trophies, 24);
-  assert.equal((await me(holderToken)).coins, 950);
+  assert.equal((await me(holderToken)).coins, 750);
   assert.equal((await me(holderToken)).stats.onlineLosses, 1);
 
   // A rematch needs both players and charges both again.

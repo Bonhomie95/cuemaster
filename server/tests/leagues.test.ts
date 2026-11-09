@@ -248,11 +248,11 @@ test(
       await meet(a, b);
       b.send({ t: "resign" });
       const [won] = await Promise.all([a.next("end"), b.next("end")]);
-      assert.equal(won.pot, 100);
-      const [ea, eb] = [await entryOf(aId, 100), await entryOf(bId)];
+      assert.equal(won.pot, 500);
+      const [ea, eb] = [await entryOf(aId, 500), await entryOf(bId)];
       assert.deepEqual(
         [ea.tier, ea.coins],
-        [1, 100],
+        [1, 500],
         "promoted, then joined Silver",
       );
       assert.deepEqual([eb.tier, eb.coins], [0, 0], "a loss still joins");
@@ -266,7 +266,7 @@ test(
       assert.equal(view.name, "Silver");
       assert.equal(view.crate.tier, LEAGUES[1].crate);
       const mine = view.standings.find((s: any) => s.you);
-      assert.deepEqual([mine.coins, mine.name], [100, (await me(ta)).name]);
+      assert.deepEqual([mine.coins, mine.name], [500, (await me(ta)).name]);
       assert.equal((await call(tb, "/me/league")).body.league.name, "Bronze");
 
       // A private room pays its pot but never counts here.
@@ -275,10 +275,10 @@ test(
       b.send({ t: "join", code: room.code });
       await Promise.all([a.next("match"), b.next("match")]);
       b.send({ t: "resign" });
-      assert.equal((await a.next("end")).pot, 100);
+      assert.equal((await a.next("end")).pot, 500);
       await b.next("end");
       await new Promise((r) => setTimeout(r, 400));
-      assert.equal((await entryOf(aId)).coins, 100);
+      assert.equal((await entryOf(aId)).coins, 500);
     } finally {
       a.ws.close();
       b.ws.close();

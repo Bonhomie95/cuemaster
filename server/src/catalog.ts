@@ -1,7 +1,8 @@
 /**
  * The venue ladder, in order. Every table is visible from day one; to play one you need its
  * level, `wins` refereed wins at the table before it (computer wins the server replayed, public
- * online wins), and the entry. Entries climb roughly fivefold from New York to a billion.
+ * online wins), and the entry. Entries double through the first cities, then climb two-and-a-half
+ * to fivefold a step from 250 in Lagos to a billion in Monaco.
  */
 export const venues = [
   {
@@ -11,7 +12,7 @@ export const venues = [
     level: 1,
     wins: 0,
     skin: 0,
-    entry: 50,
+    entry: 250,
     mood: "Where every great run begins.",
   },
   {
@@ -21,7 +22,7 @@ export const venues = [
     level: 2,
     wins: 2,
     skin: 1,
-    entry: 100,
+    entry: 500,
     mood: "Cool cloth. Clear focus.",
   },
   {
@@ -31,7 +32,7 @@ export const venues = [
     level: 3,
     wins: 2,
     skin: 2,
-    entry: 250,
+    entry: 1000,
     mood: "A room for the composed player.",
   },
   {
@@ -41,7 +42,7 @@ export const venues = [
     level: 4,
     wins: 3,
     skin: 3,
-    entry: 500,
+    entry: 2500,
     mood: "Make your mark after dark.",
   },
   {
@@ -51,7 +52,7 @@ export const venues = [
     level: 5,
     wins: 3,
     skin: 4,
-    entry: 1000,
+    entry: 5000,
     mood: "Precision in perfect balance.",
   },
   {
@@ -61,7 +62,7 @@ export const venues = [
     level: 7,
     wins: 3,
     skin: 5,
-    entry: 2500,
+    entry: 25_000,
     mood: "A table you earn.",
   },
   {
@@ -71,7 +72,7 @@ export const venues = [
     level: 9,
     wins: 4,
     skin: 6,
-    entry: 10_000,
+    entry: 100_000,
     mood: "Flat top, sharp lines.",
   },
   {
@@ -81,7 +82,7 @@ export const venues = [
     level: 11,
     wins: 4,
     skin: 7,
-    entry: 50_000,
+    entry: 250_000,
     mood: "Big stakes, warm nights.",
   },
   {
@@ -91,7 +92,7 @@ export const venues = [
     level: 13,
     wins: 4,
     skin: 8,
-    entry: 250_000,
+    entry: 1_000_000,
     mood: "Patience older than the pyramids.",
   },
   {
@@ -101,7 +102,7 @@ export const venues = [
     level: 15,
     wins: 5,
     skin: 9,
-    entry: 1_000_000,
+    entry: 5_000_000,
     mood: "The first million-coin rack.",
   },
   {
@@ -111,7 +112,7 @@ export const venues = [
     level: 18,
     wins: 5,
     skin: 10,
-    entry: 5_000_000,
+    entry: 25_000_000,
     mood: "An arena for the brave.",
   },
   {
@@ -121,7 +122,7 @@ export const venues = [
     level: 21,
     wins: 5,
     skin: 11,
-    entry: 25_000_000,
+    entry: 100_000_000,
     mood: "Sails up. Nerves steady.",
   },
   {
@@ -131,7 +132,7 @@ export const venues = [
     level: 25,
     wins: 6,
     skin: 12,
-    entry: 100_000_000,
+    entry: 250_000_000,
     mood: "The skyline watches every shot.",
   },
   {
