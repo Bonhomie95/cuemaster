@@ -25,6 +25,8 @@ const SIZES = store
       { name: "play-1920x1080", width: 960, height: 540, scale: 2 },
       // App Store: 6.9" display, landscape.
       { name: "appstore-2868x1320", width: 956, height: 440, scale: 3 },
+      // App Store: 13" iPad, landscape (required while the app supports tablets).
+      { name: "ipad-2752x2064", width: 688, height: 516, scale: 4 },
     ]
   : [{ name: "phone", width: 874, height: 402, scale: 2 }];
 // --size=appstore walks only the sizes whose name contains it.
