@@ -177,10 +177,10 @@
     "owner": "bonhomie95"
   },
   "react-native-google-mobile-ads": {
-    "android_app_id": "ca-app-pub-3940256099942544~3347511713",
-    "ios_app_id": "ca-app-pub-3940256099942544~1458002511",
-    "android_rewarded_unit_id": "ca-app-pub-3940256099942544/5224354917",
-    "ios_rewarded_unit_id": "ca-app-pub-3940256099942544/1712485313",
+    "android_app_id": "ca-app-pub-7361370703216043~9029180228",
+    "ios_app_id": "ca-app-pub-7361370703216043~8206878133",
+    "android_rewarded_unit_id": "ca-app-pub-7361370703216043/9667474474",
+    "ios_rewarded_unit_id": "ca-app-pub-7361370703216043/3237622483",
     "user_tracking_usage_description": "",
     "delay_app_measurement_init": true
   }
