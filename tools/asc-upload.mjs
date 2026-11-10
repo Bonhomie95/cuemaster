@@ -68,7 +68,7 @@ async function version() {
       attributes: {
         description: full,
         keywords: "8ball,cue,snooker,billiard,multiplayer,friends,trick,shot,spin,offline,classic,table,stick,club",
-        promotionalText: "Real-physics 8-ball pool. Play online, challenge friends, win coins and crates every day.",
+        promotionalText: "Start in Lagos, finish in Monaco: 8-ball with real physics, online rivals and a billion-coin table.",
         supportUrl: "https://cuemaster-api.onrender.com/legal/support",
         marketingUrl: "https://cuemaster-api.onrender.com/play",
         whatsNew: undefined,
@@ -76,6 +76,9 @@ async function version() {
     },
   });
   await api("PATCH", `/v1/appStoreVersions/${v.id}`, { data: { type: "appStoreVersions", id: v.id, attributes: { copyright: "2026 Bonhomie LLC", releaseType: "MANUAL" } } });
+  const review = (await api("GET", `/v1/appStoreVersions/${v.id}/appStoreReviewDetail`).catch(() => ({ data: null }))).data;
+  const notes = readFileSync(join(root, "RELEASE.md"), "utf8").split("**Review notes (paste into both consoles):**")[1].split("```")[1].trim().replace(/\n   /g, " ");
+  if (review) await api("PATCH", `/v1/appStoreReviewDetails/${review.id}`, { data: { type: "appStoreReviewDetails", id: review.id, attributes: { demoAccountRequired: false, notes } } });
   console.log("version 1.0 metadata ok");
   return { v, loc };
 }
@@ -83,7 +86,6 @@ async function version() {
 // ------------------------------------------------------------------ screenshots
 const SHOTS = {
   APP_IPHONE_67: join(root, "artifacts", "store-listing", "appstore-2868x1320"),
-  APP_IPAD_PRO_3GEN_129: join(root, "artifacts", "store-listing", "ipad-2752x2064"),
 };
 async function screenshots() {
   const { loc } = await version();

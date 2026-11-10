@@ -54,8 +54,8 @@ async function call(method, url, body, type = "application/json") {
 const LISTING = {
   language: LANG,
   title: "CueMaster: 3D Pool Billiards",
-  shortDescription: "Real-physics 8-ball pool. Play friends online, from Lagos to Tokyo.",
-  fullDescription: `CueMaster is 3D pool built on real physics. Every shot behaves the way it would on the felt: draw, follow and side spin change each rebound, cushions grip, and a ball struck slightly off line rattles in the jaws.
+  shortDescription: "8-ball pool from Lagos to Monaco: win your way up to the billion-coin table.",
+  fullDescription: `Start in Lagos. Finish in Monaco. CueMaster is 3D 8-ball pool across fourteen cities, each table harder to reach than the last, up to a final table where the entry is a billion coins. Every shot behaves the way it would on the felt: draw, follow and side spin change each rebound, cushions grip, and a ball struck slightly off line rattles in the jaws.
 
 PLAY ONLINE
 • 1v1 8-ball online: the winner takes the pot
@@ -67,14 +67,18 @@ PLAY YOUR WAY
 • 2-player pass & play on one phone
 • Practice drills for cut shots, spin and clearing the table, and free play offline
 
-SIX CITY VENUES
-Lagos, London, Paris, Tokyo, Dubai and New York, each with its own table and atmosphere. Level up to unlock the next city and raise the stakes.
+FOURTEEN CITIES, ONE BILLION-COIN TABLE
+Lagos, London, Paris, Tokyo, Dubai, New York, Cape Town, Rio de Janeiro, Cairo, Mumbai, Rome, Sydney, Singapore and Monaco, each with its own table, landmark and trick shots. Coins are not enough: win at one city to open the next, and climb from a 250-coin entry to a billion.
 
 EVERY DAY THERE IS SOMETHING TO WIN
 • Daily login rewards, free coins every four hours and a free spin of the prize wheel
-• Lucky Shot: one free skill shot a day at the prize rings
+• The Lucky Shot: stop the cue ball in the rings to win coins, rubies or a crate
 • Three daily missions and the season CueMaster Pass
-• Weekly leagues, the Daily Shot and reward crates for every win
+• The Daily Shot: the same layout for everyone, fewest shots wins
+• Reward crates for every win, and a piggy bank that fills with every match
+
+CLIMB THE WEEKLY LEAGUES
+Play online to join a league of players at your level. Win the most pots by Sunday to move up, from Bronze to Diamond, and earn a crate.
 
 PROPER 8-BALL RULES
 Groups, fouls, ball in hand and break choices are all here, so a smart safety matters as much as a long pot.
