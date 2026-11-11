@@ -130,6 +130,7 @@ export const PRODUCTS = [
 ];
 
 // ------------------------------------------------------------------ run
+if (!args.includes("--products-only")) {
 const edit = await call("POST", `${API}/edits`, {});
 const E = `${API}/edits/${edit.id}`;
 console.log("edit", edit.id);
@@ -145,34 +146,48 @@ for (const [type, files] of Object.entries(IMAGES)) {
   console.log(`${type}: ${files.length} image(s)`);
 }
 if (bundle) {
-  const up = await call("POST", `${UPLOAD}/edits/${edit.id}/bundles?uploadType=media`, readFileSync(join(root, bundle)), "application/octet-stream");
+  let up;
+  try {
+    up = await call("POST", `${UPLOAD}/edits/${edit.id}/bundles?uploadType=media`, readFileSync(join(root, bundle)), "application/octet-stream");
+  } catch (e) {
+    // The same version code was committed by an earlier run: reuse it instead of failing.
+    if (!/already been used|already exists/i.test(e.message)) throw e;
+    const have = (await call("GET", `${E}/bundles`)).bundles || [];
+    up = have.sort((a, b) => b.versionCode - a.versionCode)[0];
+    console.log("bundle already on Play, reusing versionCode", up.versionCode);
+  }
   console.log("bundle versionCode", up.versionCode);
   const release = { name: "1.0.0 (" + up.versionCode + ")", versionCodes: [String(up.versionCode)], releaseNotes: [{ language: LANG, text: "First release: real-physics 8-ball, online 1v1, six city venues, daily rewards." }] };
   await call("PUT", `${E}/tracks/internal`, { track: "internal", releases: [{ ...release, status: "completed" }] });
   await call("PUT", `${E}/tracks/production`, { track: "production", releases: [{ ...release, status: "draft" }] });
   console.log("internal track live, production draft ready");
 }
-await call("POST", `${E}:commit?changesNotSentForReview=true`);
+await call("POST", `${E}:commit`);
 console.log("edit committed");
+}
 
 if (!args.includes("--skip-products")) {
+  // One-time products through the current monetization API: an upsert per product with every
+  // region priced from the USD price (Google converts and rounds), then the purchase option is
+  // activated. The legacy inappproducts endpoint refuses new apps.
+  const money = (m) => ({ currencyCode: m.currencyCode, units: m.units || "0", nanos: m.nanos || 0 });
   for (const [sku, usd, title, description] of PRODUCTS) {
+    const base = { currencyCode: "USD", units: String(Math.floor(usd)), nanos: Math.round((usd - Math.floor(usd)) * 1e9) };
+    const conv = await call("POST", `${API}/pricing:convertRegionPrices`, { price: base });
+    const regional = Object.values(conv.convertedRegionPrices || {}).map((r) => ({ regionCode: r.regionCode, price: money(r.price), availability: "AVAILABLE" }));
     const body = {
       packageName: PKG,
-      sku,
-      status: "active",
-      purchaseType: "managedUser",
-      defaultPrice: { priceMicros: String(Math.round(usd * 1e6)), currency: "USD" },
-      listings: { [LANG]: { title, description } },
-      defaultLanguage: LANG,
+      productId: sku,
+      listings: [{ languageCode: LANG, title, description }],
+      purchaseOptions: [{
+        purchaseOptionId: "buy",
+        buyOption: { legacyCompatible: true, multiQuantityEnabled: false },
+        regionalPricingAndAvailabilityConfigs: regional,
+        newRegionsConfig: { usdPrice: money(conv.convertedOtherRegionsPrice?.usdPrice || base), eurPrice: money(conv.convertedOtherRegionsPrice?.eurPrice || { currencyCode: "EUR", units: base.units, nanos: base.nanos }), availability: "AVAILABLE" },
+      }],
     };
-    try {
-      await call("POST", `${API}/inappproducts?autoConvertMissingPrices=true`, body);
-      console.log("product created", sku);
-    } catch (e) {
-      if (!/409/.test(e.message)) throw e;
-      await call("PUT", `${API}/inappproducts/${sku}?autoConvertMissingPrices=true`, body);
-      console.log("product updated", sku);
-    }
+    await call("PATCH", `${API}/onetimeproducts/${sku}?allowMissing=true&regionsVersion.version=2026/01&updateMask=listings,purchaseOptions&latencyTolerance=PRODUCT_UPDATE_LATENCY_TOLERANCE_LATENCY_TOLERANT`, body);
+    await call("POST", `${API}/oneTimeProducts/${sku}/purchaseOptions:batchUpdateStates`, { requests: [{ activatePurchaseOptionRequest: { packageName: PKG, productId: sku, purchaseOptionId: "buy", latencyTolerance: "PRODUCT_UPDATE_LATENCY_TOLERANCE_LATENCY_TOLERANT" } }] });
+    console.log("product active", sku, usd, `(${regional.length} regions)`);
   }
 }
