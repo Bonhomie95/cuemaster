@@ -219,7 +219,7 @@ if (!args.includes("--products-only")) {
       releaseNotes: [
         {
           language: LANG,
-          text: "First release: real-physics 8-ball, online 1v1, six city venues, daily rewards.",
+          text: "First release: real-physics 8-ball, online 1v1, fourteen city venues from Lagos to Monaco, daily rewards.",
         },
       ],
     };
