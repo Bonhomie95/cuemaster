@@ -1,12 +1,25 @@
 {
-  "cli": { "version": ">= 18.0.0", "appVersionSource": "remote" },
+  "cli": {
+    "version": ">= 18.0.0",
+    "appVersionSource": "remote",
+    "promptToConfigurePushNotifications": false
+  },
   "build": {
-    "preview": { "distribution": "internal", "android": { "buildType": "apk" } },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
     "beta": {
       "distribution": "store",
       "autoIncrement": true,
-      "env": { "EXPO_PUBLIC_API_URL": "https://cuemaster-api.onrender.com" },
-      "android": { "buildType": "app-bundle" }
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://cuemaster-api.onrender.com"
+      },
+      "android": {
+        "buildType": "app-bundle"
+      }
     },
     "production": {
       "distribution": "store",
@@ -15,8 +28,13 @@
         "CUEMASTER_RELEASE": "1",
         "EXPO_PUBLIC_API_URL": "https://cuemaster-api.onrender.com"
       },
-      "android": { "buildType": "app-bundle" }
+      "android": {
+        "buildType": "app-bundle"
+      }
     }
   },
-  "submit": { "production": {}, "beta": {} }
+  "submit": {
+    "production": {},
+    "beta": {}
+  }
 }

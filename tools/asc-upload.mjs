@@ -291,52 +291,71 @@ async function iaps() {
           },
         },
       });
-    // Price: the USD price point for the US, Apple fills every other territory.
-    const points = (
-      await api(
-        "GET",
-        `/v2/inAppPurchases/${iap.id}/pricePoints?filter[territory]=USA&limit=200`,
+    // Price: the USD price point for the US (the list is paged); Apple fills every other
+    // territory. A product that already has a schedule keeps it.
+    const existingSchedule = (
+      await api("GET", `/v2/inAppPurchases/${iap.id}/iapPriceSchedule`).catch(
+        () => ({ data: null }),
       )
     ).data;
-    const point = points.find(
-      (p) => Number(p.attributes.customerPrice) === usd,
-    );
-    if (!point) throw Error(`no USD price point for ${usd}`);
-    await api("POST", "/v1/inAppPurchasePriceSchedules", {
-      data: {
-        type: "inAppPurchasePriceSchedules",
-        relationships: {
-          inAppPurchase: { data: { type: "inAppPurchases", id: iap.id } },
-          baseTerritory: { data: { type: "territories", id: "USA" } },
-          manualPrices: {
-            data: [{ type: "inAppPurchasePrices", id: "${price}" }],
-          },
-        },
-      },
-      included: [
-        {
-          type: "inAppPurchasePrices",
-          id: "${price}",
-          attributes: { startDate: null },
+    let point = null;
+    for (
+      let next = `/v2/inAppPurchases/${iap.id}/pricePoints?filter[territory]=USA&limit=200`;
+      next && !point && !existingSchedule;
+    ) {
+      const page = await api("GET", next);
+      point =
+        page.data.find((p) => Number(p.attributes.customerPrice) === usd) ||
+        null;
+      next = page.links?.next
+        ? page.links.next.replace("https://api.appstoreconnect.apple.com", "")
+        : null;
+    }
+    if (!point && !existingSchedule)
+      throw Error(`no USD price point for ${usd}`);
+    if (!existingSchedule)
+      await api("POST", "/v1/inAppPurchasePriceSchedules", {
+        data: {
+          type: "inAppPurchasePriceSchedules",
           relationships: {
-            inAppPurchasePricePoint: {
-              data: { type: "inAppPurchasePricePoints", id: point.id },
+            inAppPurchase: { data: { type: "inAppPurchases", id: iap.id } },
+            baseTerritory: { data: { type: "territories", id: "USA" } },
+            manualPrices: {
+              data: [{ type: "inAppPurchasePrices", id: "${price}" }],
             },
           },
         },
-      ],
-    });
+        included: [
+          {
+            type: "inAppPurchasePrices",
+            id: "${price}",
+            attributes: { startDate: null },
+            relationships: {
+              inAppPurchasePricePoint: {
+                data: { type: "inAppPurchasePricePoints", id: point.id },
+              },
+            },
+          },
+        ],
+      });
     // Availability: everywhere, including territories Apple adds later.
-    await api("POST", "/v1/inAppPurchaseAvailabilities", {
-      data: {
-        type: "inAppPurchaseAvailabilities",
-        attributes: { availableInNewTerritories: true },
-        relationships: {
-          inAppPurchase: { data: { type: "inAppPurchases", id: iap.id } },
-          availableTerritories: { data: territories },
+    const availability = (
+      await api(
+        "GET",
+        `/v2/inAppPurchases/${iap.id}/inAppPurchaseAvailability`,
+      ).catch(() => ({ data: null }))
+    ).data;
+    if (!availability)
+      await api("POST", "/v1/inAppPurchaseAvailabilities", {
+        data: {
+          type: "inAppPurchaseAvailabilities",
+          attributes: { availableInNewTerritories: true },
+          relationships: {
+            inAppPurchase: { data: { type: "inAppPurchases", id: iap.id } },
+            availableTerritories: { data: territories },
+          },
         },
-      },
-    });
+      });
     // Review screenshot: the shop page.
     const shot = await api(
       "GET",
