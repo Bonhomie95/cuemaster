@@ -34,7 +34,19 @@
     }
   },
   "submit": {
-    "production": {},
+    "production": {
+      "ios": {
+        "ascApiKeyPath": "/Users/bonhomie/Downloads/AuthKey_NAD4C3HB42.p8",
+        "ascApiKeyId": "NAD4C3HB42",
+        "ascApiKeyIssuerId": "f71295f2-a0fd-4155-94d1-df5f2a1e26d5",
+        "appleTeamId": "59XX65426W",
+        "ascAppId": "6833168163"
+      },
+      "android": {
+        "serviceAccountKeyPath": "/Users/bonhomie/Downloads/project-4cd79ecf-00bc-44e1-a78-3d82e2721cfd.json",
+        "track": "internal"
+      }
+    },
     "beta": {}
   }
 }
