@@ -10,7 +10,10 @@ const PROJECT = "12345678-1234-1234-1234-123456789abc";
 
 test("a store build needs a public HTTPS API, an EAS project and real AdMob ids; Google sign-in is optional", () => {
   assert.throws(() => assertReleaseConfig({}, PROJECT), /EXPO_PUBLIC_API_URL/);
-  for (const url of ["http://cuemaster-api.onrender.com", "https://localhost:4000"])
+  for (const url of [
+    "http://cuemaster-api.onrender.com",
+    "https://localhost:4000",
+  ])
     assert.throws(
       () => assertReleaseConfig({ EXPO_PUBLIC_API_URL: url }, PROJECT),
       /public HTTPS/,
@@ -19,7 +22,10 @@ test("a store build needs a public HTTPS API, an EAS project and real AdMob ids;
   assert.throws(
     () =>
       assertReleaseConfig(
-        { ...API, EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: "client.apps.googleusercontent.com" },
+        {
+          ...API,
+          EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: "client.apps.googleusercontent.com",
+        },
         PROJECT,
       ),
     /both .* or neither/,
