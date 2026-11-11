@@ -31,6 +31,7 @@ function token() {
       .sign({ key, dsaEncoding: "ieee-p1363" }, "base64url")
   );
 }
+const already = (e) => /already added/i.test(e.message);
 async function api(method, path, body) {
   const r = await fetch("https://api.appstoreconnect.apple.com" + path, {
     method,
@@ -135,21 +136,13 @@ if (!has("appStoreVersion", version.id))
         appStoreVersion: { data: { type: "appStoreVersions", id: version.id } },
       },
     },
+  }).catch((e) => {
+    if (!already(e)) throw e;
   });
-for (const p of iaps.filter((p) => p.attributes.state === "READY_TO_SUBMIT"))
-  if (!has("inAppPurchaseV2", p.id))
-    await api("POST", "/v1/reviewSubmissionItems", {
-      data: {
-        type: "reviewSubmissionItems",
-        relationships: {
-          reviewSubmission: {
-            data: { type: "reviewSubmissions", id: submission.id },
-          },
-          inAppPurchaseV2: { data: { type: "inAppPurchases", id: p.id } },
-        },
-      },
-    });
-console.log("items added: version + purchases");
+// The public API cannot attach in-app purchases to a submission. For the first consumable
+// purchases, open each purchase in App Store Connect and use "Add for Review" > the draft iOS
+// submission before running this script; they then ride along with the version item.
+console.log("version item added");
 await api("PATCH", `/v1/reviewSubmissions/${submission.id}`, {
   data: {
     type: "reviewSubmissions",
