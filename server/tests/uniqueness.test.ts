@@ -5,12 +5,35 @@ import { World, drill } from "../../mobile/src/physics/engine";
 import { planCpuShot } from "../../mobile/src/game/cpu";
 import { Progress } from "../../mobile/src/game/progress";
 const base = process.env.TEST_API_URL || "http://127.0.0.1:4000";
-/** Let the planner solve a layout so the test does not hard-code shots that drift with physics. */
+/** Run `shots` on a fresh layout and return the settled table. */
+function run(
+  name: string,
+  shots: { angle: number; power: number; side: number; top: number }[],
+) {
+  const w = new World(drill(name));
+  for (const s of shots) {
+    w.strike(s.angle, s.power, s.side, s.top);
+    let n = 0;
+    while (w.active && n++ < 14400) {
+      w.tick();
+      w.events.length = 0;
+    }
+  }
+  return w;
+}
+/**
+ * Let the planner solve a layout so the test does not hard-code shots that drift with physics.
+ * The referee ends a challenge on a scratch and the daily layout changes with the date, so
+ * around the planner's idea we try spins, powers and small aim changes, and keep the first
+ * shot that leaves the cue ball on the table (preferring one that also pots a target). Spin
+ * stays inside the unit circle the referee enforces.
+ */
 function solve(name: string, targets: number[]) {
-  const w = new World(drill(name)),
-    p = new Progress(),
-    shots = [];
+  type Shot = { angle: number; power: number; side: number; top: number };
+  const p = new Progress(),
+    shots: Shot[] = [];
   for (let i = 0; i < 8; i++) {
+    const w = run(name, shots);
     const left = targets.filter(
       (id) => !w.balls.find((b) => b.id === id)!.pocketed,
     );
@@ -18,14 +41,26 @@ function solve(name: string, targets: number[]) {
     const view = w.balls.map((b) =>
       b.id && b.id !== 8 && !left.includes(b.id) ? { ...b, pocketed: true } : b,
     );
-    const shot = planCpuShot(view, p, 0.98, false, () => 0.5);
-    w.strike(shot.angle, shot.power, shot.side, shot.top);
-    shots.push(shot);
-    let n = 0;
-    while (w.active && n++ < 14400) {
-      w.tick();
-      w.events.length = 0;
-    }
+    const plan = planCpuShot(view, p, 0.98, false, () => 0.5);
+    const ideas: Shot[] = [];
+    for (const top of [0, -0.6, 0.6, -0.8])
+      for (const side of [0, 0.5, -0.5])
+        for (const scale of [1, 0.75, 0.55, 1.3])
+          for (const da of [0, 0.012, -0.012, 0.03, -0.03])
+            ideas.push({
+              angle: plan.angle + da,
+              power: Math.min(1, plan.power * scale),
+              side,
+              top,
+            });
+    let safe: Shot | undefined;
+    const pots = ideas.find((shot) => {
+      const after = run(name, [...shots, shot]);
+      if (after.balls.find((b) => b.id === 0)!.pocketed) return false;
+      safe ??= shot;
+      return left.some((id) => after.balls.find((b) => b.id === id)!.pocketed);
+    });
+    shots.push(pots ?? safe ?? ideas[0]);
   }
   return shots;
 }
