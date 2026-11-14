@@ -119,9 +119,9 @@ async function version() {
       attributes: {
         description: full,
         keywords:
-          "8ball,cue,snooker,billiard,multiplayer,friends,trick,shot,spin,offline,classic,table,stick,club",
+          "pool,cue,billiards,snooker,multiplayer,friends,trick,shot,spin,offline,daily,league,cities,physics",
         promotionalText:
-          "Start in Lagos, finish in Monaco: 8-ball with real physics, online rivals and a billion-coin table.",
+          "Fourteen landmark tables from Lagos to Monaco, a Daily Shot everyone plays on the same layout, and online racks refereed by the server. Physics built from scratch.",
         supportUrl: "https://cuemaster-api.onrender.com/legal/support",
         marketingUrl: "https://cuemaster-api.onrender.com/play",
         whatsNew: undefined,

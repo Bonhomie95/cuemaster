@@ -75,42 +75,38 @@ const LISTING = {
   title: "CueMaster: 3D Pool Billiards",
   shortDescription:
     "8-ball pool from Lagos to Monaco: win your way up to the billion-coin table.",
-  fullDescription: `Start in Lagos. Finish in Monaco. CueMaster is 3D 8-ball pool across fourteen cities, each table harder to reach than the last, up to a final table where the entry is a billion coins. Every shot behaves the way it would on the felt: draw, follow and side spin change each rebound, cushions grip, and a ball struck slightly off line rattles in the jaws.
+  fullDescription: `Start in Lagos. Finish in Monaco. CueMaster is 3D pool across fourteen real cities, each with its own table, landmark and trick shots. Coins alone do not open the next city: you have to win there first, and the climb ends at a Monaco table where the entry is a billion coins.
 
-PLAY ONLINE
-• 1v1 8-ball online: the winner takes the pot
+THE DAILY SHOT
+One layout for every player in the world each day. Fewest shots wins.
+
+FOURTEEN CITIES, ONE BILLION-COIN TABLE
+Lagos, London, Paris, Tokyo, Dubai, New York, Cape Town, Rio de Janeiro, Cairo, Mumbai, Rome, Sydney, Singapore and Monaco. Each city has its own felt, its own landmark and its own trick shots to learn.
+
+PHYSICS, NOT ANIMATION
+Every shot behaves the way it would on the felt: draw, follow and side spin change each rebound, cushions grip, and a ball struck slightly off line rattles in the jaws. Slow-motion instant replay shows exactly how your best shot went in.
+
+PLAY ONLINE, REFEREED BY THE SERVER
+• 1v1 online: the winner takes the pot, and every shot is ruled on the server, so nobody can cheat their way to a win
 • Invite a friend to a private table with a code or a link
 • Rematch, quick chat and trophies for every win
+• Weekly leagues from Bronze to Diamond: win the most pots by Sunday to move up
 
 PLAY YOUR WAY
 • House rivals that adapt to your form when you want a quick rack
 • 2-player pass & play on one phone
 • Practice drills for cut shots, spin and clearing the table, and free play offline
 
-FOURTEEN CITIES, ONE BILLION-COIN TABLE
-Lagos, London, Paris, Tokyo, Dubai, New York, Cape Town, Rio de Janeiro, Cairo, Mumbai, Rome, Sydney, Singapore and Monaco, each with its own table, landmark and trick shots. Coins are not enough: win at one city to open the next, and climb from a 250-coin entry to a billion.
-
-EVERY DAY THERE IS SOMETHING TO WIN
-• Daily login rewards, free coins every four hours and a free spin of the prize wheel
-• The Lucky Shot: stop the cue ball in the rings to win coins, rubies or a crate
-• Three daily missions and the season CueMaster Pass
-• The Daily Shot: the same layout for everyone, fewest shots wins
-• Reward crates for every win, and a piggy bank that fills with every match
-
-CLIMB THE WEEKLY LEAGUES
-Play online to join a league of players at your level. Win the most pots by Sunday to move up, from Bronze to Diamond, and earn a crate.
-
 PROPER 8-BALL RULES
 Groups, fouls, ball in hand and break choices are all here, so a smart safety matters as much as a long pot.
 
-SEE IT AGAIN
-Slow-motion instant replay shows exactly how your best shot went in.
+SOMETHING TO WIN EVERY DAY
+Daily login rewards, free coins every four hours, a free spin, the Lucky Shot at the prize rings, three daily missions, the season CueMaster Pass, a reward crate for every win and a piggy bank that fills with every match.
 
 SIMPLE CONTROLS, DEEP GAME
 Drag to aim, set spin with a touch, pull back for power. Easy to pick up, hard to master.
 
-FAIR BY DESIGN
-Every online shot is refereed by the server, so nobody can cheat their way to a win. Reward videos are always your choice, and nothing interrupts a rack.
+Reward videos are always your choice, and nothing interrupts a rack.
 
 Chalk your cue, pick a city and break.
 
