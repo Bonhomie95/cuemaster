@@ -143,6 +143,18 @@ if (!has("appStoreVersion", version.id))
 // purchases, open each purchase in App Store Connect and use "Add for Review" > the draft iOS
 // submission before running this script; they then ride along with the version item.
 console.log("version item added");
+// After a rejection the rejected item must be marked resolved (the fix is already on the
+// version: new metadata or a new build) or the submission cannot be submitted again.
+for (const item of items.filter((i) => i.attributes.state === "REJECTED")) {
+  await api("PATCH", `/v1/reviewSubmissionItems/${item.id}`, {
+    data: {
+      type: "reviewSubmissionItems",
+      id: item.id,
+      attributes: { resolved: true },
+    },
+  });
+  console.log("rejected item marked resolved", item.id);
+}
 await api("PATCH", `/v1/reviewSubmissions/${submission.id}`, {
   data: {
     type: "reviewSubmissions",
