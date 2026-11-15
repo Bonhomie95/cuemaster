@@ -677,7 +677,7 @@ app.patch("/me", required, async (req: any, res) => {
         .string()
         .regex(/^[A-Z]{2}$/)
         .or(z.literal("")),
-      avatar: z.number().int().min(0).max(1),
+      avatar: z.number().int().min(0).max(16),
     })
     .strict()
     .parse(req.body);

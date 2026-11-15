@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 import { api, flag, Player } from "./api";
-import { portraits } from "./art";
+import { AVATAR_COUNT, Avatar } from "./avatar";
 import { Press, Enter } from "./motion";
 import { celebrate } from "./feedback";
 import { redeemInvite } from "./Invite";
@@ -191,8 +191,13 @@ export default function Welcome({
                   ]}
                 />
                 <Text style={s.label}>YOUR LOOK</Text>
-                <View style={{ flexDirection: "row", gap: 10 }}>
-                  {portraits.map((p, i) => (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={{ width: 232, flexGrow: 0 }}
+                  contentContainerStyle={{ gap: 10, paddingHorizontal: 4 }}
+                >
+                  {Array.from({ length: AVATAR_COUNT }, (_, i) => (
                     <Pressable
                       key={i}
                       accessibilityRole="button"
@@ -204,10 +209,10 @@ export default function Welcome({
                         avatar === i && { borderColor: "#ffd05b" },
                       ]}
                     >
-                      <Image source={p} style={s.faceImage} />
+                      <Avatar id={i} size={62} />
                     </Pressable>
                   ))}
-                </View>
+                </ScrollView>
               </View>
             </View>
             {!!error && (

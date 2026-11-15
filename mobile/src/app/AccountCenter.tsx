@@ -12,7 +12,7 @@ import {
 import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
 import { api, Player } from "./api";
-import { portraits } from "./art";
+import { Avatar } from "./avatar";
 import { Press, Enter } from "./motion";
 type Area = "wallet" | "leaderboard" | "blocked";
 type Icon = React.ComponentProps<typeof Feather>["name"];
@@ -418,8 +418,10 @@ export default function AccountCenter({
                   >
                     #{p.rank}
                   </Text>
-                  <Image
-                    source={portraits[p.avatar] || portraits[0]}
+                  <Avatar
+                    id={p.avatar || 0}
+                    size={40}
+                    mine={p.id === player.id}
                     style={s.avatar}
                   />
                   <View style={{ flex: 1, minWidth: 120 }}>

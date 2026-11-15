@@ -3,7 +3,8 @@ import { Image, StyleSheet, Text, View } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
 import { Player, coinsShort } from "./api";
-import { portraits, icons } from "./art";
+import { icons } from "./art";
+import { Avatar } from "./avatar";
 import { Press, CountUp } from "./motion";
 
 /**
@@ -32,8 +33,10 @@ export function PlayerBadge({
       style={s.badge}
     >
       <View>
-        <Image
-          source={portraits[player.avatar % portraits.length]}
+        <Avatar
+          id={player.avatar}
+          size={40}
+          mine
           style={[s.avatar, selected && { borderColor: "#ffd05b" }]}
         />
         <View style={s.level}>

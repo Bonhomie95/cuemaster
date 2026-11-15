@@ -15,7 +15,8 @@
       "distribution": "store",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://cuemaster-api.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://cuemaster-api.onrender.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "762009450013-9nlnpj7er0afcm6202fbafbsr7l033ch.apps.googleusercontent.com"
       },
       "android": {
         "buildType": "app-bundle"
@@ -26,7 +27,8 @@
       "autoIncrement": true,
       "env": {
         "CUEMASTER_RELEASE": "1",
-        "EXPO_PUBLIC_API_URL": "https://cuemaster-api.onrender.com"
+        "EXPO_PUBLIC_API_URL": "https://cuemaster-api.onrender.com",
+        "EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID": "762009450013-9nlnpj7er0afcm6202fbafbsr7l033ch.apps.googleusercontent.com"
       },
       "android": {
         "buildType": "app-bundle"
@@ -39,7 +41,7 @@
         "ascApiKeyPath": "/Users/bonhomie/Downloads/AuthKey_NAD4C3HB42.p8",
         "ascApiKeyId": "NAD4C3HB42",
         "ascApiKeyIssuerId": "f71295f2-a0fd-4155-94d1-df5f2a1e26d5",
-        "appleTeamId": "59XX65426W",
+        "appleTeamId": "S9XX65426W",
         "ascAppId": "6833168163"
       },
       "android": {

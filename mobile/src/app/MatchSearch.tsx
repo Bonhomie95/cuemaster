@@ -16,7 +16,8 @@ import {
 } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 import { API, Player, Venue, coinsShort } from "./api";
-import { portraits, venueArt } from "./art";
+import { venueArt } from "./art";
+import { Avatar } from "./avatar";
 import { Press, Pulse, Enter } from "./motion";
 import { online } from "../game/online";
 
@@ -144,10 +145,7 @@ export default function MatchSearch({
       ) : (
         <View style={s.duel}>
           <View style={s.player}>
-            <Image
-              source={portraits[player.avatar % portraits.length]}
-              style={s.avatar}
-            />
+            <Avatar id={player.avatar} size={72} mine style={s.avatar} />
             <Text style={s.name} numberOfLines={1}>
               {player.name}
             </Text>

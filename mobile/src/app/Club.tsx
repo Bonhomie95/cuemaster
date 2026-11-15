@@ -71,7 +71,14 @@ import {
   coinsShort,
 } from "./api";
 import { signInProvider } from "./identity";
-import { welcome, entryArt, venueArt, portraits, clubRoom } from "./art";
+import { welcome, entryArt, venueArt, clubRoom } from "./art";
+import {
+  AVATAR_COUNT,
+  Avatar,
+  clearCustomAvatar,
+  pickCustomAvatar,
+  useCustomAvatar,
+} from "./avatar";
 import ProviderButton from "./ProviderButton";
 import Lobby, { IconButton } from "./Lobby";
 import TableGame, { MatchResult } from "../../TableGame";
@@ -307,6 +314,7 @@ function ClubBody() {
   const [name, setName] = useState(""),
     [country, setCountry] = useState(""),
     [avatar, setAvatar] = useState(0);
+  const customAvatar = useCustomAvatar();
   const launchRef = useRef<Launch | null>(null),
     submitted = useRef(false),
     verifying = useRef<Launch | null>(null);
@@ -1436,8 +1444,10 @@ function ClubBody() {
                   >
                     <View style={[u.feature, { flex: 1, minWidth: 240 }]}>
                       <View style={u.row}>
-                        <Image
-                          source={portraits[player.avatar]}
+                        <Avatar
+                          id={player.avatar}
+                          size={88}
+                          mine
                           style={u.profileAvatar}
                         />
                         <View>
@@ -1536,11 +1546,16 @@ function ClubBody() {
                         style={u.input}
                       />
                       <Text style={u.fieldLabel}>AVATAR</Text>
-                      <View style={u.row}>
-                        {portraits.map((p, i) => (
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        contentContainerStyle={{ gap: 14, paddingVertical: 2 }}
+                      >
+                        {Array.from({ length: AVATAR_COUNT }, (_, i) => (
                           <Pressable
                             accessibilityRole="button"
                             accessibilityLabel={`Choose avatar ${i + 1}`}
+                            accessibilityState={{ selected: avatar === i }}
                             key={i}
                             onPress={() => setAvatar(i)}
                             style={[
@@ -1548,16 +1563,40 @@ function ClubBody() {
                               avatar === i && { borderColor: "#e0be81" },
                             ]}
                           >
-                            <Image
-                              source={p}
-                              style={{
-                                width: 56,
-                                height: 56,
-                                borderRadius: 28,
-                              }}
-                            />
+                            <Avatar id={i} size={56} />
                           </Pressable>
                         ))}
+                      </ScrollView>
+                      <View
+                        style={[
+                          u.row,
+                          {
+                            alignItems: "center",
+                            flexWrap: "wrap",
+                            marginTop: 12,
+                          },
+                        ]}
+                      >
+                        {customAvatar && <Avatar id={avatar} size={56} mine />}
+                        <Action
+                          secondary
+                          label={customAvatar ? "Change photo" : "Use my photo"}
+                          disabled={busy}
+                          onPress={() =>
+                            work(async () => {
+                              if (await pickCustomAvatar())
+                                setToast("Only you see your photo.");
+                            })
+                          }
+                        />
+                        {customAvatar && (
+                          <Action
+                            secondary
+                            label="Remove photo"
+                            disabled={busy}
+                            onPress={() => work(clearCustomAvatar)}
+                          />
+                        )}
                       </View>
                       <Action
                         label="Save profile"

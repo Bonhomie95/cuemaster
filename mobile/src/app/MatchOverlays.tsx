@@ -10,7 +10,8 @@ import {
 } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
-import { portraits, icons } from "./art";
+import { icons } from "./art";
+import { Avatar } from "./avatar";
 import { flag } from "./api";
 import { Press, Enter, CountUp, Pulse } from "./motion";
 import { celebrate } from "./feedback";
@@ -92,7 +93,7 @@ export function VsIntro({
       <Text style={s.vsEyebrow}>{title}</Text>
       <View style={s.vsRow}>
         <Animated.View style={[s.vsCard, slide(-260)]}>
-          <SeatCard seat={me} accent="#24dbb3" />
+          <SeatCard mine seat={me} accent="#24dbb3" />
         </Animated.View>
         <Animated.View
           style={{
@@ -117,14 +118,19 @@ export function VsIntro({
     </Animated.View>
   );
 }
-function SeatCard({ seat, accent }: { seat: Seat; accent: string }) {
+function SeatCard({
+  seat,
+  accent,
+  mine,
+}: {
+  seat: Seat;
+  accent: string;
+  mine?: boolean;
+}) {
   return (
     <View style={{ alignItems: "center", gap: 6 }}>
       <View style={[s.vsAvatar, { borderColor: accent, shadowColor: accent }]}>
-        <Image
-          source={portraits[seat.avatar % portraits.length]}
-          style={{ width: 76, height: 76, borderRadius: 38 }}
-        />
+        <Avatar id={seat.avatar} size={76} mine={mine} />
       </View>
       <Text style={s.vsName} numberOfLines={1}>
         {seat.name} {seat.country ? flag(seat.country) : ""}
