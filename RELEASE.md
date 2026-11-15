@@ -153,42 +153,36 @@ and you run `npx eas-cli build -p ios --profile production` then `submit` again.
   Settings → License testing → add your Gmail, then buy on the testing-track build. Buy one of each kind, and close
   the app in the middle of a purchase once: it must still arrive, once.
 
-## 6. Google and Apple sign-in (optional, any time)
+## 6. Google and Apple sign-in
 
-Guest play is enough to launch: both stores accept it, and a guest keeps their progress on their
-own phone. Sign-in lets a player keep it across phones. The buttons appear by themselves once
-the server has the keys below; on iPhone, Google shows only beside Sign in with Apple, which is
-Apple's rule (4.8).
+Guest play stays: both stores accept it, and a guest keeps their progress on their own phone.
+Sign-in lets a player keep it across phones. The buttons appear by themselves once the server
+has the keys below; on iPhone, Google shows only beside Sign in with Apple, which is Apple's
+rule (4.8).
 
-**Apple (iPhone).**
+**Google: done 15 Nov.** Its own Google Cloud project `cuemaster-514818` carries the consent
+screen (app name CueMaster, external audience, published) and four OAuth clients: a web client
+(the server's audience, `GOOGLE_WEB_CLIENT_ID`), two Android clients for
+`com.bonhomie.cuemaster` (the upload key SHA-1 for builds installed by hand and the Play
+app-signing SHA-1 `F0:BA:67:…:F1:4B` for anything Play installs), and an iOS client whose
+reversed id is the `iosUrlScheme` in `app.json` and whose id is
+`EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID` in `eas.json`. Render already has `GOOGLE_CLIENT_IDS` and
+`GOOGLE_WEB_CLIENT_ID`. Build 5 lacks the iOS URL scheme, so Google on iPhone needs the build
+that followed; Android works from the Play-installed build.
+
+**Apple: one step left, yours.** Render has `APPLE_CLIENT_IDS` and `APPLE_TEAM_ID`
+(`S9XX65426W`); the capability is on the App ID and in build 5. The server also needs a Sign in
+with Apple key, which only the Account Holder can create and which Apple lets you download once:
 
 1. developer.apple.com → Certificates, Identifiers & Profiles → **Keys** → + → name
    `CueMaster Sign in with Apple` → tick **Sign in with Apple** → Configure → App ID
-   `com.bonhomie.cuemaster` → Save → Continue → Register → **Download** the `.p8` file (Apple
-   lets you download it once) and note its **Key ID**. Your **Team ID** is under Membership.
-2. Render → `cuemaster-api` → Environment, add `APPLE_CLIENT_IDS` = `com.bonhomie.cuemaster`,
-   `APPLE_TEAM_ID`, `APPLE_KEY_ID`, and `APPLE_PRIVATE_KEY` = the whole text of the `.p8` file.
-   Paste the `.p8` only into Render, never into chat or email: the server uses it to cancel a
-   player's Apple sign-in when they delete their account, which Apple requires.
-3. Nothing else: the app already asks for Sign in with Apple, and the Expo build switches the
-   capability on for the App ID.
-
-**Google (Android, and iPhone once Apple is on).**
-
-1. console.cloud.google.com → create a project `CueMaster` → APIs & Services → **OAuth consent
-   screen** → External → app name `CueMaster`, your support email, privacy policy
-   `https://cuemaster-api.onrender.com/legal/privacy` → publish it.
-2. Credentials → Create credentials → **OAuth client ID**, three times:
-   - **Web application**, name `CueMaster server`. Copy its Client ID.
-   - **Android**, package `com.bonhomie.cuemaster`, SHA-1
-     `B3:73:F3:15:79:B4:8C:94:FA:C9:9D:C4:2D:FD:B5:21:BF:DF:5D:F1` (your upload key). After the
-     first Play upload, add a second Android client with the **App signing key** SHA-1 from
-     Play Console → Test and release → App integrity: that is the key Play signs installs with.
-   - **iOS**, bundle ID `com.bonhomie.cuemaster`. Copy its Client ID and its **iOS URL scheme**.
-3. Render → Environment: `GOOGLE_CLIENT_IDS` = the web, Android and iOS client IDs separated by
-   commas, and `GOOGLE_WEB_CLIENT_ID` = the web one.
-4. Send me the iOS client ID and iOS URL scheme (they are not secret); I add them to the iPhone
-   build.
+   `com.bonhomie.cuemaster` → Save → Continue → Register → **Download** the `.p8` and note the
+   **Key ID**.
+2. Render → `cuemaster-api` → Environment: `APPLE_KEY_ID` = the key id, `APPLE_PRIVATE_KEY` =
+   the whole text of the `.p8`, and, if it is not there yet, `TOKEN_ENCRYPTION_KEY` = 64 hex
+   characters (`openssl rand -hex 32`). Paste the key only into Render, never into chat or
+   email: the server uses it to cancel a player's Apple sign-in when they delete their account,
+   which Apple requires. The Apple button appears on iPhone as soon as the redeploy finishes.
 
 ## Products
 
