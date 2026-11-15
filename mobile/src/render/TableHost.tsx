@@ -117,7 +117,12 @@ export function TableHost() {
   }, [warm, host.ready, host.error, host.compatibility, host.attempt]);
   if (!warm || host.compatibility || host.error) return null;
   return (
+    // Never flattened: with opacity 1 and pointer events "auto" the new architecture would drop
+    // this View from the native tree and re-parent the GL view under it, and expo-gl on iOS
+    // destroys its context the moment its view leaves its parent (expo/expo#37725). That showed
+    // as a table frozen on its first frame while the match played on underneath it.
     <View
+      collapsable={false}
       pointerEvents={host.active ? "auto" : "none"}
       style={[
         s.host,
