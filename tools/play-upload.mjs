@@ -2,6 +2,10 @@
 // the Play Developer API, so nothing has to be clicked through the console by hand.
 //
 //   node tools/play-upload.mjs <service-account.json> [--bundle artifacts/release/x.aab] [--skip-products]
+//   node tools/play-upload.mjs <service-account.json> --bundle x.aab --internal-only
+//
+// --internal-only puts the bundle on the internal testing track and touches nothing else, so a
+// release that is in review on production stays exactly as submitted.
 //
 // The service account must be added under Play Console → Users and permissions with access to
 // the app. Re-running is safe: listings and products are overwritten, images are replaced.
@@ -169,26 +173,13 @@ export const PRODUCTS = [
 ];
 
 // ------------------------------------------------------------------ run
+const internalOnly = args.includes("--internal-only");
+if (internalOnly && !bundle) throw Error("--internal-only needs --bundle");
 if (!args.includes("--products-only")) {
   const edit = await call("POST", `${API}/edits`, {});
   const E = `${API}/edits/${edit.id}`;
   console.log("edit", edit.id);
-  await call("PUT", `${E}/listings/${LANG}`, LISTING);
-  console.log("listing ok");
-  await call("PATCH", `${E}/details`, DETAILS);
-  console.log("details ok");
-  for (const [type, files] of Object.entries(IMAGES)) {
-    await call("DELETE", `${E}/listings/${LANG}/${type}`);
-    for (const f of files) {
-      await call(
-        "POST",
-        `${UPLOAD}/edits/${edit.id}/listings/${LANG}/${type}?uploadType=media`,
-        readFileSync(f),
-        "image/png",
-      );
-    }
-    console.log(`${type}: ${files.length} image(s)`);
-  }
+  if (!internalOnly) await pushListing(E, edit.id);
   if (bundle) {
     let up;
     try {
@@ -223,17 +214,38 @@ if (!args.includes("--products-only")) {
       track: "internal",
       releases: [{ ...release, status: "completed" }],
     });
-    await call("PUT", `${E}/tracks/production`, {
-      track: "production",
-      releases: [{ ...release, status: "draft" }],
-    });
-    console.log("internal track live, production draft ready");
+    if (internalOnly) console.log("internal track live");
+    else {
+      await call("PUT", `${E}/tracks/production`, {
+        track: "production",
+        releases: [{ ...release, status: "draft" }],
+      });
+      console.log("internal track live, production draft ready");
+    }
   }
   await call("POST", `${E}:commit`);
   console.log("edit committed");
 }
+async function pushListing(E, editId) {
+  await call("PUT", `${E}/listings/${LANG}`, LISTING);
+  console.log("listing ok");
+  await call("PATCH", `${E}/details`, DETAILS);
+  console.log("details ok");
+  for (const [type, files] of Object.entries(IMAGES)) {
+    await call("DELETE", `${E}/listings/${LANG}/${type}`);
+    for (const f of files) {
+      await call(
+        "POST",
+        `${UPLOAD}/edits/${editId}/listings/${LANG}/${type}?uploadType=media`,
+        readFileSync(f),
+        "image/png",
+      );
+    }
+    console.log(`${type}: ${files.length} image(s)`);
+  }
+}
 
-if (!args.includes("--skip-products")) {
+if (!args.includes("--skip-products") && !internalOnly) {
   // One-time products through the current monetization API: an upsert per product with every
   // region priced from the USD price (Google converts and rounds), then the purchase option is
   // activated. The legacy inappproducts endpoint refuses new apps.

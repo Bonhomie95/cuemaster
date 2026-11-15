@@ -7,6 +7,13 @@ on each service, is `docs/release/OWNER-CHECKLIST.md` in the main checkout.
 
 ## Ready now
 
+- **Android builds stay local.** `npx expo prebuild -p android --clean` then
+  `./gradlew :app:bundleRelease` (lint tasks skipped) signed with the upload key through
+  `-Pandroid.injected.signing.*`; the EAS Android keystore is *not* the Play upload key, so an
+  EAS Android build would be refused by Play. Test builds go to the internal track with
+  `node tools/play-upload.mjs <service-account.json> --bundle <aab> --internal-only`, which
+  leaves the production submission untouched. iPhone builds go through EAS (`--profile beta`
+  for TestFlight, `production` for the store); `mobile/.easignore` keeps the archive small.
 - **Android upload file:** `cuemaster-1.0.0-2-closed-test.aab` (version 1.0.0, version code 2),
   in `artifacts/release/upload/` with the store pictures. Signed with your upload key in
   `~/.cuemaster-release/`: copy that folder into your password manager, and keep the `.aab`

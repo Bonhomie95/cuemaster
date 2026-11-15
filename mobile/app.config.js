@@ -5,7 +5,7 @@ module.exports = ({ config }) => {
   const projectId =
     process.env.EAS_PROJECT_ID || config.extra?.eas?.projectId || undefined;
   if (process.env.CUEMASTER_RELEASE === "1")
-    assertReleaseConfig(process.env, projectId);
+    assertReleaseConfig(process.env, projectId, config.plugins);
   return {
     ...config,
     extra: {
@@ -31,14 +31,6 @@ module.exports = ({ config }) => {
           skAdNetworkItems: undefined,
         },
       ],
-      ...(process.env.GOOGLE_IOS_URL_SCHEME
-        ? [
-            [
-              "@react-native-google-signin/google-signin",
-              { iosUrlScheme: process.env.GOOGLE_IOS_URL_SCHEME },
-            ],
-          ]
-        : []),
     ],
   };
 };

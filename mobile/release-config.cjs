@@ -1,6 +1,6 @@
 const { usingTestIds } = require("./ads.cjs");
 /** `projectId` is the EAS project, from `EAS_PROJECT_ID` or app.json's `extra.eas.projectId`. */
-function assertReleaseConfig(env, projectId) {
+function assertReleaseConfig(env, projectId, plugins = []) {
   // The privacy, terms, support and deletion links come from the API's /config response, so the
   // server's PUBLIC_BASE_URL is their single source. Requiring copies here only created four
   // settings the owner could get wrong and the app would never read.
@@ -9,10 +9,21 @@ function assertReleaseConfig(env, projectId) {
   if (missing.length)
     throw Error("Release configuration missing: " + missing.join(", "));
   // Google sign-in is optional: the app offers it only when the server has it set up, and on
-  // iPhone only when this build carries its client id. Half a configuration is the mistake.
-  if (!env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID !== !env.GOOGLE_IOS_URL_SCHEME)
+  // iPhone only when this build carries its client id, whose reversed form must be the URL
+  // scheme app.json gives the google-signin plugin. Half a configuration is the mistake.
+  const clientId = env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.trim();
+  const scheme = plugins.find(
+    (p) =>
+      Array.isArray(p) && p[0] === "@react-native-google-signin/google-signin",
+  )?.[1]?.iosUrlScheme;
+  if (
+    clientId &&
+    scheme !==
+      "com.googleusercontent.apps." +
+        clientId.replace(/\.apps\.googleusercontent\.com$/, "")
+  )
     throw Error(
-      "Set both EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID and GOOGLE_IOS_URL_SCHEME, or neither.",
+      "app.json's google-signin iosUrlScheme must be the reversed EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID.",
     );
   for (const name of required.filter((n) => n.endsWith("_URL"))) {
     let url;

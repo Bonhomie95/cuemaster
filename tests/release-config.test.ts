@@ -19,17 +19,32 @@ test("a store build needs a public HTTPS API, an EAS project and real AdMob ids;
       /public HTTPS/,
     );
   assert.throws(() => assertReleaseConfig(API, undefined), /eas-cli init/);
+  // A Google client id needs its reversed form as the google-signin plugin's URL scheme.
+  const google = {
+    ...API,
+    EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: "123-abc.apps.googleusercontent.com",
+  };
+  const signin = (iosUrlScheme: string) => [
+    ["@react-native-google-signin/google-signin", { iosUrlScheme }],
+  ];
+  assert.throws(() => assertReleaseConfig(google, PROJECT), /iosUrlScheme/);
   assert.throws(
     () =>
       assertReleaseConfig(
-        {
-          ...API,
-          EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: "client.apps.googleusercontent.com",
-        },
+        google,
         PROJECT,
+        signin("com.googleusercontent.apps.other"),
       ),
-    /both .* or neither/,
+    /iosUrlScheme/,
   );
+  const matched = () =>
+    assertReleaseConfig(
+      google,
+      PROJECT,
+      signin("com.googleusercontent.apps.123-abc"),
+    );
+  if (usingTestIds()) assert.throws(matched, /AdMob/);
+  else assert.doesNotThrow(matched);
   // With everything else right, the remaining gate is Google's test ad units in app.json.
   if (usingTestIds())
     assert.throws(() => assertReleaseConfig(API, PROJECT), /AdMob/);
