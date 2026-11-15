@@ -104,8 +104,12 @@ it today. An organization account (registered with a D-U-N-S number) skips that 
    later, use the same command. The `beta` profile keeps Google's test adverts, which is right
    for TestFlight; the build you send to App Review uses `--profile production`, after your
    AdMob IDs are in the app.
-4. **TestFlight:** your app → TestFlight → Internal Testing → + → add yourself → install the
-   TestFlight app on your iPhone → open the invite → install CueMaster.
+4. **TestFlight:** done 15 Nov. The internal group **CueMaster team** receives every processed
+   build automatically and the account holder is invited; install the TestFlight app on the
+   iPhone, sign in with the team Apple account, open the invite email, install CueMaster. To add
+   a colleague: Users and Access → add them to the team first, then TestFlight → Internal Testing
+   → CueMaster team → +. Outside testers need an external group (public link) and Beta App
+   Review, which is separate from App Review.
 5. **In-app purchases:** your app → Monetization → In-App Purchases → + → type **Consumable** →
    reference name → product ID from the table → Create → price → App Store localization
    (display name and description) → review screenshot (any picture of the shop) → Save. All 12
@@ -144,9 +148,9 @@ and you run `npx eas-cli build -p ios --profile production` then `submit` again.
 - **Both:** Render → Environment → `STORE_BILLING` = `ios,android` (or only the one that is
   ready). The starter pack, the pass's unlock button and the shop's packs then appear on that
   platform with no app update.
-- **Test with fake money first:** iOS: App Store Connect → Users and Access → Sandbox → add a
-  sandbox tester, then buy on the TestFlight build. Android: Play Console → Settings → License
-  testing → add your Gmail, then buy on the testing-track build. Buy one of each kind, and close
+- **Test with fake money first:** iOS: buy on the TestFlight build; TestFlight purchases are
+  sandbox purchases, nothing is charged and no sandbox tester is needed. Android: Play Console →
+  Settings → License testing → add your Gmail, then buy on the testing-track build. Buy one of each kind, and close
   the app in the middle of a purchase once: it must still arrive, once.
 
 ## 6. Google and Apple sign-in (optional, any time)
