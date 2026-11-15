@@ -13,7 +13,7 @@ on each service, is `docs/release/OWNER-CHECKLIST.md` in the main checkout.
   EAS Android build would be refused by Play. Test builds go to the internal track with
   `node tools/play-upload.mjs <service-account.json> --bundle <aab> --internal-only`, which
   leaves the production submission untouched. iPhone builds go through EAS (`--profile beta`
-  for TestFlight, `production` for the store); `mobile/.easignore` keeps the archive small.
+  for TestFlight, `production` for the store); the repo-root `.easignore` keeps the archive small (the desktop app's `.claude/` folder alone is gigabytes).
 - **Android upload file:** `cuemaster-1.0.0-2-closed-test.aab` (version 1.0.0, version code 2),
   in `artifacts/release/upload/` with the store pictures. Signed with your upload key in
   `~/.cuemaster-release/`: copy that folder into your password manager, and keep the `.aab`

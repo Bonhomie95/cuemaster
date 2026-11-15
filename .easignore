@@ -1,0 +1,17 @@
+# What EAS Build needs is the app source and its sibling packages; everything else below is
+# generated, local-only or history (the archive was 3 GB without this, and the upload failed).
+.claude/
+.data/
+.tmpview/
+.git/
+artifacts/
+docs/
+mobile/node_modules/
+mobile/android/
+mobile/ios/
+mobile/.expo/
+mobile/.env
+server/node_modules/
+server/.env
+**/*.blend
+**/*.blend1
