@@ -14,6 +14,13 @@ on each service, is `docs/release/OWNER-CHECKLIST.md` in the main checkout.
   `node tools/play-upload.mjs <service-account.json> --bundle <aab> --internal-only`, which
   leaves the production submission untouched. iPhone builds go through EAS (`--profile beta`
   for TestFlight, `production` for the store); the repo-root `.easignore` keeps the archive small (the desktop app's `.claude/` folder alone is gigabytes).
+  When the free plan's monthly iOS builds are used up (it says so after the upload; the count
+  resets on the 1st), build on this Mac instead, free, with the same signing:
+  `npx eas-cli build -p ios --profile beta --local --non-interactive --output cuemaster.ipa`
+  with `LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8` and `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`
+  (needs `brew install fastlane`; if `pod --version` then fails, `brew reinstall cocoapods`), then
+  `npx eas-cli submit -p ios --profile production --path cuemaster.ipa --non-interactive`.
+  Build 10 (15 Nov) went up this way.
 - **Android upload file:** `cuemaster-1.0.0-2-closed-test.aab` (version 1.0.0, version code 2),
   in `artifacts/release/upload/` with the store pictures. Signed with your upload key in
   `~/.cuemaster-release/`: copy that folder into your password manager, and keep the `.aab`
