@@ -44,6 +44,38 @@ type Prepared = {
 };
 let prepared: Prepared | null = null;
 let preparing = "";
+/**
+ * Players in the EEA, the UK and Switzerland must be asked through AdMob's own consent form
+ * (Google's EU user consent policy); anywhere else the form never appears. Resolved once per app
+ * run, before the first ticket is drawn. When the check itself fails (offline, no message
+ * published yet) the SDK's last recorded answer decides, and the next prepare asks again.
+ */
+let consent: Promise<boolean> | null = null;
+const consented = (ads: typeof import("react-native-google-mobile-ads")) =>
+  (consent ??= (async () => {
+    try {
+      return (await ads.AdsConsent.gatherConsent()).canRequestAds;
+    } catch {
+      consent = null;
+      const last = await ads.AdsConsent.getConsentInfo().catch(() => null);
+      return last?.canRequestAds ?? true;
+    }
+  })());
+/** True when the consent rules require an in-app way to change the choice (shown in Profile). */
+export async function adPrivacyOptionsRequired() {
+  if (Platform.OS === "web" || !unit()) return false;
+  try {
+    const ads = await import("react-native-google-mobile-ads");
+    const info = await ads.AdsConsent.getConsentInfo();
+    return (info.privacyOptionsRequirementStatus as string) === "REQUIRED";
+  } catch {
+    return false;
+  }
+}
+export async function showAdPrivacyOptions() {
+  const ads = await import("react-native-google-mobile-ads");
+  await ads.AdsConsent.showPrivacyOptionsForm().catch(() => {});
+}
 const listeners = new Set<() => void>();
 const changed = () => listeners.forEach((l) => l());
 const ready = (key: string) =>
@@ -57,6 +89,7 @@ async function prepare(target: RewardFor) {
   preparing = key;
   try {
     const ads = await import("react-native-google-mobile-ads");
+    if (!(await consented(ads))) return;
     const { ticket, clientRedeem } = await api(
       "/ads/reward-ticket",
       "POST",

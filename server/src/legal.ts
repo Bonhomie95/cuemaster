@@ -205,4 +205,12 @@ export function installLegal(app: Express) {
   );
   app.get("/legal/odds", (_q, res) => html(res, page("Reward odds", ODDS())));
   app.get("/legal", (_q, res) => res.redirect(302, "/legal/privacy"));
+  // AdMob reads app-ads.txt from the developer website on the store listings, which is this
+  // host; the line is the account's publisher id (the same one bonhomieinc.dev publishes).
+  app.get("/app-ads.txt", (_q, res) =>
+    res
+      .type("text/plain")
+      .set("Cache-Control", "public, max-age=86400")
+      .send("google.com, pub-7361370703216043, DIRECT, f08c47fec0942fa0\n"),
+  );
 }

@@ -1,6 +1,7 @@
 import AccountCenter from "./AccountCenter";
 import { warmTextures } from "../render/textures";
 import { TableHost } from "../render/TableHost";
+import { adPrivacyOptionsRequired, showAdPrivacyOptions } from "./ads";
 import Rewards from "./Rewards";
 import Welcome from "./Welcome";
 import InviteCard from "./Invite";
@@ -303,7 +304,11 @@ function ClubBody() {
     [rules, setRules] = useState(false),
     [locked, setLocked] = useState<Venue | null>(null),
     [deleting, setDeleting] = useState(false),
+    [adPrivacy, setAdPrivacy] = useState(false),
     [deleteText, setDeleteText] = useState("");
+  useEffect(() => {
+    if (page === "profile") void adPrivacyOptionsRequired().then(setAdPrivacy);
+  }, [page]);
   const [verificationError, setVerificationError] = useState("");
   /** A brand-new guest picks a name and flag before anyone else sees "Rookie". */
   const [naming, setNaming] = useState(false);
@@ -1735,6 +1740,13 @@ function ClubBody() {
                       label="Terms of service"
                       url={config.urls?.terms}
                     />
+                    {adPrivacy && (
+                      <NavRow
+                        icon="sliders"
+                        label="Ad privacy options"
+                        onPress={() => void showAdPrivacyOptions()}
+                      />
+                    )}
                     <NavRow
                       icon="life-buoy"
                       label="Support"
