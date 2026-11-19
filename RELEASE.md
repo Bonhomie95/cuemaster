@@ -21,6 +21,15 @@ on each service, is `docs/release/OWNER-CHECKLIST.md` in the main checkout.
   (needs `brew install fastlane`; if `pod --version` then fails, `brew reinstall cocoapods`), then
   `npx eas-cli submit -p ios --profile production --path cuemaster.ipa --non-interactive`.
   Build 10 (15 Nov) went up this way.
+- **Play rejection of 16 Nov (fixed):** "Misleading Claims: app store listing mismatch" because the
+  Android launcher icon was still Expo's default blue chevron while the listing shows the CueMaster
+  card. The adaptive icon layers in `mobile/assets/android-icon-*.png` now come from the same
+  artwork as `artifacts/store-listing/icon-512.png`; version code 4 carries the fix. Before any Play
+  upload, check `base/res/mipmap-xxxhdpi-v4/ic_launcher_foreground.webp` inside the bundle.
+- **Ad consent:** the app asks AdMob's consent form first (`gatherConsent`) and shows "Ad privacy
+  options" in Profile when the rules require it; the AdMob message "WordWar EU consent" covers
+  CueMaster's two apps. The API serves `/app-ads.txt` for AdMob's crawler. AdMob keeps both apps on
+  "Limited ad serving" until the store listings are live: then Apps → CueMaster → Add store.
 - **Android upload file:** `cuemaster-1.0.0-2-closed-test.aab` (version 1.0.0, version code 2),
   in `artifacts/release/upload/` with the store pictures. Signed with your upload key in
   `~/.cuemaster-release/`: copy that folder into your password manager, and keep the `.aab`
