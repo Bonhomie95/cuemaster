@@ -272,6 +272,36 @@ export class Session {
     if (this.remote && a.t !== "timeout") this.localSeq++;
     this.onAction?.(a);
   }
+  /**
+   * Rebuild an unfinished rack from its recorded actions: the same deterministic replay the
+   * referee runs, on this table, so a match survives the app being closed. The clock stands
+   * still while catching up, and the action log comes out identical to the one recorded.
+   */
+  restore(actions: Action[]) {
+    const now = this.now,
+      onAction = this.onAction;
+    this.now = () => 0;
+    this.onAction = null;
+    this.actions = [];
+    const settle = () => {
+      let n = 0;
+      while ((this.running || this.cpuTurn) && n++ < 20000) this.update(0.1);
+    };
+    try {
+      for (const a of actions) {
+        settle();
+        if (this.progress.finished) break;
+        perform(this, a);
+      }
+      settle();
+    } finally {
+      this.now = now;
+      this.onAction = onAction;
+      this.snapDrops = true;
+      this.resetTurnClock();
+      this.notify();
+    }
+  }
   /** Leave online mode; called when a match ends or the player leaves the table. */
   endOnline() {
     this.remote = null;

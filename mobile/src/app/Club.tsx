@@ -2,6 +2,7 @@ import AccountCenter from "./AccountCenter";
 import { warmTextures } from "../render/textures";
 import { TableHost } from "../render/TableHost";
 import { adPrivacyOptionsRequired, showAdPrivacyOptions } from "./ads";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import Rewards from "./Rewards";
 import Welcome from "./Welcome";
 import InviteCard from "./Invite";
@@ -83,7 +84,7 @@ import {
 import ProviderButton from "./ProviderButton";
 import Lobby, { IconButton } from "./Lobby";
 import TableGame, { MatchResult } from "../../TableGame";
-import { session } from "../game/session";
+import { session, seededRandom } from "../game/session";
 import type { LeaderReplay } from "./api";
 void SplashScreen.preventAutoHideAsync().catch(() => {});
 /** The least time the entry screen shows, so its art registers before the club opens. */
@@ -128,7 +129,11 @@ type Launch = {
   matchId?: string;
   opponent?: CpuOpponent;
   venue?: Venue;
+  /** The rival's dice for a house match; the referee replays the rack from the same seed. */
+  seed?: number;
 };
+/** Where an open house or pass-and-play rack keeps its shot record on this phone. */
+const rackKey = (matchId: string) => "localMatch." + matchId;
 const money = (n: number) => coinsShort(n, 1_000_000);
 function Action({
   label,
@@ -557,9 +562,23 @@ function ClubBody() {
     retryVerification.current = null;
     session.cpu = l.opponent || null;
     session.matchRules = l.kind === "local";
+    // Without the match seed the rival plays its own game here and the referee's replay cannot
+    // follow the recorded shots, so a won rack would never verify.
+    session.rng = l.seed === undefined ? Math.random : seededRandom(l.seed);
     session.cueIds = [player?.selectedCue || "club", "club"];
     session.skin = v.skin;
     session.reset(l.drill);
+    if (l.kind === "local" && l.matchId) {
+      // Every action goes to the phone's storage, so an open rack can be rebuilt after the app
+      // is closed (see resumeLocal).
+      const key = rackKey(l.matchId);
+      const keep = () =>
+        void AsyncStorage.setItem(key, JSON.stringify(session.actions)).catch(
+          () => {},
+        );
+      session.onAction = keep;
+      keep();
+    }
     launchRef.current = l;
     submitted.current = false;
     setSearch(null);
@@ -570,9 +589,13 @@ function ClubBody() {
     work(async () => {
       const active = await api("/local-matches/active");
       if (active) {
-        // Reloaded racks cannot be restored yet. Show a recoverable forfeit choice.
+        // The rack is rebuilt from the shot record this phone kept; without one (another phone,
+        // a reinstall) the only way out is to quit it.
+        const kept = await AsyncStorage.getItem(rackKey(active.id)).catch(
+          () => null,
+        );
         setSearch(null);
-        setAbandoned(active);
+        setAbandoned({ ...active, actions: kept ? JSON.parse(kept) : null });
         return;
       }
       if (entryRequest.current?.venueId !== v.id)
@@ -591,9 +614,37 @@ function ClubBody() {
           matchId: result.match.id,
           venue: v,
           opponent: result.match.opponent,
+          seed: result.match.seed,
         },
         v,
       );
+    });
+  /** Reopen the rack the server still holds for this player, exactly where it was left. */
+  const resumeLocal = (m: any) =>
+    work(async () => {
+      const v = catalog?.venues.find((x) => x.id === m.venueId);
+      if (!v) throw new Error("That venue is no longer available.");
+      openGame(
+        {
+          kind: "local",
+          drill: "break",
+          matchId: m.id,
+          venue: v,
+          opponent: m.opponent || undefined,
+          seed: m.seed,
+        },
+        v,
+      );
+      try {
+        session.restore(m.actions || []);
+      } catch {
+        leaveGame();
+        throw new Error(
+          "That rack could not be rebuilt. Quit it to start fresh.",
+        );
+      }
+      setAbandoned(null);
+      entryRequest.current = null;
     });
   const [search, setSearch] = useState<{
     venue: Venue | null;
@@ -668,6 +719,7 @@ function ClubBody() {
         throw e;
       }
       setPlayer(r.player);
+      void AsyncStorage.removeItem(rackKey(launch.matchId)).catch(() => {});
       if (winner === null) {
         setToast("Match forfeited.");
         leaveGame();
@@ -1782,12 +1834,24 @@ function ClubBody() {
           <View style={u.scrim}>
             <View style={[u.eventModal, u.dialog]}>
               <Text style={u.modalTitle}>Rack still open</Text>
-              <Text style={u.body}>Quitting it counts as a loss.</Text>
-              <Action
-                label="Keep it open"
-                secondary
-                onPress={() => setAbandoned(null)}
-              />
+              <Text style={u.body}>
+                {abandoned?.actions
+                  ? "Pick it up where you left it. Quitting counts as a loss."
+                  : "This phone has no record of it. Quitting counts as a loss."}
+              </Text>
+              {abandoned?.actions ? (
+                <Action
+                  label="Continue"
+                  disabled={busy}
+                  onPress={() => resumeLocal(abandoned)}
+                />
+              ) : (
+                <Action
+                  label="Keep it open"
+                  secondary
+                  onPress={() => setAbandoned(null)}
+                />
+              )}
               <Action
                 label="Quit it"
                 disabled={busy}
@@ -1799,6 +1863,9 @@ function ClubBody() {
                       { outcome: "forfeit" },
                     );
                     setPlayer(r.player);
+                    void AsyncStorage.removeItem(rackKey(abandoned.id)).catch(
+                      () => {},
+                    );
                     setAbandoned(null);
                     entryRequest.current = null;
                   })

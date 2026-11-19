@@ -892,6 +892,17 @@ export function Scene({
         session.shoot();
       }
     }
+    // A GL context that was torn down under the view (expo/expo#37725) answers nothing here
+    // while JS keeps drawing into the void: this is how a frozen table is told from a slow one.
+    if (__DEV__ && Platform.OS !== "web" && checkFrames.current % 20 === 0) {
+      const ctx = gl.getContext();
+      console.info(
+        "CueMaster gl alive",
+        ctx.getParameter(ctx.VERSION) ? "yes" : "NO",
+        "frame",
+        checkFrames.current,
+      );
+    }
     if (
       (__DEV__ || process.env.EXPO_PUBLIC_NATIVE_BENCHMARK === "1") &&
       Platform.OS !== "web" &&

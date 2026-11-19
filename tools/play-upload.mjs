@@ -223,8 +223,10 @@ if (!args.includes("--products-only")) {
       console.log("internal track live, production draft ready");
     }
   }
-  await call("POST", `${E}:commit`);
-  console.log("edit committed");
+  // Once a submission has been reviewed (or rejected), Play refuses to send further changes for
+  // review by API: commit them unsent and press "Send changes for review" in the Console.
+  await call("POST", `${E}:commit?changesNotSentForReview=true`);
+  console.log("edit committed (send for review from the Console)");
 }
 async function pushListing(E, editId) {
   await call("PUT", `${E}/listings/${LANG}`, LISTING);
