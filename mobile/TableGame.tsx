@@ -27,9 +27,7 @@ import {
   TextInput,
   LayoutChangeEvent,
 } from "react-native";
-import {
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import Feather from "@expo/vector-icons/Feather";
 import { StatusBar } from "expo-status-bar";
