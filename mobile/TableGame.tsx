@@ -28,7 +28,6 @@ import {
   LayoutChangeEvent,
 } from "react-native";
 import {
-  SafeAreaProvider,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
@@ -402,11 +401,7 @@ type TableProps = {
   onPlayAgain?: () => void;
 };
 export default function TableGame(props: TableProps) {
-  return (
-    <SafeAreaProvider>
-      <Game {...props} />
-    </SafeAreaProvider>
-  );
+  return <Game {...props} />;
 }
 function Avatar({
   opponent = false,

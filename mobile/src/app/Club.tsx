@@ -974,7 +974,7 @@ function ClubBody() {
     );
   if (launch && player)
     return (
-      <View style={{ flex: 1 }}>
+      <View style={{ flex: 1 }} pointerEvents="box-none">
         <TableGame
           onExit={
             launch.kind === "online"

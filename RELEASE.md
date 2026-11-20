@@ -30,6 +30,15 @@ on each service, is `docs/release/OWNER-CHECKLIST.md` in the main checkout.
   rebuilt from the shot record the phone keeps (`Session.restore`, the referee's own replay), so
   "Rack still open" now offers Continue; and the club finally seeds the rival from the match
   (`session.rng = seededRandom(match.seed)`), without which no house-rival win could ever verify.
+- **Touches never reached the table on phones (fixed 20 Nov, version code 6 / iPhone build 12):** the game
+  screen wrapped itself in a second `SafeAreaProvider`, whose native view is full-screen and takes
+  touches by default (Android ignores `pointerEvents` on it), and the club wrapped that in a plain
+  full-screen `View`. Every tap or drag that missed a HUD control stopped there, so tap-to-aim and the
+  break's ball-in-hand drag never worked on Android or iOS, from the first commit on. The nested
+  provider is gone (Club's own one supplies the insets) and the wrapper is `pointerEvents="box-none"`.
+  Verified on the Android emulator: tap or drag places the cue ball anywhere behind the head string,
+  and a drag past the line stops at the line. Any new full-screen view above the table must be
+  `box-none`.
 - **Ad consent:** the app asks AdMob's consent form first (`gatherConsent`) and shows "Ad privacy
   options" in Profile when the rules require it; the AdMob message "WordWar EU consent" covers
   CueMaster's two apps. The API serves `/app-ads.txt` for AdMob's crawler. AdMob keeps both apps on
