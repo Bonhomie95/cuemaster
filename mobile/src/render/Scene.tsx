@@ -22,6 +22,7 @@ import {
   floorTexture,
 } from "./textures";
 const spinQ = new T.Quaternion();
+const BALL_IDS = Array.from({ length: 16 }, (_, i) => i);
 function SurfaceMaterial(props: ThreeElements["meshStandardMaterial"]) {
   if (Platform.OS === "web") return <meshStandardMaterial {...props} />;
   // Phong keeps wood/metal highlights without the costly PBR shader on EXGL's
@@ -308,11 +309,13 @@ function Balls() {
       for (const b of session.world.balls)
         if (b.pocketed) drops.current[b.id] = 0.5;
     }
+    const seen = new Set<number>();
     for (let i = 0; i < session.world.balls.length; i++) {
       const b = session.world.balls[i],
         m = meshes.current[b.id],
         shadow = shadows.current[b.id],
         contact = contacts.current[b.id];
+      seen.add(b.id);
       if (!m) continue;
       const old = session.previous.find((p) => p.id === b.id) || b,
         a = session.running ? session.alpha : 1;
@@ -349,79 +352,95 @@ function Balls() {
         shadow.position.set(x + R * 0.42, 0.00085, z + R * 0.5);
       }
     }
+    // Balls that left the table with a drill switch keep their meshes but must not linger.
+    for (let id = 0; id < 16; id++)
+      if (!seen.has(id))
+        for (const list of [meshes, shadows, contacts]) {
+          const m = list.current[id];
+          if (m) m.visible = false;
+        }
   });
   return (
     <group>
-      {session.world.balls.map((b) => (
-        <React.Fragment key={b.id}>
-          <mesh
-            ref={(m) => {
-              meshes.current[b.id] = m;
-            }}
-            position={[b.x, R, b.z]}
-            rotation={[Math.PI / 2, 0.15, 0]}
-          >
-            <sphereGeometry
-              args={[
-                // Drawn 10% over size for readability on a phone; the physics radius is unchanged.
-                R * BALL_DRAW,
-                Platform.OS === "web" ? 48 : 24,
-                Platform.OS === "web" ? 32 : 16,
-              ]}
-            />
-            {Platform.OS === "web" ? (
-              <meshPhysicalMaterial
-                map={ballTexture(b.id)}
-                roughness={0.22}
-                metalness={0}
-                clearcoat={1}
-                clearcoatRoughness={0.04}
-                envMapIntensity={1.1}
+      {BALL_IDS.map((id) => {
+        // Every id keeps a mesh: the rack changes under this component without a re-render (a
+        // drill switch, a new match), and a ball without a mesh is simply never drawn.
+        const b = session.world.balls.find((x) => x.id === id) ?? {
+          id,
+          x: 0,
+          z: 0,
+        };
+        return (
+          <React.Fragment key={b.id}>
+            <mesh
+              ref={(m) => {
+                meshes.current[b.id] = m;
+              }}
+              position={[b.x, R, b.z]}
+              rotation={[Math.PI / 2, 0.15, 0]}
+            >
+              <sphereGeometry
+                args={[
+                  // Drawn 10% over size for readability on a phone; the physics radius is unchanged.
+                  R * BALL_DRAW,
+                  Platform.OS === "web" ? 48 : 24,
+                  Platform.OS === "web" ? 32 : 16,
+                ]}
               />
-            ) : (
-              <meshPhongMaterial
-                map={ballTexture(b.id)}
-                shininess={65}
-                specular="#fff4dc"
+              {Platform.OS === "web" ? (
+                <meshPhysicalMaterial
+                  map={ballTexture(b.id)}
+                  roughness={0.22}
+                  metalness={0}
+                  clearcoat={1}
+                  clearcoatRoughness={0.04}
+                  envMapIntensity={1.1}
+                />
+              ) : (
+                <meshPhongMaterial
+                  map={ballTexture(b.id)}
+                  shininess={65}
+                  specular="#fff4dc"
+                />
+              )}
+            </mesh>
+            <mesh
+              ref={(m) => {
+                shadows.current[b.id] = m;
+              }}
+              renderOrder={2}
+              rotation={[-Math.PI / 2, 0, 0]}
+              position={[b.x, 0.00085, b.z]}
+            >
+              <planeGeometry args={[R * 3.1, R * 3.1]} />
+              <meshBasicMaterial
+                map={contactShadow}
+                color="#ffffff"
+                transparent
+                opacity={0.8}
+                depthWrite={false}
               />
-            )}
-          </mesh>
-          <mesh
-            ref={(m) => {
-              shadows.current[b.id] = m;
-            }}
-            renderOrder={2}
-            rotation={[-Math.PI / 2, 0, 0]}
-            position={[b.x, 0.00085, b.z]}
-          >
-            <planeGeometry args={[R * 3.1, R * 3.1]} />
-            <meshBasicMaterial
-              map={contactShadow}
-              color="#ffffff"
-              transparent
-              opacity={0.8}
-              depthWrite={false}
-            />
-          </mesh>
-          <mesh
-            ref={(m) => {
-              contacts.current[b.id] = m;
-            }}
-            renderOrder={3}
-            rotation={[-Math.PI / 2, 0, 0]}
-            position={[b.x, 0.0009, b.z]}
-          >
-            <planeGeometry args={[R * 1.9, R * 1.9]} />
-            <meshBasicMaterial
-              map={contactShadow}
-              color="#ffffff"
-              transparent
-              opacity={1}
-              depthWrite={false}
-            />
-          </mesh>
-        </React.Fragment>
-      ))}
+            </mesh>
+            <mesh
+              ref={(m) => {
+                contacts.current[b.id] = m;
+              }}
+              renderOrder={3}
+              rotation={[-Math.PI / 2, 0, 0]}
+              position={[b.x, 0.0009, b.z]}
+            >
+              <planeGeometry args={[R * 1.9, R * 1.9]} />
+              <meshBasicMaterial
+                map={contactShadow}
+                color="#ffffff"
+                transparent
+                opacity={1}
+                depthWrite={false}
+              />
+            </mesh>
+          </React.Fragment>
+        );
+      })}
     </group>
   );
 }

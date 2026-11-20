@@ -39,6 +39,19 @@ on each service, is `docs/release/OWNER-CHECKLIST.md` in the main checkout.
   Verified on the Android emulator: tap or drag places the cue ball anywhere behind the head string,
   and a drag past the line stops at the line. Any new full-screen view above the table must be
   `box-none`.
+- **Online match interrupted by "Your result is waiting" (fixed 20 Nov, version code 7 / iPhone build
+  13):** the challenge-result watcher in Club skipped free, house and lucky racks but not online ones,
+  so the first pocketed ball of an online match posted a bogus practice result (400 "Please check the
+  supplied fields") and the dialog covered the table. Online racks are skipped now.
+- **Invisible balls (same builds):** the 3D ball meshes were created from whatever rack the scene last
+  rendered with, and the scene only re-renders when the table is shown or hidden. A rack change
+  underneath it (a drill switch, "New full rack", a match after a drill) left balls without a mesh,
+  simulated but never drawn, and a smaller drill left stale balls on the cloth. The forbidden marker
+  on "your own" ball was the same fault: the aim line was hitting an undrawn ball in front of it.
+  Every ball id now keeps a mesh for the life of the scene and ids missing from the rack are hidden.
+  Verified on the emulator (two-ball drill, then New full rack shows all sixteen). To debug online
+  sync without a phone, `npx tsx ../tools/online-probe.mts` from `mobile/` plays a live match the
+  way the app does and prints every server state that disagrees.
 - **Ad consent:** the app asks AdMob's consent form first (`gatherConsent`) and shows "Ad privacy
   options" in Profile when the rules require it; the AdMob message "WordWar EU consent" covers
   CueMaster's two apps. The API serves `/app-ads.txt` for AdMob's crawler. AdMob keeps both apps on

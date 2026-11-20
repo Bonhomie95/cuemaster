@@ -225,8 +225,16 @@ if (!args.includes("--products-only")) {
   }
   // Once a submission has been reviewed (or rejected), Play refuses to send further changes for
   // review by API: commit them unsent and press "Send changes for review" in the Console.
-  await call("POST", `${E}:commit?changesNotSentForReview=true`);
-  console.log("edit committed (send for review from the Console)");
+  // While a review is already running, Play insists the opposite way round: the commit itself
+  // sends the changes for review and the flag is refused.
+  try {
+    await call("POST", `${E}:commit?changesNotSentForReview=true`);
+    console.log("edit committed (send for review from the Console)");
+  } catch (e) {
+    if (!/must not be set/.test(e.message)) throw e;
+    await call("POST", `${E}:commit`);
+    console.log("edit committed and sent for review");
+  }
 }
 async function pushListing(E, editId) {
   await call("PUT", `${E}/listings/${LANG}`, LISTING);

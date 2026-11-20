@@ -422,6 +422,7 @@ function ClubBody() {
           l.kind === "free" ||
           l.kind === "local" ||
           l.kind === "lucky" ||
+          l.kind === "online" ||
           session.running ||
           !session.shots ||
           submitted.current ||
