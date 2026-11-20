@@ -26,6 +26,10 @@ on each service, is `docs/release/OWNER-CHECKLIST.md` in the main checkout.
   card. The adaptive icon layers in `mobile/assets/android-icon-*.png` now come from the same
   artwork as `artifacts/store-listing/icon-512.png`; version code 4 carries the fix. Before any Play
   upload, check `base/res/mipmap-xxxhdpi-v4/ic_launcher_foreground.webp` inside the bundle.
+- **House matches resume and verify (19 Nov, version code 5 / iPhone build 11):** an open rack is
+  rebuilt from the shot record the phone keeps (`Session.restore`, the referee's own replay), so
+  "Rack still open" now offers Continue; and the club finally seeds the rival from the match
+  (`session.rng = seededRandom(match.seed)`), without which no house-rival win could ever verify.
 - **Ad consent:** the app asks AdMob's consent form first (`gatherConsent`) and shows "Ad privacy
   options" in Profile when the rules require it; the AdMob message "WordWar EU consent" covers
   CueMaster's two apps. The API serves `/app-ads.txt` for AdMob's crawler. AdMob keeps both apps on
