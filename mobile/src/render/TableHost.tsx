@@ -33,6 +33,11 @@ const state: HostState = ((globalThis as any).__cmTableHost ??= {
   attempt: 0,
   listeners: new Set<() => void>(),
 });
+// Development only: EXPO_PUBLIC_CM_COMPAT_OS=ios (or android) starts that platform on the 2D
+// table. The iOS simulator draws OpenGL ES in software at well under a frame a second, and the
+// physics only advances inside frames, so simulator matches need the 2D table to run in real time.
+if (__DEV__ && process.env.EXPO_PUBLIC_CM_COMPAT_OS === Platform.OS)
+  state.compatibility = true;
 const notify = () => state.listeners.forEach((l) => l());
 export const tableHost = {
   subscribe(l: () => void) {

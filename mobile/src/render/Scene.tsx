@@ -12,6 +12,7 @@ import {
 import * as T from "three";
 import meshData from "../../assets/models/table-mesh.json";
 import { session, skins } from "../game/session";
+import { groupOf } from "../game/progress";
 import { R, H, W, LUCKY } from "../physics/engine";
 import {
   luckyColors,
@@ -22,6 +23,8 @@ import {
   floorTexture,
 } from "./textures";
 const spinQ = new T.Quaternion();
+// Development only: tags the session's diagnostic lines with the device they came from.
+if (__DEV__) (globalThis as any).__cmTag = Platform.OS;
 const BALL_IDS = Array.from({ length: 16 }, (_, i) => i);
 function SurfaceMaterial(props: ThreeElements["meshStandardMaterial"]) {
   if (Platform.OS === "web") return <meshStandardMaterial {...props} />;
@@ -302,6 +305,7 @@ function Balls() {
     contacts = useRef<(T.Mesh | null)[]>([]),
     shadows = useRef<(T.Mesh | null)[]>([]);
   const drops = useRef<number[]>(Array(16).fill(0));
+  const meshCheck = useRef({ tick: 0, last: "" });
   useFrame((_, dt) => {
     if (session.snapDrops) {
       // Returning from a replay: balls already down stay down instead of falling again.
@@ -359,6 +363,26 @@ function Balls() {
           const m = list.current[id];
           if (m) m.visible = false;
         }
+    if (__DEV__ && ++meshCheck.current.tick % 60 === 0) {
+      const problems: string[] = [];
+      for (let id = 0; id < 16; id++) {
+        const b = session.world.balls.find((x) => x.id === id),
+          m = meshes.current[id];
+        if (b && !b.pocketed) {
+          if (!m) problems.push(`${id}:nomesh`);
+          else if (!m.visible) problems.push(`${id}:hidden`);
+          else if (
+            ![m.position.x, m.position.y, m.position.z].every(Number.isFinite)
+          )
+            problems.push(`${id}:nan`);
+        } else if (!b && m?.visible) problems.push(`${id}:ghost`);
+      }
+      const line = problems.join(" ");
+      if (line !== meshCheck.current.last) {
+        meshCheck.current.last = line;
+        console.info("CueMaster mesh check", Platform.OS, line || "ok");
+      }
+    }
   });
   return (
     <group>
@@ -498,7 +522,8 @@ function Aim() {
     ghost = useRef<T.Mesh>(null),
     objectLine = useRef<T.Mesh>(null),
     cueLine = useRef<T.Mesh>(null),
-    forbidden = useRef<T.Group>(null);
+    forbidden = useRef<T.Group>(null),
+    lastWarning = useRef("");
   useFrame(() => {
     const b = session.world.balls.find((b) => b.id === 0);
     if (!b || !cue.current || !guide.current) return;
@@ -551,6 +576,31 @@ function Aim() {
             session.world.balls.map((ball) => ball.id),
           )
         : null;
+    if (__DEV__ && guide.current.visible) {
+      const key =
+        warning && hit
+          ? `${hit.id}|${warning}|${session.progress.turn}|${session.progress.groups.join(",")}`
+          : "";
+      if (key !== lastWarning.current) {
+        lastWarning.current = key;
+        if (key)
+          console.info(
+            "CueMaster forbidden",
+            Platform.OS,
+            JSON.stringify({
+              hit: hit!.id,
+              hitGroup: groupOf(hit!.id),
+              shooterGroup: session.progress.groups[session.progress.turn],
+              turn: session.progress.turn,
+              cpuTurn: session.cpuTurn,
+              online: !!session.remote,
+              warning,
+              potted: session.progress.returned,
+              shots: session.shots,
+            }),
+          );
+      }
+    }
     if (forbidden.current) {
       forbidden.current.visible = !!warning && !!hit;
       if (hit) forbidden.current.position.set(hit.x, R * 2 + 0.014, hit.z);

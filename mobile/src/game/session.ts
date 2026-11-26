@@ -379,6 +379,7 @@ export class Session {
     const state = this.confirmed.get(this.localSeq);
     if (state) {
       if (!this.matches(state, mirror)) {
+        devAdopt(this, state, mirror, "reconcile");
         this.loadTableState(state, mirror);
         this.aimAtTarget();
       }
@@ -870,6 +871,7 @@ export class Session {
     }`;
   }
   update(dt: number) {
+    devTick(this, dt);
     this.updateClock();
     this.updateCpu(dt);
     this.updateRemote(dt);
@@ -990,11 +992,135 @@ export class Session {
             : "Your table. Your next shot.";
         this.aimAtTarget();
         this.notify();
+        devDigest(this, "settled");
         break;
       }
     }
     this.alpha = Math.min(1, this.accumulator / P.tick);
   }
+}
+const devOn = () => (globalThis as any).__DEV__ === true;
+const devTag = () => (globalThis as any).__cmTag ?? "";
+let devLast = "",
+  devClock = 0;
+/** Development only: a state line whenever turn, rules or the resting aim changes; frame rate every 10 s. */
+function devTick(s: Session, dt: number) {
+  if (!devOn()) return;
+  const p = s.progress,
+    cue = s.world.balls.find((b) => b.id === 0),
+    key = JSON.stringify({
+      drill: s.drill,
+      online: !!s.remote,
+      cpu: !!s.cpu,
+      seq: s.localSeq,
+      shots: s.shots,
+      turn: p.turn,
+      cpuTurn: s.cpuTurn,
+      groups: p.groups,
+      potted: p.returned,
+      running: s.running,
+      placement: s.placement,
+      head: s.headStringPlacement,
+      breakChoice: p.breakChoice,
+      finished: p.finished,
+      foul: p.foul,
+      msg: s.message,
+      aim: s.running ? null : Math.round(s.angle * 10) / 10,
+      cue:
+        s.running || !cue
+          ? null
+          : `${cue.x.toFixed(2)},${cue.z.toFixed(2)}${cue.pocketed ? "P" : ""}`,
+    });
+  devClock += dt;
+  if (key !== devLast) {
+    devLast = key;
+    console.info("CueMaster state", devTag(), key);
+  }
+  if (devClock > 10) {
+    devClock = 0;
+    console.info(
+      "CueMaster fps",
+      devTag(),
+      s.fps,
+      Math.round(s.p95 || 0),
+      s.turnDeadline ? Math.round((s.turnDeadline - Date.now()) / 1000) : 0,
+    );
+  }
+}
+/** Development only: one line per settled shot, so two devices can be compared seq by seq. */
+function devDigest(s: Session, where: string) {
+  if (!devOn()) return;
+  const nonFinite = s.world.balls
+    .filter((b) =>
+      Object.values(b).some(
+        (v) => typeof v === "number" && !Number.isFinite(v),
+      ),
+    )
+    .map((b) => b.id);
+  console.info(
+    "CueMaster digest",
+    devTag(),
+    where,
+    JSON.stringify({
+      seq: s.localSeq,
+      shots: s.shots,
+      turn: s.progress.turn,
+      groups: s.progress.groups,
+      potted: [...s.progress.returned].sort((a, b) => a - b),
+      foul: s.progress.foul,
+      finished: s.progress.finished,
+      breakChoice: s.progress.breakChoice,
+      placement: s.placement,
+      online: !!s.remote,
+      nonFinite,
+      pos: s.world.balls
+        .filter((b) => !b.pocketed)
+        .map((b) => `${b.id}:${b.x.toFixed(3)},${b.z.toFixed(3)}`)
+        .join(" "),
+    }),
+  );
+}
+/** Development only: what differed when the phone adopted the server's table. */
+export function devAdopt(
+  s: Session,
+  state: TableState,
+  mirror: boolean,
+  why: string,
+) {
+  if (!devOn()) return;
+  const turn = mirror ? 1 - state.progress.turn : state.progress.turn;
+  const groups = mirror
+    ? [state.progress.groups[1], state.progress.groups[0]]
+    : state.progress.groups;
+  const at = (b: { pocketed: boolean; x: number; z: number }) =>
+    `${b.pocketed ? "P" : ""}${b.x.toFixed(3)},${b.z.toFixed(3)}`;
+  const moved = state.balls
+    .map((b) => {
+      const a = s.world.balls.find((m) => m.id === b.id);
+      if (
+        a &&
+        a.pocketed === b.pocketed &&
+        (b.pocketed || Math.hypot(a.x - b.x, a.z - b.z) <= 1e-4)
+      )
+        return "";
+      return `${b.id}:${a ? at(a) : "none"}->${at(b)}`;
+    })
+    .filter(Boolean);
+  console.info(
+    "CueMaster adopt",
+    devTag(),
+    why,
+    JSON.stringify({
+      seq: s.localSeq,
+      mirror,
+      turn: [s.progress.turn, turn],
+      groups: [s.progress.groups, groups],
+      potted: [s.progress.returned, state.progress.returned],
+      foul: [s.progress.foul, state.progress.foul],
+      placement: [s.placement, state.placement],
+      moved,
+    }),
+  );
 }
 export const session = new Session();
 /**

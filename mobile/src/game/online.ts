@@ -1,5 +1,5 @@
 import { API, sessionToken, Player, Venue } from "../app/api";
-import { session, Action, TableState } from "./session";
+import { session, Action, TableState, devAdopt } from "./session";
 
 /**
  * The phone's half of an online match: one socket to the server's referee, and the glue that
@@ -288,6 +288,12 @@ class Online {
         session.inbox = session.inbox.filter((x) => x.seq > m.seq);
         session.confirmed.clear();
         session.localSeq = m.seq;
+        devAdopt(
+          session,
+          m.state,
+          this.match?.seat === 1,
+          "reject: " + m.message,
+        );
         session.loadTableState(m.state, this.match?.seat === 1);
         session.resetTurnClock();
         break;
