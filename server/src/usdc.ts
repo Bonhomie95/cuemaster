@@ -1,12 +1,15 @@
-import { getAddress, verifyMessage, ZeroAddress } from "ethers";
 import { randomUUID } from "node:crypto";
 import type { Express, RequestHandler } from "express";
 import type { Db } from "mongodb";
 import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
-export function baseAddress(value: string) {
+// ethers costs ~36 MB at start-up for a feature almost nobody touches (payouts are off), and the
+// free instance has 512 MB in all, so it loads on the first wallet request instead.
+const ethers = () => import("ethers");
+async function baseAddress(value: string) {
   if (!/^0x[0-9a-fA-F]{40}$/.test(value))
     throw new Error("Enter a Base wallet address starting with 0x.");
+  const { getAddress, ZeroAddress } = await ethers();
   const address = getAddress(value);
   if (address === ZeroAddress)
     throw new Error("The zero address cannot receive prizes.");
@@ -57,7 +60,7 @@ export function installUsdc(app: Express, db: Db, required: RequestHandler) {
       .parse(req.body);
     let address;
     try {
-      address = baseAddress(input.address);
+      address = await baseAddress(input.address);
     } catch {
       return res.status(400).json({
         error:
@@ -129,7 +132,7 @@ export function installUsdc(app: Express, db: Db, required: RequestHandler) {
         .json({ error: "Verification expired. Request another challenge." });
     let signer;
     try {
-      signer = verifyMessage(challenge.message, signature);
+      signer = (await ethers()).verifyMessage(challenge.message, signature);
     } catch {
       return res.status(400).json({ error: "Invalid wallet signature." });
     }

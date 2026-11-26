@@ -82,6 +82,11 @@ await Promise.all([
   // scan that fails outright once the in-memory sort passes 32MB.
   users.createIndex({ xp: -1, "stats.finishes": -1, _id: 1 }),
   users.createIndex({ trophies: -1, xp: -1, _id: 1 }),
+  // The country boards: without these a small country walks the whole global index.
+  users.createIndex({ country: 1, xp: -1, "stats.finishes": -1, _id: 1 }),
+  users.createIndex({ country: 1, trophies: -1, xp: -1, _id: 1 }),
+  // Every house seating reads the house players; partial, so the index holds only those 40.
+  users.createIndex({ house: 1 }, { partialFilterExpression: { house: true } }),
   users.createIndex({ "providers.google": 1 }, { unique: true, sparse: true }),
   users.createIndex({ "providers.apple": 1 }, { unique: true, sparse: true }),
   entries.createIndex({ playerId: 1, eventId: 1 }, { unique: true }),
@@ -95,21 +100,25 @@ await Promise.all([
 ]);
 const events = db.collection<any>("tournaments");
 await events.createIndex({ id: 1 }, { unique: true });
-for (const event of tournaments)
-  await events.updateOne(
-    { id: event.id },
-    {
-      $setOnInsert: {
-        ...event,
-        version: 1,
-        drill: "pocket",
-        targets: [1],
-        createdAt: new Date(),
-        history: [],
+// One round trip: every one counts on a cold start, which a player is waiting through.
+await events.bulkWrite(
+  tournaments.map((event) => ({
+    updateOne: {
+      filter: { id: event.id },
+      update: {
+        $setOnInsert: {
+          ...event,
+          version: 1,
+          drill: "pocket",
+          targets: [1],
+          createdAt: new Date(),
+          history: [],
+        },
       },
+      upsert: true,
     },
-    { upsert: true },
-  );
+  })),
+);
 const app = express();
 app.disable("x-powered-by");
 if (process.env.TRUST_PROXY)
@@ -758,60 +767,85 @@ app.post(
   },
 );
 /**
- * Two long-lived referee workers. Spawning a fresh worker per verification compiled the engine
- * through tsx every time (seconds on a small dyno); a resident worker answers in milliseconds.
- * A worker that overruns its budget is terminated and replaced, so a stuck replay cannot wedge
- * the pool.
+ * Resident referee workers fed from one queue. Spawning a worker per verification recompiled the
+ * engine every time; a resident one answers in milliseconds. Render's free instance has a tenth
+ * of a CPU, so one worker is the default: a second would only split the same slice and add its
+ * memory. REFEREE_WORKERS raises it on a plan with a whole CPU or more.
+ *
+ * A job that finds every worker busy waits its turn rather than being refused (a refused CPU win
+ * sat unpaid), and its time budget starts when a worker picks it up. Only a queue this deep is
+ * refused. A worker that overruns its budget is terminated and replaced, so a stuck replay cannot
+ * wedge the queue.
  */
-const REFEREES = 2;
+const REFEREES = Math.max(1, Number(process.env.REFEREE_WORKERS) || 1);
+const REFEREE_QUEUE = 30;
 type Referee = { worker: Worker; busy: boolean };
+type Job = {
+  job: any;
+  ms: number;
+  resolve: (value: any) => void;
+  reject: (error: Error) => void;
+};
 const referees: Referee[] = [];
+const waiting: Job[] = [];
+// The bundle (dist/*.js, what production runs) is plain JavaScript; `npm run dev` and the tests
+// run the TypeScript source through tsx.
+const compiled = import.meta.url.endsWith(".js");
 function spawnReferee(): Referee {
-  const r: Referee = {
-    worker: new Worker(new URL("./worker.ts", import.meta.url), {
-      execArgv: ["--import", "tsx"],
-    }),
-    busy: false,
-  };
-  r.worker.unref();
-  return r;
+  const worker = new Worker(
+    new URL(compiled ? "./worker.js" : "./worker.ts", import.meta.url),
+    compiled ? {} : { execArgv: ["--import", "tsx"] },
+  );
+  worker.unref();
+  return { worker, busy: false };
 }
 function referee(job: any, ms: number): Promise<any> {
   return new Promise((resolve, reject) => {
-    let r = referees.find((r) => !r.busy);
-    if (!r && referees.length < REFEREES) referees.push((r = spawnReferee()));
-    if (!r)
+    if (waiting.length >= REFEREE_QUEUE)
       return reject(new Error("The referee is busy. Please retry shortly."));
-    const ref = r;
-    ref.busy = true;
-    let done = false;
-    const finish = (error?: Error, value?: any, replace = false) => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      ref.worker.off("message", onMessage);
-      ref.worker.off("error", onError);
-      ref.worker.off("exit", onExit);
-      if (replace) {
-        void ref.worker.terminate();
-        referees.splice(referees.indexOf(ref), 1);
-      } else ref.busy = false;
-      error ? reject(error) : resolve(value);
-    };
-    const timer = setTimeout(
-      () => finish(new Error("Replay took too long."), undefined, true),
-      ms,
-    );
-    const onMessage = (m: any) =>
-      finish(m.error ? new Error(m.error) : undefined, m.result);
-    const onError = (e: Error) => finish(e, undefined, true);
-    const onExit = (code: number) =>
-      finish(new Error(`Replay stopped (${code}).`), undefined, true);
-    ref.worker.on("message", onMessage);
-    ref.worker.on("error", onError);
-    ref.worker.on("exit", onExit);
-    ref.worker.postMessage(job);
+    waiting.push({ job, ms, resolve, reject });
+    dispatch();
   });
+}
+function dispatch() {
+  while (waiting.length) {
+    let ref = referees.find((r) => !r.busy);
+    if (!ref && referees.length < REFEREES)
+      referees.push((ref = spawnReferee()));
+    if (!ref) return;
+    run(ref, waiting.shift()!);
+  }
+}
+function run(ref: Referee, { job, ms, resolve, reject }: Job) {
+  ref.busy = true;
+  let done = false;
+  const finish = (error?: Error, value?: any, replace = false) => {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    ref.worker.off("message", onMessage);
+    ref.worker.off("error", onError);
+    ref.worker.off("exit", onExit);
+    if (replace) {
+      void ref.worker.terminate();
+      referees.splice(referees.indexOf(ref), 1);
+    } else ref.busy = false;
+    error ? reject(error) : resolve(value);
+    dispatch();
+  };
+  const timer = setTimeout(
+    () => finish(new Error("Replay took too long."), undefined, true),
+    ms,
+  );
+  const onMessage = (m: any) =>
+    finish(m.error ? new Error(m.error) : undefined, m.result);
+  const onError = (e: Error) => finish(e, undefined, true);
+  const onExit = (code: number) =>
+    finish(new Error(`Replay stopped (${code}).`), undefined, true);
+  ref.worker.on("message", onMessage);
+  ref.worker.on("error", onError);
+  ref.worker.on("exit", onExit);
+  ref.worker.postMessage(job);
 }
 const replay = (drill: string, shots: any[], targets: number[]) =>
   referee({ drill, shots, targets }, 12000);

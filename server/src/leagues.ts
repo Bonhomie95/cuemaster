@@ -84,15 +84,43 @@ export function outcome(
 }
 
 const entriesOf = (db: Db) => db.collection<any>("leagueEntries");
-// ponytail: every view and every settle reads the tier's whole week to cut its leagues. Once a
-// tier holds thousands a week, store each entry's league number when the week closes instead.
-const tierOfWeek = (db: Db, week: number, tier: number) =>
-  entriesOf(db)
-    .find(
-      { week, tier },
-      { projection: { playerId: 1, trophies: 1, coins: 1, scoredAt: 1 } },
-    )
-    .toArray() as Promise<Entry[]>;
+/**
+ * A tier's whole week, which is what cutting it into leagues needs. A finished week never
+ * changes, so it is read once and kept: Monday's settling otherwise read the whole tier again
+ * for every player in it. The week in play is re-read at most every 30 seconds; the asking
+ * player's own row is always fresh (see `/me/league`). Rows come sorted the way `leagueOf` sorts
+ * them, so its sort is a single pass.
+ *
+ * ponytail: one process's memory, a few weeks deep. Once a tier holds tens of thousands a week,
+ * store each entry's league number when the week closes instead.
+ */
+const TIER_FRESH_MS = 30_000;
+const tierCache = new Map<
+  string,
+  { at: number; final: boolean; rows: Promise<Entry[]> }
+>();
+function tierOfWeek(db: Db, week: number, tier: number) {
+  const key = `${week}:${tier}`;
+  const hit = tierCache.get(key);
+  // Only a read made after the week closed is final; one taken while it ran expires as usual.
+  if (hit && (hit.final || Date.now() - hit.at < TIER_FRESH_MS))
+    return hit.rows;
+  const final = week < currentWeek().id;
+  const rows = (
+    entriesOf(db)
+      .find(
+        { week, tier },
+        { projection: { playerId: 1, trophies: 1, coins: 1, scoredAt: 1 } },
+      )
+      .toArray() as Promise<Entry[]>
+  ).then((r) => r.sort((a, b) => b.trophies - a.trophies || byId(a, b)));
+  rows.catch(() => tierCache.delete(key));
+  tierCache.delete(key);
+  tierCache.set(key, { at: Date.now(), final, rows });
+  // Five tiers a week: keep about the last four weeks.
+  if (tierCache.size > 20) tierCache.delete(tierCache.keys().next().value!);
+  return rows;
+}
 
 /** Settle every finished week this player has not been settled for, oldest first. */
 export async function settleLeague(
@@ -203,10 +231,11 @@ export function installLeagues(app: Express, db: Db, required: RequestHandler) {
     const entry = await entriesOf(db).findOne({ _id: `${week.id}:${u._id}` });
     let league = null;
     if (entry) {
-      const { group, groups, standings } = leagueOf(
-        await tierOfWeek(db, week.id, entry.tier),
-        u._id,
+      // The cached tier may predate this player's latest pot, or their joining at all.
+      const rows = (await tierOfWeek(db, week.id, entry.tier)).filter(
+        (e) => e.playerId !== u._id,
       );
+      const { group, groups, standings } = leagueOf([...rows, entry], u._id);
       const people = new Map(
         (
           await users

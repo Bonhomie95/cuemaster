@@ -710,11 +710,18 @@ function ClubBody() {
       settling.current = launch.matchId;
       let r;
       try {
-        r = await api(`/local-matches/${launch.matchId}/finish`, "POST", {
-          outcome: winner === null ? "forfeit" : winner === 0 ? "won" : "lost",
-          // The referee replays these against the same rival seed before a win counts.
-          actions: launch.opponent ? session.actions : undefined,
-        });
+        r = await api(
+          `/local-matches/${launch.matchId}/finish`,
+          "POST",
+          {
+            outcome:
+              winner === null ? "forfeit" : winner === 0 ? "won" : "lost",
+            // The referee replays these against the same rival seed before a win counts.
+            actions: launch.opponent ? session.actions : undefined,
+          },
+          // The replay waits its turn for the referee, and the free server may be waking up.
+          65000,
+        );
       } catch (e) {
         settling.current = null;
         throw e;

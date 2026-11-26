@@ -36,6 +36,24 @@ export const TROPHIES = { win: 24, loss: 16 };
 export const ONLINE_XP = { win: 40, loss: 15 };
 /** How long a dropped player has to come back before the match is theirs to lose. */
 const RETURN_MS = 45_000;
+/**
+ * Tables in play at once. Every online shot is simulated here on the main thread, 10–40 ms of CPU
+ * on a fast laptop, and Render's free instance has a tenth of a slower CPU. Past about this many
+ * tables the shot clocks run late and the health check stalls, and a restart voids every table.
+ * Raise LIVE_TABLES with the plan (about 60 on Starter's half CPU).
+ */
+const TABLES = Number(process.env.LIVE_TABLES) || 15;
+const FULL = "Every online table is taken. Try again in a minute.";
+/** Open sockets at once, and how long a new one has to sign in before it is closed. */
+const SOCKETS = 500;
+const HELLO_MS = 15_000;
+/**
+ * Render's free plan sleeps after 15 minutes without an incoming request, and sleeping drops every
+ * table; socket frames may not count as requests. While anyone is queued, hosting or playing, the server
+ * calls its own public address this often. With nobody online it stays quiet and may sleep, which
+ * keeps the workspace's shared 750 free hours for the hours people actually play.
+ */
+const AWAKE_MS = 10 * 60_000;
 /** Time for the VS card before the first shot clock starts. */
 const INTRO_MS = 3_500;
 /** Network allowance on every turn so a shot released at 0:01 is not lost in transit. */
@@ -175,6 +193,13 @@ export function installLive(
   const matches = new Map<string, Match>();
   const byPlayer = new Map<string, Match>();
   void ensureHouse(db).catch((e) => console.error("House setup", e?.name));
+  // The restart refund below looks up active tables; partial, so only those are indexed.
+  void records
+    .createIndex(
+      { status: 1 },
+      { partialFilterExpression: { status: "active" } },
+    )
+    .catch(() => {});
 
   // A restart loses the tables in memory. Nobody should lose an entry fee to a deploy.
   void (async () => {
@@ -377,6 +402,13 @@ export function installLive(
     isPrivate: boolean,
   ) {
     const venue = venues.find((v) => v.id === venueId)!;
+    // Every way to a table (search, house, room, rematch) comes through here, before any charge.
+    let tables = 0;
+    for (const x of matches.values()) if (!x.ended) tables++;
+    if (tables >= TABLES) {
+      for (const x of [a, b]) send(x.conn, { t: "error", message: FULL });
+      return;
+    }
     const charged: Seat[] = [];
     for (const c of [a, b]) {
       const u = await users.findOneAndUpdate(
@@ -990,7 +1022,14 @@ export function installLive(
 
   const wss = new WebSocketServer({ server, path: "/live", maxPayload: 8192 });
   wss.on("connection", (ws) => {
+    if (wss.clients.size > SOCKETS) {
+      ws.send(JSON.stringify({ t: "error", message: FULL }));
+      return ws.close(1013, "Server busy");
+    }
     let conn: Conn | null = null;
+    // A socket that never says hello would otherwise stay open for good: the heartbeat below
+    // only walks signed-in players.
+    const hello = setTimeout(() => conn || ws.terminate(), HELLO_MS);
     let budget = 40,
       refilled = Date.now();
     ws.on("pong", () => conn && (conn.alive = true));
@@ -1015,6 +1054,7 @@ export function installLive(
       }
     });
     ws.on("close", () => {
+      clearTimeout(hello);
       if (!conn) return;
       leaveQueue(conn);
       closeRoom(conn);
@@ -1032,8 +1072,18 @@ export function installLive(
       }
     });
   });
+  const self = process.env.RENDER_EXTERNAL_URL;
+  let awakeAt = Date.now();
   // Mobile networks drop sockets silently; a missed pong is how we find out.
   const heartbeat = setInterval(() => {
+    const busy =
+      matches.size > 0 ||
+      rooms.size > 0 ||
+      [...queues.values()].some((q) => q.length > 0);
+    if (self && busy && Date.now() - awakeAt > AWAKE_MS) {
+      awakeAt = Date.now();
+      void fetch(self + "/health").catch(() => {});
+    }
     for (const c of conns.values()) {
       if (!c.alive) {
         c.ws.terminate();

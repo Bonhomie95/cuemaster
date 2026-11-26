@@ -115,49 +115,55 @@ const COINS = 200_000;
 export async function ensureHouse(db: Db) {
   const users = db.collection<any>("players");
   const base = Date.now() - 70 * 86_400_000;
-  for (const [i, r] of ROSTER.entries()) {
-    const played = Math.round(r.trophies / 12) + 6;
-    const wins = Math.round(played * 0.52);
-    await users.updateOne(
-      { _id: houseId(r.slug) },
-      {
-        $setOnInsert: {
-          house: true,
-          houseStyle: r.style,
-          name: r.name,
-          country: r.country,
-          avatar: r.avatar,
-          xp: r.xp,
-          trophies: r.trophies,
-          rubies: 0,
-          crates: [],
-          completed: [],
-          selectedTable:
-            venues.filter((v) => v.level <= 1 + Math.floor(r.xp / 100)).at(-1)
-              ?.id || "heritage",
-          selectedCue: r.cue,
-          ownedCues: ["club", "precision", "master"].slice(
-            0,
-            ["club", "precision", "master"].indexOf(r.cue) + 1,
-          ),
-          providers: {},
-          adultConfirmed: true,
-          createdAt: new Date(base + i * 1.6 * 86_400_000),
-          stats: {
-            finishes: Math.round(r.xp / 60),
-            shots: Math.round(r.xp / 4),
-            onlineMatches: played,
-            onlineWins: wins,
-            onlineLosses: played - wins,
-            coinsWon: wins * 180,
+  // One round trip for the whole roster; this runs on every (cold) start.
+  await users.bulkWrite(
+    ROSTER.map((r, i) => {
+      const played = Math.round(r.trophies / 12) + 6;
+      const wins = Math.round(played * 0.52);
+      return {
+        updateOne: {
+          filter: { _id: houseId(r.slug) },
+          update: {
+            $setOnInsert: {
+              house: true,
+              houseStyle: r.style,
+              name: r.name,
+              country: r.country,
+              avatar: r.avatar,
+              xp: r.xp,
+              trophies: r.trophies,
+              rubies: 0,
+              crates: [],
+              completed: [],
+              selectedTable:
+                venues
+                  .filter((v) => v.level <= 1 + Math.floor(r.xp / 100))
+                  .at(-1)?.id || "heritage",
+              selectedCue: r.cue,
+              ownedCues: ["club", "precision", "master"].slice(
+                0,
+                ["club", "precision", "master"].indexOf(r.cue) + 1,
+              ),
+              providers: {},
+              adultConfirmed: true,
+              createdAt: new Date(base + i * 1.6 * 86_400_000),
+              stats: {
+                finishes: Math.round(r.xp / 60),
+                shots: Math.round(r.xp / 4),
+                onlineMatches: played,
+                onlineWins: wins,
+                onlineLosses: played - wins,
+                coinsWon: wins * 180,
+              },
+            },
+            // Entries are charged like anyone's; the balance is simply never allowed to run dry.
+            $max: { coins: COINS },
           },
+          upsert: true,
         },
-        // Entries are charged like anyone's; the balance is simply never allowed to run dry.
-        $max: { coins: COINS },
-      },
-      { upsert: true },
-    );
-  }
+      };
+    }),
+  );
 }
 
 /**

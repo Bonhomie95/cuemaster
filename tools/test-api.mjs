@@ -1,5 +1,5 @@
 // Fresh API rate-limit state and a disposable MongoDB database for every run.
-import { spawn } from "node:child_process";
+import { spawn, execFileSync } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { randomUUID } from "node:crypto";
@@ -33,6 +33,7 @@ const stop = async () => {
   server = null;
 };
 try {
+  execFileSync("npm", ["run", "--silent", "build"], { cwd, stdio: "inherit" });
   for (const file of (await readdir(cwd + "/tests"))
     // `npm run test:api -- live` runs only the suites whose file name contains "live".
     .filter((f) => f.endsWith(".test.ts") && f.includes(process.argv[2] || ""))
@@ -64,7 +65,8 @@ try {
       NODE_ENV: "test",
       ...perSuite,
     };
-    server = spawn(process.execPath, ["--import", "tsx", "src/index.ts"], {
+    // The suites run against the same bundle production starts (built once, above).
+    server = spawn(process.execPath, ["dist/index.js"], {
       cwd,
       env,
       stdio: ["ignore", "pipe", "pipe"],
