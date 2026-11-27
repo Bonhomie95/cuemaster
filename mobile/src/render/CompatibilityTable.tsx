@@ -192,6 +192,24 @@ export default function CompatibilityTable() {
                   }}
                 />
               )}
+              {session.cueInHand &&
+                (() => {
+                  const spot = session.inHandSpot();
+                  return (
+                    <View
+                      style={{
+                        position: "absolute",
+                        left: (spot.x + H) * scale - diameter / 2,
+                        top: (spot.z + W) * scale - diameter / 2,
+                        width: diameter,
+                        height: diameter,
+                        borderRadius: diameter,
+                        backgroundColor: "#faf9f2",
+                        opacity: 0.55,
+                      }}
+                    />
+                  );
+                })()}
               {ghost && !ghost.pocketed && !session.replaying && (
                 <View
                   style={{

@@ -491,6 +491,31 @@ function GhostBall() {
     </mesh>
   );
 }
+/** A scratched cue ball "in hand", drawn at the head spot so the table never looks empty. */
+function InHandBall() {
+  const mesh = useRef<T.Mesh>(null);
+  useFrame(({ clock }) => {
+    const m = mesh.current;
+    if (!m) return;
+    m.visible = session.cueInHand;
+    if (!m.visible) return;
+    const spot = session.inHandSpot();
+    m.position.set(spot.x, R, spot.z);
+    (m.material as T.MeshBasicMaterial).opacity =
+      0.45 + 0.25 * Math.sin(clock.elapsedTime * 4);
+  });
+  return (
+    <mesh ref={mesh} visible={false} renderOrder={4}>
+      <sphereGeometry args={[R * BALL_DRAW, 24, 16]} />
+      <meshBasicMaterial
+        color="#fbfaf3"
+        transparent
+        opacity={0.6}
+        depthWrite={false}
+      />
+    </mesh>
+  );
+}
 function Rod({
   length,
   radius,
@@ -1028,6 +1053,7 @@ export function Scene({
       <LuckyRings />
       <Balls />
       <GhostBall />
+      <InHandBall />
       <Aim />
       <mesh
         rotation={[-Math.PI / 2, 0, 0]}

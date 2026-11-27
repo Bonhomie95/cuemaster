@@ -700,6 +700,33 @@ export class Session {
     const pick = clear || best;
     if (pick) this.angle = pick.a;
   }
+  /**
+   * Where a cue ball in hand is drawn until the player places it: the head spot, or the nearest
+   * free point along the head string. Drawn only; the table itself keeps the ball off the cloth.
+   */
+  inHandSpot() {
+    for (let i = 0; i < 12; i++) {
+      const z = i ? (i % 2 ? 1 : -1) * Math.ceil(i / 2) * 2.2 * R : 0;
+      if (
+        this.world.balls.every(
+          (b) =>
+            b.id === 0 ||
+            b.pocketed ||
+            Math.hypot(b.x + H / 2, b.z - z) > 2.2 * R,
+        )
+      )
+        return { x: -H / 2, z };
+    }
+    return { x: -H / 2, z: 0 };
+  }
+  /** The player holds a scratched cue ball: nothing is on the cloth until they tap to place it. */
+  get cueInHand() {
+    return (
+      this.placement &&
+      !this.cpuTurn &&
+      !!this.world.balls.find((b) => b.id === 0)?.pocketed
+    );
+  }
   placeCue(x: number, z: number, commit = true) {
     if (this.progress.finished) return false;
     if (this.headStringPlacement && x > -H / 2 + 1e-9) {
@@ -1043,6 +1070,7 @@ function devTick(s: Session, dt: number) {
       foul: p.foul,
       msg: s.message,
       aim: s.running ? null : Math.round(s.angle * 10) / 10,
+      spin: s.running ? null : `${s.side.toFixed(2)},${s.top.toFixed(2)}`,
       cue:
         s.running || !cue
           ? null

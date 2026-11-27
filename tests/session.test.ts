@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Session } from "../mobile/src/game/session";
 import { makeCpu } from "../mobile/src/game/cpu";
+import { H, R } from "../mobile/src/physics/engine";
 function play(rate: number, skin = 0) {
   const s = new Session();
   s.skin = skin;
@@ -74,4 +75,23 @@ test("practice keeps the table with the player, spin stays with its shooter, and
     1,
     "the referee's replay has no clock to match",
   );
+});
+test("a scratched cue ball in hand is shown at a free point on the head string", () => {
+  const s = new Session();
+  s.reset("break");
+  const cue = s.world.balls.find((b) => b.id === 0)!;
+  cue.pocketed = true;
+  s.placement = true;
+  assert.equal(s.cueInHand, true);
+  assert.deepEqual(s.inHandSpot(), { x: -H / 2, z: 0 });
+  // A ball parked on the head spot pushes the drawn cue ball along the line, clear of it.
+  Object.assign(
+    s.world.balls.find((b) => b.id === 1)!,
+    { x: -H / 2, z: 0 },
+  );
+  const spot = s.inHandSpot();
+  assert.equal(spot.x, -H / 2);
+  assert.ok(Math.abs(spot.z) > 2 * R);
+  s.placement = false;
+  assert.equal(s.cueInHand, false);
 });
