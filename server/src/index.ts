@@ -499,9 +499,16 @@ app.post("/local-matches/:id/finish", required, async (req: any, res) => {
                     -5,
                   ],
                 },
-                // Every finished computer match drops coins into the piggy bank; a forfeit is
-                // not a finished match.
-                ...(outcome === "forfeit" ? {} : { piggy: piggyDeposit(won) }),
+                // Every finished computer match drops coins into the piggy bank and counts
+                // toward an invite bonus; a forfeit is not a finished match.
+                ...(outcome === "forfeit"
+                  ? {}
+                  : {
+                      piggy: piggyDeposit(won),
+                      "stats.finishedMatches": {
+                        $add: [{ $ifNull: ["$stats.finishedMatches", 0] }, 1],
+                      },
+                    }),
                 "stats.cpuStreak": streak,
                 // The longest run of verified wins, kept for the profile and the leaderboard.
                 "stats.bestStreak": {

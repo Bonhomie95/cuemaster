@@ -134,6 +134,11 @@ type Launch = {
 };
 /** Where an open house or pass-and-play rack keeps its shot record on this phone. */
 const rackKey = (matchId: string) => "localMatch." + matchId;
+const keepRack = (matchId: string) =>
+  void AsyncStorage.setItem(
+    rackKey(matchId),
+    JSON.stringify(session.actions),
+  ).catch(() => {});
 const money = (n: number) => coinsShort(n, 1_000_000);
 function Action({
   label,
@@ -504,7 +509,15 @@ function ClubBody() {
   useEffect(
     () =>
       session.subscribe(() => {
-        if (launchRef.current?.kind !== "lucky" || !session.shots) return;
+        // Only a live stroke on the Lucky Shot layout counts: never a pasted replay code (a known
+        // bullseye) or a rack opened from the table menu.
+        if (
+          launchRef.current?.kind !== "lucky" ||
+          !session.shots ||
+          session.drill !== "lucky" ||
+          session.imported
+        )
+          return;
         if (!luckySent.current) {
           luckySent.current = true;
           setLucky({ result: null, error: "", settled: false });
@@ -561,7 +574,7 @@ function ClubBody() {
   const selected =
     catalog?.venues.find((v) => v.id === player?.selectedTable) ||
     catalog?.venues[0];
-  function openGame(l: Launch, v = selected) {
+  function openGame(l: Launch, v = selected, resumed = false) {
     if (!v) return;
     setVerificationError("");
     setToast("");
@@ -577,13 +590,11 @@ function ClubBody() {
     if (l.kind === "local" && l.matchId) {
       // Every action goes to the phone's storage, so an open rack can be rebuilt after the app
       // is closed (see resumeLocal).
-      const key = rackKey(l.matchId);
-      const keep = () =>
-        void AsyncStorage.setItem(key, JSON.stringify(session.actions)).catch(
-          () => {},
-        );
-      session.onAction = keep;
-      keep();
+      const id = l.matchId;
+      session.onAction = () => keepRack(id);
+      // A resumed rack is written once it has been rebuilt: writing the empty table first lost
+      // the record if the app closed again before the next shot.
+      if (!resumed) keepRack(id);
     }
     launchRef.current = l;
     submitted.current = false;
@@ -640,6 +651,7 @@ function ClubBody() {
           seed: m.seed,
         },
         v,
+        true,
       );
       try {
         session.restore(m.actions || []);
@@ -649,6 +661,7 @@ function ClubBody() {
           "That rack could not be rebuilt. Quit it to start fresh.",
         );
       }
+      keepRack(m.id);
       setAbandoned(null);
       entryRequest.current = null;
     });
@@ -864,8 +877,15 @@ function ClubBody() {
     setPage("home");
   };
   const topMessage = toast ? (
-    <View style={u.toast} accessibilityLiveRegion="polite">
-      <Text style={u.toastText}>{toast}</Text>
+    // Only the × takes touches: the strip sits over the table's bottom controls.
+    <View
+      style={u.toast}
+      accessibilityLiveRegion="polite"
+      pointerEvents="box-none"
+    >
+      <Text style={u.toastText} pointerEvents="none">
+        {toast}
+      </Text>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Dismiss message"
@@ -996,6 +1016,11 @@ function ClubBody() {
                   const after = online.result?.player;
                   online.leave();
                   if (after) setPlayer(after);
+                  // A table that closed while offline brought no balance with it.
+                  else
+                    void api<Player>("/me")
+                      .then(setPlayer)
+                      .catch(() => {});
                   leaveGame();
                   setPage("matches");
                 }

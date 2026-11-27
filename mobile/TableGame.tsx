@@ -915,27 +915,32 @@ function Game({
       ? {
           won: live.won,
           draw: live.draw,
-          title: live.draw
-            ? "Match abandoned"
-            : live.won
-              ? "You win"
-              : `${session.opponentName} wins`,
+          title:
+            live.reason === "gone"
+              ? "Table closed"
+              : live.draw
+                ? "Match abandoned"
+                : live.won
+                  ? "You win"
+                  : `${session.opponentName} wins`,
           note:
-            live.reason === "resign"
-              ? live.won
-                ? `${session.opponentName} resigned.`
-                : "You resigned."
-              : live.reason === "disconnect"
+            live.reason === "gone"
+              ? "It ended while you were offline."
+              : live.reason === "resign"
                 ? live.won
-                  ? `${session.opponentName} did not come back.`
-                  : "You were away too long."
-                : live.reason === "idle"
+                  ? `${session.opponentName} resigned.`
+                  : "You resigned."
+                : live.reason === "disconnect"
                   ? live.won
-                    ? `${session.opponentName} let the clock run out three times.`
-                    : "Three turns ran out in a row."
-                  : live.draw
-                    ? "Both players left. Entries refunded."
-                    : eightBallNote(session.progress, session.opponentName),
+                    ? `${session.opponentName} did not come back.`
+                    : "You were away too long."
+                  : live.reason === "idle"
+                    ? live.won
+                      ? `${session.opponentName} let the clock run out three times.`
+                      : "Three turns ran out in a row."
+                    : live.draw
+                      ? "Both players left. Entries refunded."
+                      : eightBallNote(session.progress, session.opponentName),
           pot: live.pot,
           xp: live.xp,
           trophies: live.trophies,
@@ -1327,7 +1332,7 @@ function Game({
             result={shownResult}
             primary={
               isOnline
-                ? online.opponentLeft
+                ? online.opponentLeft || live?.reason === "gone"
                   ? undefined
                   : () => online.rematch()
                 : onPlayAgain

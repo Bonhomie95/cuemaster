@@ -123,15 +123,8 @@ export async function settleInvite(db: Db, playerId: string) {
       referredBy: { $exists: true },
       invitePaid: { $ne: true },
       $expr: {
-        $gte: [
-          {
-            $add: [
-              { $ifNull: ["$stats.cpuMatches", 0] },
-              { $ifNull: ["$stats.onlineMatches", 0] },
-            ],
-          },
-          MATCHES_NEEDED,
-        ],
+        // Racks played to the end: quits and resigns would let a throwaway guest farm it.
+        $gte: [{ $ifNull: ["$stats.finishedMatches", 0] }, MATCHES_NEEDED],
       },
     },
     {

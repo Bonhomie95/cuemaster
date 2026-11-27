@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { winVerifiedRack } from "./playCpu";
 const base = process.env.TEST_API_URL || "http://127.0.0.1:4000";
 
@@ -50,13 +51,23 @@ test("an invite pays both players once, after the newcomer finishes three matche
     "one code per player",
   );
   const before = (await host("/me")).body;
-  // Nothing is paid until three matches are finished.
+  // Nothing is paid until three matches are finished, and a quit is not finished.
   assert.equal((await guest("/me")).body.rubies, 0);
+  const quit = await guest("/local-matches/start", "POST", {
+    venueId: "heritage",
+    requestId: randomUUID(),
+    mode: "cpu",
+  });
+  assert.equal(quit.status, 201);
+  await guest(`/local-matches/${quit.body.match.id}/finish`, "POST", {
+    outcome: "forfeit",
+  });
   let finished = 0;
   while (finished < 3) {
+    assert.equal((await host("/me")).body.rubies, before.rubies);
     const r = await winVerifiedRack(guest);
     assert.ok(r.body.verified);
-    finished = (await guest("/me")).body.stats.cpuMatches;
+    finished = (await guest("/me")).body.stats.finishedMatches;
   }
   const after = (await host("/me")).body;
   assert.equal(after.rubies, before.rubies + 10);

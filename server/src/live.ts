@@ -653,6 +653,11 @@ export function installLive(
         },
       });
       const loser = 1 - winner;
+      // Only a rack played to the end counts toward an invite bonus, never a resign or a walk-off.
+      const finished =
+        reason === "rack"
+          ? { "stats.finishedMatches": inc("$stats.finishedMatches", 1) }
+          : {};
       results[winner] = await users.findOneAndUpdate(
         { _id: m.seats[winner].profile.id },
         [
@@ -663,6 +668,7 @@ export function installLive(
               trophies: inc("$trophies", TROPHIES.win),
               "stats.onlineMatches": inc("$stats.onlineMatches", 1),
               "stats.onlineWins": inc("$stats.onlineWins", 1),
+              ...finished,
               "stats.coinsWon": inc("$stats.coinsWon", pot),
               // The house keeps its record but has no use for crates, form or a piggy bank.
               ...(m.seats[winner].house
@@ -697,6 +703,7 @@ export function installLive(
               },
               "stats.onlineMatches": inc("$stats.onlineMatches", 1),
               "stats.onlineLosses": inc("$stats.onlineLosses", 1),
+              ...finished,
               ...(m.seats[loser].house
                 ? {}
                 : { piggy: piggyDeposit(false), ...form(false) }),

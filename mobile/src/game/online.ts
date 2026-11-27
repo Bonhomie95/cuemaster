@@ -72,6 +72,7 @@ class Online {
   private ws: WebSocket | null = null;
   private ready: Promise<void> | null = null;
   private retry = 0;
+  private tables = 0;
   private aimTimer: ReturnType<typeof setInterval> | null = null;
   private lastAim = "";
   revision = 0;
@@ -113,6 +114,16 @@ class Online {
           clearTimeout(timer);
           this.retry = 0;
           resolve();
+          // Back from a dropped connection: the server resends a live table right after its
+          // welcome. Silence means the match ended (or the server restarted) while this phone
+          // was away, and the table would otherwise stay frozen for good.
+          if (this.status === "playing") {
+            const tables = this.tables;
+            setTimeout(() => {
+              if (this.status !== "playing" || this.tables !== tables) return;
+              this.receive({ t: "end", winner: null, reason: "gone" });
+            }, 4000);
+          }
         }
         this.receive(m);
       };
@@ -328,6 +339,7 @@ class Online {
       case "cancelled":
         break;
       case "match":
+        this.tables++;
         this.startTable(m, m.state !== undefined);
         break;
       case "act": {

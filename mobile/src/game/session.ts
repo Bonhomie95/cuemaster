@@ -486,7 +486,7 @@ export class Session {
     this.turnSerial++;
   }
   expireTurn() {
-    this.power = 0;
+    this.power = this.side = this.top = 0;
     if (this.progress.turn === 0) this.record({ t: "timeout" });
     this.progress.turn = 1 - this.progress.turn;
     this.progress.foul = "Time expired";
@@ -508,8 +508,9 @@ export class Session {
     if (!this.turnDeadline)
       this.turnDeadline = now + this.activeCue.seconds * 1000;
     const left = Math.max(0, Math.ceil((this.turnDeadline - now) / 1000));
-    // Online, the server owns the clock and sends the timeout itself.
-    if (left === 0 && !this.remote) this.expireTurn();
+    // Online, the server owns the clock and sends the timeout itself. The house never times
+    // out: the referee's replay has no clock, and an unrecorded rival timeout split the tables.
+    if (left === 0 && !this.remote && !this.cpuTurn) this.expireTurn();
     else if (left !== this.secondsLeft) {
       this.secondsLeft = left;
       this.notify();
@@ -977,7 +978,13 @@ export class Session {
           over20ms: fs.filter((t) => t > 20).length,
           frames: fs.length,
         };
+        const shooter = this.progress.turn;
         this.progress.finish(this.drill === "break" && this.shots === 1);
+        // Practice has no second player: a miss used to pass the table to a "Player 2".
+        if (!this.matchRules && !this.cpu && !this.remote)
+          this.progress.turn = 0;
+        // Spin belongs to the shooter; the opponent's must not ride into this player's shot.
+        if (this.progress.turn !== shooter) this.side = this.top = 0;
         if (this.world.balls.filter((b) => b.id !== 0).every((b) => b.pocketed))
           this.progress.finished = true;
         this.running = false;
