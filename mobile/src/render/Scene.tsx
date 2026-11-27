@@ -14,7 +14,7 @@ import meshData from "../../assets/models/table-mesh.json";
 import { session, skins } from "../game/session";
 import { groupOf } from "../game/progress";
 import { R, H, W, LUCKY } from "../physics/engine";
-import { pockets, opening } from "./pockets";
+import { pockets, opening, lip } from "./pockets";
 import {
   luckyColors,
   ballTexture,
@@ -334,7 +334,8 @@ function Balls() {
       let x = old.x + (b.x - old.x) * a,
         z = old.z + (b.z - old.z) * a;
       if (b.pocketed) {
-        // Roll over the lip towards the pocket centre while falling, instead of sinking in place.
+        // Roll over the lip into the black while falling, instead of sinking in place. Aim one
+        // ball radius past the lip: a side pocket's disc centre sits short of it.
         let best = pockets[0];
         for (const p of pockets)
           if (
@@ -342,9 +343,10 @@ function Balls() {
             Math.hypot(best.x - b.x, best.z - b.z)
           )
             best = p;
-        const k = Math.min(1, d / 0.16);
-        x += (best.x - x) * k;
-        z += (best.z - z) * k;
+        const k = Math.min(1, d / 0.16),
+          [lx, lz] = lip(best);
+        x += (lx + best.nx * R - x) * k;
+        z += (lz + best.nz * R - z) * k;
       }
       m.position.set(x, R - 3 * d * d, z);
       m.quaternion.set(old.qx, old.qy, old.qz, old.qw);
