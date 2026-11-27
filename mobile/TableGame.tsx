@@ -446,8 +446,8 @@ function Avatar({
       <Image
         source={
           variant === 1
-            ? require("./assets/avatars/opponent-natural.png")
-            : require("./assets/avatars/player-natural.png")
+            ? require("./assets/avatars/opponent-natural.jpg")
+            : require("./assets/avatars/player-natural.jpg")
         }
         style={{ width: 43, height: 43 }}
       />
