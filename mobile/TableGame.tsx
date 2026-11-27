@@ -38,6 +38,7 @@ import CompatibilityTable from "./src/render/CompatibilityTable";
 import { session, skins, encodeReplay } from "./src/game/session";
 import { coinsShort, flag, type Player } from "./src/app/api";
 import { Press, Enter } from "./src/app/motion";
+import { useAwake } from "./src/app/feedback";
 import { online } from "./src/game/online";
 import { setSound } from "./src/app/sound";
 import {
@@ -420,6 +421,7 @@ type TableProps = {
   onPlayAgain?: () => void;
 };
 export default function TableGame(props: TableProps) {
+  useAwake("table");
   return <Game {...props} />;
 }
 function Avatar({

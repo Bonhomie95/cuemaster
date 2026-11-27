@@ -1,6 +1,7 @@
 import { useEffect, useReducer } from "react";
 import { Platform } from "react-native";
 import Constants from "expo-constants";
+import { activateKeepAwakeAsync, deactivateKeepAwake } from "expo-keep-awake";
 import { api } from "./api";
 
 /**
@@ -161,6 +162,8 @@ export async function showRewardedVideo(
   prepared = null;
   changed();
   const ads = await import("react-native-google-mobile-ads");
+  // The phone must not dim halfway through a video.
+  void activateKeepAwakeAsync("ad").catch(() => {});
   const outcome = await new Promise<RewardOutcome>((resolve) => {
     let earned = false;
     const offs: (() => void)[] = [];
@@ -178,7 +181,7 @@ export async function showRewardedVideo(
       p.ad.addAdEventListener(ads.AdEventType.ERROR, () => done("unavailable")),
     );
     p.ad.show().catch(() => done("unavailable"));
-  });
+  }).finally(() => void deactivateKeepAwake("ad").catch(() => {}));
   // On a deployment AdMob cannot call back into — a developer machine, or production during a
   // test period on Google's sample units — the server lets the app redeem the ticket it was
   // issued. Otherwise AdMob's signed callback grants it.

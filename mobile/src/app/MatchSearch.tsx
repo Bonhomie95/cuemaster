@@ -20,6 +20,7 @@ import { API, Player, Venue, coinsShort } from "./api";
 import { venueArt } from "./art";
 import { Avatar } from "./avatar";
 import { Press, Pulse, Enter } from "./motion";
+import { useAwake } from "./feedback";
 import { online } from "../game/online";
 
 export type SearchKind = "queue" | "host" | "join";
@@ -43,6 +44,7 @@ export default function MatchSearch({
   code?: string;
   onCancel: () => void;
 }) {
+  useAwake("search");
   useSyncExternalStore(online.subscribe, online.snapshot);
   const [seconds, setSeconds] = useState(0);
   const [code, setCode] = useState(invited);

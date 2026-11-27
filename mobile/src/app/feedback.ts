@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import * as Haptics from "expo-haptics";
+import { useKeepAwake } from "expo-keep-awake";
 import { sfx, type Sound } from "./sound";
 
 /**
@@ -33,3 +34,8 @@ export const warn = () => {
     () => {},
   );
 };
+/** The screen stays on while a game is in play: the queue and the table. Native only. */
+export const useAwake: (tag: string) => void =
+  Platform.OS === "web"
+    ? () => {}
+    : (tag) => useKeepAwake(tag, { suppressDeactivateWarnings: true });

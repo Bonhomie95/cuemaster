@@ -14,6 +14,7 @@ import meshData from "../../assets/models/table-mesh.json";
 import { session, skins } from "../game/session";
 import { groupOf } from "../game/progress";
 import { R, H, W, LUCKY } from "../physics/engine";
+import { pockets, opening } from "./pockets";
 import {
   luckyColors,
   ballTexture,
@@ -252,32 +253,34 @@ function Table() {
     </group>
   );
 }
-/** [x, z, mouth radius] in ball radii, so the trim follows the ball size and the rail cut. */
-const pocketCenters: [number, number, number][] = [
-  [H + 0.35 * R, W + 0.35 * R, 2.35 * R],
-  [H + 0.35 * R, -W - 0.35 * R, 2.35 * R],
-  [-H - 0.35 * R, W + 0.35 * R, 2.35 * R],
-  [-H - 0.35 * R, -W - 0.35 * R, 2.35 * R],
-  [0, W + 0.6 * R, 1.95 * R],
-  [0, -W - 0.6 * R, 1.95 * R],
-];
 /**
  * Pocket trim. Overhead, the modelled mouth reads as a muddle of cloth shelf, cushion ends and
  * liner, so each mouth is covered by a black opening that sits above the shelf but below the
- * balls, framed by a metal cap arc on the rail top in the venue's finish.
+ * balls, framed by a metal cap arc on the rail top in the venue's finish. The black starts at the
+ * line where a ball drops (pockets.ts): a ball that has not gone in never sits on it.
  */
 function Pockets() {
   const skin = skins[session.skin];
+  const openings = useMemo(
+    () =>
+      pockets.map(
+        (p) =>
+          new T.ShapeGeometry(
+            new T.Shape(opening(p).map(([u, v]) => new T.Vector2(u, -v))),
+          ),
+      ),
+    [],
+  );
   return (
     <group>
-      {pocketCenters.map(([x, z, r], i) => (
+      {pockets.map(({ x, z, r }, i) => (
         <group key={i} position={[x, 0, z]}>
           <mesh
             rotation={[-Math.PI / 2, 0, 0]}
             position={[0, 0.004, 0]}
             renderOrder={1}
+            geometry={openings[i]}
           >
-            <circleGeometry args={[r, 32]} />
             <meshBasicMaterial color="#04060a" toneMapped={false} />
           </mesh>
           <mesh
@@ -332,16 +335,16 @@ function Balls() {
         z = old.z + (b.z - old.z) * a;
       if (b.pocketed) {
         // Roll over the lip towards the pocket centre while falling, instead of sinking in place.
-        let best = pocketCenters[0];
-        for (const p of pocketCenters)
+        let best = pockets[0];
+        for (const p of pockets)
           if (
-            Math.hypot(p[0] - b.x, p[1] - b.z) <
-            Math.hypot(best[0] - b.x, best[1] - b.z)
+            Math.hypot(p.x - b.x, p.z - b.z) <
+            Math.hypot(best.x - b.x, best.z - b.z)
           )
             best = p;
         const k = Math.min(1, d / 0.16);
-        x += (best[0] - x) * k;
-        z += (best[1] - z) * k;
+        x += (best.x - x) * k;
+        z += (best.z - z) * k;
       }
       m.position.set(x, R - 3 * d * d, z);
       m.quaternion.set(old.qx, old.qy, old.qz, old.qw);
@@ -405,8 +408,7 @@ function Balls() {
             >
               <sphereGeometry
                 args={[
-                  // Drawn 10% over size for readability on a phone; the physics radius is unchanged.
-                  R * BALL_DRAW,
+                  R,
                   Platform.OS === "web" ? 48 : 24,
                   Platform.OS === "web" ? 32 : 16,
                 ]}
@@ -481,7 +483,7 @@ function GhostBall() {
   });
   return (
     <mesh ref={mesh} visible={false} renderOrder={4}>
-      <sphereGeometry args={[R * BALL_DRAW * 1.02, 24, 16]} />
+      <sphereGeometry args={[R * 1.02, 24, 16]} />
       <meshBasicMaterial
         color="#9fe8ff"
         transparent
@@ -506,7 +508,7 @@ function InHandBall() {
   });
   return (
     <mesh ref={mesh} visible={false} renderOrder={4}>
-      <sphereGeometry args={[R * BALL_DRAW, 24, 16]} />
+      <sphereGeometry args={[R, 24, 16]} />
       <meshBasicMaterial
         color="#fbfaf3"
         transparent
@@ -797,7 +799,6 @@ function Aim() {
 // overhang may run under the HUD edges, which buys the cloth a bigger share of the screen.
 // Vertically the pockets must stay clear of the player strips, so the short axis fits the rail.
 // Measured from table-mesh.json: the cabinet's outer edge, so the whole table sits clear of the HUD.
-const BALL_DRAW = 1.1;
 const TABLE_X = 1.47,
   TABLE_Z = 0.84,
   // A long lens and a slight tilt: the reference reads almost orthographic, which is what keeps

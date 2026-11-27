@@ -154,20 +154,8 @@ function fillCloth(data: Uint8Array, y0: number, y1: number) {
       // Lamp pool: bright down the middle of the bed, falling away to the corners.
       const r = Math.min(1, Math.hypot(px / 1.55, pz / 0.95));
       const pool = 1 - 0.34 * r * r;
-      // Pocket mouths sit in their own shadow.
-      let pocket = 1;
-      for (const [cx, cz] of [
-        [1.27, 0.635],
-        [1.27, -0.635],
-        [-1.27, 0.635],
-        [-1.27, -0.635],
-        [0, 0.66],
-        [0, -0.66],
-      ]) {
-        const q = Math.hypot(px - cx, pz - cz);
-        if (q < 0.17)
-          pocket = Math.min(pocket, 0.62 + 0.38 * (q / 0.17) ** 1.5);
-      }
+      // No extra shadow round the pockets: the cloth up to each pocket's black is still in play,
+      // and a darkened lip read as part of the hole.
       seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
       const noise =
         (seed / 4294967296 - 0.5) * 24 +
@@ -178,10 +166,7 @@ function fillCloth(data: Uint8Array, y0: number, y1: number) {
         Math.sin(y * 0.7) * 0.8;
       const v = Math.max(
           0,
-          Math.min(
-            255,
-            Math.round((242 + weave + noise) * cushion * pool * pocket),
-          ),
+          Math.min(255, Math.round((242 + weave + noise) * cushion * pool)),
         ),
         i = (y * w + x) * 4;
       data[i] = data[i + 1] = data[i + 2] = v;

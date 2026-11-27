@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import mesh from "../mobile/assets/models/table-mesh.json";
 import { World, ball, H, W } from "../mobile/src/physics/engine";
+import { pockets, opening, lip } from "../mobile/src/render/pockets";
 function hasCloth(x: number, z: number) {
   const p = mesh.cloth.positions;
   for (let i = 0; i < p.length; i += 9) {
@@ -38,5 +39,22 @@ test("all six visible pocket shelves end at the physics drop boundary", () => {
     w.capture(b);
     assert.equal(b.pocketed, dropped, `physics at ${x},${z}`);
     assert.equal(hasCloth(x, z), !dropped, `visible shelf at ${x},${z}`);
+  }
+});
+test("each pocket's black starts exactly where a ball drops", () => {
+  for (const p of pockets) {
+    // No black on cloth a ball can still roll on.
+    for (const [u, v] of opening(p))
+      assert.ok(p.nx * (p.x + u) + p.nz * (p.z + v) >= p.d - 1e-9);
+    // Straight in from the pocket: a hair short of the black stays up, a hair past it drops.
+    const [x, z] = lip(p);
+    for (const [step, dropped] of [
+      [-0.002, false],
+      [0.002, true],
+    ] as const) {
+      const b = ball(1, x + p.nx * step, z + p.nz * step);
+      new World().capture(b);
+      assert.equal(b.pocketed, dropped, `pocket at ${p.x},${p.z}`);
+    }
   }
 });

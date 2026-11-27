@@ -23,6 +23,17 @@ export function throwFriction(slip: number) {
 export const H = P.length / 2,
   W = P.width / 2,
   R = P.radius;
+/**
+ * Where a ball drops, in ball radii so the mouths keep their proportions if the ball size
+ * changes: past the side cushion line by `side`, or within `corner` of a corner (x + z). The
+ * table draws each pocket's black from these numbers.
+ */
+export const DROP = {
+  side: 0.9,
+  sideMouth: 0.35,
+  corner: 1.2,
+  cornerReach: 3.2,
+};
 /** Cushion nose contact sits above the ball centre: sin θ = (nose − R)/R. */
 const NOSE_SIN = Math.max(0, Math.min(0.5, (P.noseHeight - R) / R)),
   NOSE_COS = Math.sqrt(1 - NOSE_SIN * NOSE_SIN);
@@ -429,10 +440,11 @@ export class World {
   capture(b: Ball) {
     const x = Math.abs(b.x),
       z = Math.abs(b.z);
-    // Expressed in ball radii so the mouths keep their proportions if the ball size changes.
-    const side = x < P.sideHalf - 0.35 * R && z > W + 0.9 * R;
+    const side = x < P.sideHalf - DROP.sideMouth * R && z > W + DROP.side * R;
     const corner =
-      x + z > H + W - 1.2 * R && x > H - 3.2 * R && z > W - 3.2 * R;
+      x + z > H + W - DROP.corner * R &&
+      x > H - DROP.cornerReach * R &&
+      z > W - DROP.cornerReach * R;
     if (side || corner) {
       b.pocketed = true;
       b.drop = 0;

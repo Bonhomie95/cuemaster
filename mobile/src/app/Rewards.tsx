@@ -14,7 +14,8 @@ import { LinearGradient } from "expo-linear-gradient";
 import { api, Player } from "./api";
 import { showRewardedVideo, untilGranted, useVideo } from "./ads";
 import { celebrate } from "./feedback";
-import { remind } from "./notify";
+import { forget, remind } from "./notify";
+import { crateReminder } from "./crateReminder";
 import { sfx } from "./sound";
 import { Press, Enter, CountUp, Pulse, CrateBurst } from "./motion";
 import { icons } from "./art";
@@ -128,6 +129,14 @@ export default function Rewards({
   async function load() {
     setData(await api("/me/crates"));
   }
+  // The crate reminder follows every crate list the server sends: a video moves it, opening the
+  // crate clears it. Permission is only asked when an unlock starts.
+  useEffect(() => {
+    if (!data) return;
+    const r = crateReminder(data.crates);
+    if (r) void remind("crate", r.at, r.title, r.body, false);
+    else void forget("crate");
+  }, [data]);
   useEffect(() => {
     let active = true;
     load()
@@ -318,15 +327,13 @@ export default function Rewards({
                                     "POST",
                                     {},
                                   );
-                                  const started = r.crates?.find(
-                                    (c: Crate) => c.id === crate.id,
-                                  );
-                                  if (started?.readyAt)
+                                  const due = crateReminder(r.crates);
+                                  if (due)
                                     void remind(
                                       "crate",
-                                      new Date(started.readyAt),
-                                      `${crate.name} unlocked`,
-                                      "Your crate is ready. Open it and collect your coins.",
+                                      due.at,
+                                      due.title,
+                                      due.body,
                                     );
                                   await load();
                                 })

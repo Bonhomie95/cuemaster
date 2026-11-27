@@ -52,7 +52,8 @@ export async function remind(
   body: string,
   ask = true,
 ) {
-  if (when.getTime() <= Date.now() + 30_000) return;
+  // A time that has come (a video took the hour off, the crate opened early) clears the old one.
+  if (when.getTime() <= Date.now() + 30_000) return forget(id);
   const n = await allowed(ask);
   if (!n) return;
   await n

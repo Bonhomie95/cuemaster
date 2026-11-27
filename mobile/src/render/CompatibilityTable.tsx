@@ -4,6 +4,7 @@ import { session, skins } from "../game/session";
 import { H, W, R, LUCKY } from "../physics/engine";
 import { ballColors, luckyColors } from "./textures";
 import { aimGuide } from "./aimGuide";
+import { pockets, lip } from "./pockets";
 
 /** A GL-independent view of the same world, for devices whose renderer cannot start. */
 export default function CompatibilityTable() {
@@ -86,7 +87,7 @@ export default function CompatibilityTable() {
   const left = hud.left + (safeWidth - width) / 2;
   const top = hud.top + (safeHeight - height) / 2;
   const skin = skins[session.skin];
-  const diameter = 2 * R * 1.1 * scale;
+  const diameter = 2 * R * scale;
   const cue = session.world.balls.find((b) => b.id === 0);
   const guide = cue && canAim() && !cue.pocketed && !session.placement;
   const ghost = session.ghost?.world.balls.find((b) => b.id === 0);
@@ -155,27 +156,28 @@ export default function CompatibilityTable() {
                     />
                   );
                 })}
-              {[
-                [0, 0],
-                [width / 2, 0],
-                [width, 0],
-                [0, height],
-                [width / 2, height],
-                [width, height],
-              ].map(([x, y], i) => (
-                <View
-                  key={i}
-                  style={{
-                    position: "absolute",
-                    left: x - diameter * 0.75,
-                    top: y - diameter * 0.75,
-                    width: diameter * 1.5,
-                    height: diameter * 1.5,
-                    borderRadius: diameter,
-                    backgroundColor: "#020609",
-                  }}
-                />
-              ))}
+              {pockets.map((p, i) => {
+                // A half disc whose flat edge is the drop line: black only where a ball has gone in.
+                const [x, z] = lip(p),
+                  a = (p.nx ? 1.9 : 1.55) * R * scale;
+                return (
+                  <View
+                    key={i}
+                    style={{
+                      position: "absolute",
+                      left: (x + H) * scale - a,
+                      top: (z + W) * scale - a,
+                      width: 2 * a,
+                      height: a,
+                      borderTopLeftRadius: a,
+                      borderTopRightRadius: a,
+                      backgroundColor: "#020609",
+                      transformOrigin: "50% 100%",
+                      transform: [{ rotate: `${Math.atan2(p.nx, -p.nz)}rad` }],
+                    }}
+                  />
+                );
+              })}
               {guide && (
                 <View
                   style={{
