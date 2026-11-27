@@ -214,6 +214,8 @@ export function Confetti({ play }: { play: boolean }) {
 export type ResultView = {
   won: boolean;
   draw?: boolean;
+  /** Replaces VICTORY / NO RESULT / DEFEAT when the outcome is not known here. */
+  kicker?: string;
   title: string;
   note?: string;
   pot: number;
@@ -258,7 +260,8 @@ export function ResultCard({
           style={StyleSheet.absoluteFill}
         />
         <Text style={[s.resultKicker, { color: accent }]}>
-          {result.won ? "VICTORY" : result.draw ? "NO RESULT" : "DEFEAT"}
+          {result.kicker ??
+            (result.won ? "VICTORY" : result.draw ? "NO RESULT" : "DEFEAT")}
         </Text>
         <Text style={s.resultTitle}>{result.title}</Text>
         {!!result.note && <Text style={s.resultNote}>{result.note}</Text>}

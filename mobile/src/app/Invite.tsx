@@ -50,8 +50,8 @@ export default function InviteCard({
         <View style={{ flex: 1 }}>
           <Text style={s.title}>Invite friends</Text>
           <Text style={s.copy}>
-            You both get {reward} when they finish {invite.matchesNeeded}{" "}
-            matches.{invite.friends ? ` ${invite.friends} joined so far.` : ""}
+            You both get {reward} when they win {invite.matchesNeeded} matches.
+            {invite.friends ? ` ${invite.friends} joined so far.` : ""}
           </Text>
         </View>
       </View>
@@ -103,7 +103,7 @@ export default function InviteCard({
                   celebrate();
                   setInvite({ ...invite, canRedeem: false, redeemed: true });
                   setMessage(
-                    `Linked with ${r.friend}. Finish ${invite.matchesNeeded} matches to collect.`,
+                    `Linked with ${r.friend}. Win ${invite.matchesNeeded} matches to collect.`,
                   );
                 })
                 .catch((e) => setMessage(e.message))

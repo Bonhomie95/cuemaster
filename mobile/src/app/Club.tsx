@@ -713,8 +713,16 @@ function ClubBody() {
       .then(setPlayer)
       .catch(() => {});
   }, [liveMatchId]);
+  // The new balance and level wait for the result card: adopting them at once opened the
+  // level-up dialog over the deciding shot and gave the result away.
   useEffect(() => {
-    if (online.result?.player) setPlayer(online.result.player);
+    const r = online.result;
+    if (!r?.player) return;
+    const t = setTimeout(
+      () => setPlayer(r.player!),
+      Math.max(0, r.revealAt - Date.now()),
+    );
+    return () => clearTimeout(t);
   }, [liveRevision]);
   /**
    * Report a finished (or abandoned) rack. A finished rack stays on the table behind the result

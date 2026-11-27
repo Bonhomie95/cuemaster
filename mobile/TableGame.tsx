@@ -91,6 +91,17 @@ function Power({ compact = false }: { compact?: boolean }) {
   const [power, setPower] = useState(0);
   const start = React.useRef(0);
   const gestureTurn = React.useRef(0);
+  // Every finger on the screen reports to the bar once it holds the gesture; only the one that
+  // took it pulls and shoots. A resting second thumb used to read as full power.
+  const finger = React.useRef<number | string | null>(null);
+  const release = () => {
+    if (finger.current === null) return;
+    finger.current = null;
+    if (session.power > 0.025 && gestureTurn.current === session.turnSerial)
+      session.shoot();
+    session.power = 0;
+    setPower(0);
+  };
   const responder = useMemo(
     () =>
       PanResponder.create({
@@ -101,29 +112,37 @@ function Power({ compact = false }: { compact?: boolean }) {
           !session.progress.finished &&
           !session.progress.breakChoice,
         onPanResponderGrant: (e) => {
+          finger.current = e.nativeEvent.identifier;
           start.current = e.nativeEvent.pageY;
           gestureTurn.current = session.turnSerial;
           session.power = 0;
           setPower(0);
         },
         onPanResponderMove: (e) => {
+          const { touches } = e.nativeEvent;
+          const t =
+            touches.find((x) => x.identifier === finger.current) ||
+            (touches.length <= 1 ? e.nativeEvent : null);
+          if (!t) return;
           const p = Math.max(
             0,
-            Math.min(1, (e.nativeEvent.pageY - start.current) / travel),
+            Math.min(1, (t.pageY - start.current) / travel),
           );
           session.power = p;
           setPower(p);
         },
-        onPanResponderRelease: () => {
+        // The pulling finger lifting is the shot, even while another finger stays down.
+        onPanResponderEnd: (e) => {
           if (
-            session.power > 0.025 &&
-            gestureTurn.current === session.turnSerial
+            e.nativeEvent.changedTouches.some(
+              (x) => x.identifier === finger.current,
+            )
           )
-            session.shoot();
-          session.power = 0;
-          setPower(0);
+            release();
         },
+        onPanResponderRelease: release,
         onPanResponderTerminate: () => {
+          finger.current = null;
           session.power = 0;
           setPower(0);
         },
@@ -915,6 +934,8 @@ function Game({
       ? {
           won: live.won,
           draw: live.draw,
+          // Whether this player lost the entry is the server's to say; the balance refreshes.
+          kicker: live.reason === "gone" ? "MATCH OVER" : undefined,
           title:
             live.reason === "gone"
               ? "Table closed"

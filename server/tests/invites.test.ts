@@ -27,7 +27,7 @@ const client = async () => {
   };
 };
 
-test("an invite pays both players once, after the newcomer finishes three matches", async () => {
+test("an invite pays both players once, after the newcomer wins three refereed matches", async () => {
   const [host, guest] = [await client(), await client()];
   const mine = (await host("/me/invite")).body;
   assert.match(mine.code, /^[A-Z2-9]{6}$/);
@@ -51,7 +51,7 @@ test("an invite pays both players once, after the newcomer finishes three matche
     "one code per player",
   );
   const before = (await host("/me")).body;
-  // Nothing is paid until three matches are finished, and a quit is not finished.
+  // Nothing is paid until three refereed wins; a quit or a claimed loss never counts.
   assert.equal((await guest("/me")).body.rubies, 0);
   const quit = await guest("/local-matches/start", "POST", {
     venueId: "heritage",
@@ -62,12 +62,23 @@ test("an invite pays both players once, after the newcomer finishes three matche
   await guest(`/local-matches/${quit.body.match.id}/finish`, "POST", {
     outcome: "forfeit",
   });
+  for (let i = 0; i < 3; i++) {
+    const lost = await guest("/local-matches/start", "POST", {
+      venueId: "heritage",
+      requestId: randomUUID(),
+      mode: "cpu",
+    });
+    await guest(`/local-matches/${lost.body.match.id}/finish`, "POST", {
+      outcome: "lost",
+    });
+  }
+  assert.equal((await host("/me")).body.rubies, before.rubies);
   let finished = 0;
   while (finished < 3) {
     assert.equal((await host("/me")).body.rubies, before.rubies);
     const r = await winVerifiedRack(guest);
     assert.ok(r.body.verified);
-    finished = (await guest("/me")).body.stats.finishedMatches;
+    finished = (await guest("/me")).body.stats.refereedWins;
   }
   const after = (await host("/me")).body;
   assert.equal(after.rubies, before.rubies + 10);

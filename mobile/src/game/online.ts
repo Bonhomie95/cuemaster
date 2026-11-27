@@ -120,8 +120,23 @@ class Online {
           if (this.status === "playing") {
             const tables = this.tables;
             setTimeout(() => {
-              if (this.status !== "playing" || this.tables !== tables) return;
-              this.receive({ t: "end", winner: null, reason: "gone" });
+              if (
+                this.ws !== ws ||
+                this.status !== "playing" ||
+                this.tables !== tables
+              )
+                return;
+              this.receive({
+                t: "end",
+                winner: null,
+                reason: "gone",
+                pot: 0,
+                refunded: 0,
+                trophies: 0,
+                xp: 0,
+                crate: null,
+                player: null,
+              });
             }, 4000);
           }
         }

@@ -112,7 +112,7 @@ export function installInvites(
 }
 
 /**
- * Pay both sides once the invited player has finished enough matches. Safe to call after every
+ * Pay both sides once the invited player has won enough refereed matches. Safe to call after every
  * match: the `invitePaid` flag in the same write makes it pay exactly once.
  */
 export async function settleInvite(db: Db, playerId: string) {
@@ -123,8 +123,8 @@ export async function settleInvite(db: Db, playerId: string) {
       referredBy: { $exists: true },
       invitePaid: { $ne: true },
       $expr: {
-        // Racks played to the end: quits and resigns would let a throwaway guest farm it.
-        $gte: [{ $ifNull: ["$stats.finishedMatches", 0] }, MATCHES_NEEDED],
+        // Refereed wins only: quits, resigns and thrown racks would let a throwaway guest farm it.
+        $gte: [{ $ifNull: ["$stats.refereedWins", 0] }, MATCHES_NEEDED],
       },
     },
     {
