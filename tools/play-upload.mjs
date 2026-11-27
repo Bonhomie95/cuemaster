@@ -9,7 +9,9 @@
 //
 // The service account must be added under Play Console → Users and permissions with access to
 // the app. Re-running is safe: listings and products are overwritten, images are replaced.
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { createSign } from "node:crypto";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -56,6 +58,43 @@ async function token() {
 const tok = await token();
 const API = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${PKG}`;
 const UPLOAD = `https://androidpublisher.googleapis.com/upload/androidpublisher/v3/applications/${PKG}`;
+/**
+ * Google can hold a bundle upload's reply past fetch's five-minute header timeout (27 Nov), so the
+ * bundle goes up with curl, which waits. The token reaches curl through a private header file.
+ */
+function uploadFile(url, file) {
+  const auth = join(tmpdir(), `play-auth-${process.pid}`);
+  writeFileSync(auth, `Authorization: Bearer ${tok}\n`, { mode: 0o600 });
+  try {
+    const out = execFileSync(
+      "curl",
+      [
+        "-sS",
+        "-X",
+        "POST",
+        "-H",
+        `@${auth}`,
+        "-H",
+        "Content-Type: application/octet-stream",
+        "--data-binary",
+        `@${file}`,
+        "-w",
+        "\n%{http_code}",
+        url,
+      ],
+      { maxBuffer: 1 << 26 },
+    ).toString();
+    const cut = out.lastIndexOf("\n"),
+      status = Number(out.slice(cut + 1));
+    if (status >= 300)
+      throw Error(
+        `POST ${url.replace(UPLOAD, "")} → ${status} ${out.slice(0, cut).slice(0, 400)}`,
+      );
+    return JSON.parse(out.slice(0, cut));
+  } finally {
+    rmSync(auth, { force: true });
+  }
+}
 async function call(method, url, body, type = "application/json") {
   const r = await fetch(url, {
     method,
@@ -183,11 +222,9 @@ if (!args.includes("--products-only")) {
   if (bundle) {
     let up;
     try {
-      up = await call(
-        "POST",
+      up = uploadFile(
         `${UPLOAD}/edits/${edit.id}/bundles?uploadType=media`,
-        readFileSync(join(root, bundle)),
-        "application/octet-stream",
+        join(root, bundle),
       );
     } catch (e) {
       // The same version code was committed by an earlier run: reuse it instead of failing.
