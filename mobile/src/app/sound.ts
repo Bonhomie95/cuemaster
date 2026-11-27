@@ -30,6 +30,16 @@ void AsyncStorage.getItem(KEY)
   })
   .catch(() => {});
 
+// Load every player shortly after launch: a player created on first use starts ~0.1 s late,
+// which a once-a-match sound (opponent found, the drum roll, the result) cannot spare.
+setTimeout(() => {
+  for (const name of Object.keys(FILES) as Sound[])
+    try {
+      players[name] ??= createAudioPlayer(FILES[name]);
+    } catch {
+      // No audio on this device; sfx stays a no-op.
+    }
+}, 1500);
 export function sfx(name: Sound, volume = 1) {
   if (!session.sound) return;
   try {

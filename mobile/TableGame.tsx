@@ -1017,10 +1017,13 @@ function Game({
     lastHolder.current = holder;
   }, [holder]);
   // The player's own foul gets the warning sound and buzz (the opponent's hands them the table).
+  // Not once the rack is decided: the drum roll and the result have the stage.
   const fouled =
     !session.replaying &&
     !session.running &&
     holder !== 0 &&
+    !session.progress.finished &&
+    !(session.remote && online.result) &&
     (session.progress.scratch || (!!paidMatch && !!session.progress.foul));
   const lastFoul = useRef(fouled);
   useEffect(() => {
