@@ -663,8 +663,10 @@ export function installLive(
               trophies: inc("$trophies", TROPHIES.win),
               "stats.onlineMatches": inc("$stats.onlineMatches", 1),
               "stats.onlineWins": inc("$stats.onlineWins", 1),
-              // A rack won at the table counts toward an invite bonus; a resign or walk-off does not.
-              ...(reason === "rack"
+              // A rack won against the house counts toward an invite bonus. Two people can throw
+              // racks to each other (a friend's room, or queueing together on a quiet night), and a
+              // resign or walk-off proves nothing; the house always plays to win.
+              ...(reason === "rack" && m.seats[loser].house
                 ? { "stats.refereedWins": inc("$stats.refereedWins", 1) }
                 : {}),
               "stats.coinsWon": inc("$stats.coinsWon", pot),

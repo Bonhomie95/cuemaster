@@ -119,6 +119,8 @@ function Power({ compact = false }: { compact?: boolean }) {
           setPower(0);
         },
         onPanResponderMove: (e) => {
+          // The pulling finger has lifted (and shot); another finger still down moves nothing.
+          if (finger.current === null) return;
           const { touches } = e.nativeEvent;
           const t =
             touches.find((x) => x.identifier === finger.current) ||
