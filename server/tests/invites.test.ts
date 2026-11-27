@@ -62,16 +62,15 @@ test("an invite pays both players once, after the newcomer wins three refereed m
   await guest(`/local-matches/${quit.body.match.id}/finish`, "POST", {
     outcome: "forfeit",
   });
-  for (let i = 0; i < 3; i++) {
-    const lost = await guest("/local-matches/start", "POST", {
-      venueId: "heritage",
-      requestId: randomUUID(),
-      mode: "cpu",
-    });
-    await guest(`/local-matches/${lost.body.match.id}/finish`, "POST", {
-      outcome: "lost",
-    });
-  }
+  // A new wallet holds four entries: one quit, one claimed loss, and room to win.
+  const lost = await guest("/local-matches/start", "POST", {
+    venueId: "heritage",
+    requestId: randomUUID(),
+    mode: "cpu",
+  });
+  await guest(`/local-matches/${lost.body.match.id}/finish`, "POST", {
+    outcome: "lost",
+  });
   assert.equal((await host("/me")).body.rubies, before.rubies);
   let finished = 0;
   while (finished < 3) {
