@@ -2,6 +2,33 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { guestToken as guest, me, connect } from "./liveClient";
+import { cpuAllowance } from "../src/live";
+
+test("the CPU allowance is read from the container's limits", () => {
+  const files = (m: Record<string, string>) => (f: string) => {
+    if (f in m) return m[f];
+    throw new Error("no such file");
+  };
+  // cgroup v2, as on Render's free instance.
+  assert.equal(
+    cpuAllowance(files({ "/sys/fs/cgroup/cpu.max": "15000 100000\n" })),
+    0.15,
+  );
+  // cgroup v1.
+  assert.equal(
+    cpuAllowance(
+      files({
+        "/sys/fs/cgroup/cpu/cpu.cfs_quota_us": "50000",
+        "/sys/fs/cgroup/cpu/cpu.cfs_period_us": "100000",
+      }),
+    ),
+    0.5,
+  );
+  // No limit: every core.
+  assert.ok(
+    cpuAllowance(files({ "/sys/fs/cgroup/cpu.max": "max 100000" })) >= 1,
+  );
+});
 
 // The free instance can only referee so many tables at once; past that a search is told so
 // before anyone is charged, and the tables already running carry on.

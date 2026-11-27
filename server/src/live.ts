@@ -2,6 +2,8 @@ import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "node:http";
 import type { Db } from "mongodb";
 import { randomInt, randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { availableParallelism } from "node:os";
 import { z } from "zod";
 import { Session, perform, type Action } from "../../mobile/src/game/session";
 import { localWinner } from "../../mobile/src/game/localMatch";
@@ -37,20 +39,36 @@ export const ONLINE_XP = { win: 40, loss: 15 };
 /** How long a dropped player has to come back before the match is theirs to lose. */
 const RETURN_MS = 45_000;
 /**
- * Tables in play at once. Every online shot is simulated here on the main thread, 10–40 ms of CPU
- * on a fast laptop, and Render's free instance has a tenth of a slower CPU. Past about this many
- * tables the shot clocks run late and the health check stalls, and a restart voids every table.
- * Raise LIVE_TABLES with the plan (about 60 on Starter's half CPU).
+ * Room for another table. Every online shot is simulated here on the main thread (10–40 ms of CPU
+ * on a fast laptop), so CPU is what runs out: Render's free instance is allowed 0.15 of one. Past
+ * that the shot clocks run late and the health check stalls, and a restart voids every table. So
+ * a new table opens only while this process used under CPU_BUSY of its allowance over the last
+ * few seconds. The allowance is read from the container, so a bigger plan fits more tables with
+ * nothing to change. LIVE_TABLES is a hard ceiling on top of that.
  */
-const TABLES = Number(process.env.LIVE_TABLES) || 15;
+const TABLES = Number(process.env.LIVE_TABLES) || 60;
+const CPU_BUSY = 0.7;
 const FULL = "Every online table is taken. Try again in a minute.";
+/** CPU seconds per second this process may use: the cgroup quota where there is one. */
+export function cpuAllowance(read = (f: string) => readFileSync(f, "utf8")) {
+  try {
+    const [max, period] = read("/sys/fs/cgroup/cpu.max").trim().split(/\s+/);
+    if (max !== "max") return Number(max) / Number(period);
+  } catch {}
+  try {
+    const quota = Number(read("/sys/fs/cgroup/cpu/cpu.cfs_quota_us"));
+    if (quota > 0)
+      return quota / Number(read("/sys/fs/cgroup/cpu/cpu.cfs_period_us"));
+  } catch {}
+  return availableParallelism();
+}
 /** Open sockets at once, and how long a new one has to sign in before it is closed. */
 const SOCKETS = 500;
 const HELLO_MS = 15_000;
 /**
  * Render's free plan sleeps after 15 minutes without an incoming request, and sleeping drops every
- * table; socket frames may not count as requests. While anyone is queued, hosting or playing, the server
- * calls its own public address this often. With nobody online it stays quiet and may sleep, which
+ * table; socket frames may not count as requests. While anyone is queued, hosting or playing,
+ * the server calls its own public address this often. With nobody online it stays quiet and may sleep, which
  * keeps the workspace's shared 750 free hours for the hours people actually play.
  */
 const AWAKE_MS = 10 * 60_000;
@@ -193,6 +211,19 @@ export function installLive(
   const matches = new Map<string, Match>();
   const byPlayer = new Map<string, Match>();
   void ensureHouse(db).catch((e) => console.error("House setup", e?.name));
+  // Share of the CPU allowance used over the last sample, worker threads included.
+  const allowance = cpuAllowance();
+  console.log(`Live tables: CPU allowance ${allowance}`);
+  let cpuShare = 0,
+    cpuAt = performance.now(),
+    cpuUsed = process.cpuUsage();
+  setInterval(() => {
+    const now = performance.now(),
+      d = process.cpuUsage(cpuUsed);
+    cpuShare = (d.user + d.system) / 1000 / (now - cpuAt) / allowance;
+    cpuAt = now;
+    cpuUsed = process.cpuUsage();
+  }, 5_000).unref();
   // The restart refund below looks up active tables; partial, so only those are indexed.
   void records
     .createIndex(
@@ -405,7 +436,7 @@ export function installLive(
     // Every way to a table (search, house, room, rematch) comes through here, before any charge.
     let tables = 0;
     for (const x of matches.values()) if (!x.ended) tables++;
-    if (tables >= TABLES) {
+    if (tables >= TABLES || cpuShare > CPU_BUSY) {
       for (const x of [a, b]) send(x.conn, { t: "error", message: FULL });
       return;
     }

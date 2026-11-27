@@ -30,8 +30,8 @@ const entries = [
 ];
 export const entryArt = entries[Math.floor(Math.random() * entries.length)];
 export const portraits = [
-  require("../../assets/avatars/player-natural.png"),
-  require("../../assets/avatars/opponent-natural.png"),
+  require("../../assets/avatars/player-natural.jpg"),
+  require("../../assets/avatars/opponent-natural.jpg"),
 ];
 
 export const clubRoom = require("../../assets/lounge/club-room-soft.jpg");

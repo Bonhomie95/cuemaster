@@ -264,26 +264,41 @@ app.get("/config", (_req, res) =>
     },
   }),
 );
-app.get("/catalog", async (_req, res) =>
-  res.json({
-    venues,
-    challenges,
-    cityChallenges,
-    // Players see events that run: an announcement is a "coming soon" card store review reads
-    // as placeholder content, and a USDC event advertises a real-money prize that does not
-    // exist. Both stay in the admin console and appear once opened.
-    tournaments: (
-      await events
-        .find({
-          status: { $nin: ["draft", "announced"] },
-          kind: { $ne: "crypto" },
-        })
-        .limit(100)
-        .toArray()
-    ).map(publicEvent),
-    cues,
-  }),
-);
+/**
+ * The catalog is the same for every player and the first call of every app start, so it is built
+ * at most once a minute, and afresh as soon as an administrator's change to an event has landed.
+ */
+let catalog: { at: number; body: Promise<string> } | null = null;
+app.use("/admin/tournaments", (req, res, next) => {
+  if (req.method !== "GET") res.on("finish", () => (catalog = null));
+  next();
+});
+app.get("/catalog", async (_req, res) => {
+  if (!catalog || Date.now() - catalog.at > 60_000) {
+    const body = (async () =>
+      JSON.stringify({
+        venues,
+        challenges,
+        cityChallenges,
+        // Players see events that run: an announcement is a "coming soon" card store review
+        // reads as placeholder content, and a USDC event advertises a real-money prize that does
+        // not exist. Both stay in the admin console and appear once opened.
+        tournaments: (
+          await events
+            .find({
+              status: { $nin: ["draft", "announced"] },
+              kind: { $ne: "crypto" },
+            })
+            .limit(100)
+            .toArray()
+        ).map(publicEvent),
+        cues,
+      }))();
+    catalog = { at: Date.now(), body };
+    body.catch(() => (catalog = null));
+  }
+  res.type("json").send(await catalog.body);
+});
 app.post("/me/cue", required, async (req: any, res) => {
   const { cueId } = z
     .object({ cueId: z.enum(["club", "precision", "master"]) })
@@ -370,7 +385,9 @@ app.post("/local-matches/start", required, async (req: any, res) => {
     {
       $inc: { coins: -v.entry },
       $set: { localMatch: match },
-      $addToSet: { localEntryIds: requestId },
+      // Retry protection only needs recent requests; the last 50 keep the player's document from
+      // growing with every match they ever start (every request reads the whole document).
+      $push: { localEntryIds: { $each: [requestId], $slice: -50 } } as any,
     },
     { returnDocument: "after" },
   );
@@ -768,9 +785,9 @@ app.post(
 );
 /**
  * Resident referee workers fed from one queue. Spawning a worker per verification recompiled the
- * engine every time; a resident one answers in milliseconds. Render's free instance has a tenth
- * of a CPU, so one worker is the default: a second would only split the same slice and add its
- * memory. REFEREE_WORKERS raises it on a plan with a whole CPU or more.
+ * engine every time; a resident one answers in milliseconds. Render's free instance is allowed
+ * 0.15 of a CPU, so one worker is the default: a second would only split the same slice and add
+ * its memory. REFEREE_WORKERS raises it on a plan with a whole CPU or more.
  *
  * A job that finds every worker busy waits its turn rather than being refused (a refused CPU win
  * sat unpaid), and its time budget starts when a worker picks it up. Only a queue this deep is
