@@ -531,10 +531,13 @@ export function installLive(
     };
   }
 
+  // LIVE_TURN_SECONDS overrides every turn's clock (tests and device walkthroughs only).
+  const turnOverride = Number(process.env.LIVE_TURN_SECONDS) || 0;
   const turnSeconds = (m: Match) =>
-    m.s.progress.breakChoice
+    turnOverride ||
+    (m.s.progress.breakChoice
       ? BREAK_CHOICE_SECONDS
-      : cueById(m.s.cueIds[m.s.progress.turn]).seconds;
+      : cueById(m.s.cueIds[m.s.progress.turn]).seconds);
 
   /** The next player's clock starts once the phones have finished animating the last shot. */
   function schedule(m: Match, animationMs: number) {

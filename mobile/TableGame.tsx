@@ -1,6 +1,6 @@
 import { clockUrgent } from "./src/game/shotClock";
 import { cueById } from "./src/game/cues";
-import { localWinner } from "./src/game/localMatch";
+import { localWinner, eightBallNote } from "./src/game/localMatch";
 import React, {
   useEffect,
   useMemo,
@@ -935,7 +935,7 @@ function Game({
                     : "Three turns ran out in a row."
                   : live.draw
                     ? "Both players left. Entries refunded."
-                    : "",
+                    : eightBallNote(session.progress, session.opponentName),
           pot: live.pot,
           xp: live.xp,
           trophies: live.trophies,
@@ -1862,28 +1862,28 @@ function Game({
                     />
                   )}
                 </View>
-                <View style={s.diagnostics}>
-                  <Text style={s.eyebrow}>LOCAL PERFORMANCE</Text>
-                  <Text style={s.description}>
-                    {session.fps || "—"} fps ·{" "}
-                    {session.p95 ? session.p95.toFixed(1) : "—"} ms p95 frame
-                    time
-                  </Text>
-                  {session.lastPerformance && (
+                {/* Developer numbers; "prototype" wording in a store build reads as unfinished software. */}
+                {__DEV__ && (
+                  <View style={s.diagnostics}>
+                    <Text style={s.eyebrow}>LOCAL PERFORMANCE</Text>
                     <Text style={s.description}>
-                      Last shot: {session.lastPerformance.fps.toFixed(1)} fps ·{" "}
-                      {session.lastPerformance.p95.toFixed(1)} ms p95 ·{" "}
-                      {session.lastPerformance.over20ms}/
-                      {session.lastPerformance.frames} frames over 20 ms
+                      {session.fps || "—"} fps ·{" "}
+                      {session.p95 ? session.p95.toFixed(1) : "—"} ms p95 frame
+                      time
                     </Text>
-                  )}
-                  <Text style={s.description}>
-                    Physics: 240 Hz with adaptive contact substeps.
-                  </Text>
-                  <Text style={s.description}>
-                    Offline practice prototype · device certification pending.
-                  </Text>
-                </View>
+                    {session.lastPerformance && (
+                      <Text style={s.description}>
+                        Last shot: {session.lastPerformance.fps.toFixed(1)} fps
+                        · {session.lastPerformance.p95.toFixed(1)} ms p95 ·{" "}
+                        {session.lastPerformance.over20ms}/
+                        {session.lastPerformance.frames} frames over 20 ms
+                      </Text>
+                    )}
+                    <Text style={s.description}>
+                      Physics: 240 Hz with adaptive contact substeps.
+                    </Text>
+                  </View>
+                )}
               </>
             )}
           </ScrollView>

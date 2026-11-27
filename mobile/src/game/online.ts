@@ -1,4 +1,5 @@
 import { API, sessionToken, Player, Venue } from "../app/api";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { session, Action, TableState, devAdopt } from "./session";
 
 /**
@@ -43,6 +44,15 @@ type Status =
   "idle" | "connecting" | "queued" | "room" | "playing" | "ended" | "offline";
 
 const socketUrl = () => API.replace(/^http/, "ws") + "/live";
+
+/** Set while this phone sits at a live table, so a relaunch can sign back in to it. */
+const LIVE_KEY = "online.liveMatch";
+const remember = (id: string | null) =>
+  void (
+    id
+      ? AsyncStorage.setItem(LIVE_KEY, JSON.stringify({ id, at: Date.now() }))
+      : AsyncStorage.removeItem(LIVE_KEY)
+  ).catch(() => {});
 
 class Online {
   status: Status = "idle";
@@ -170,6 +180,7 @@ class Online {
   leave() {
     if (this.status === "playing") this.resign();
     this.send({ t: "leave" });
+    remember(null);
     this.stopTable();
     this.reset();
   }
@@ -191,9 +202,43 @@ class Online {
     this.aimTimer = null;
     session.endOnline();
   }
+  /**
+   * After the app was closed mid-match (a crash, a call, the system reclaiming memory), sign back
+   * in so the server hands the table back; it holds the seat for 45 s. Without this the player
+   * landed in the club and lost the match ("did not come back").
+   */
+  async resumeIfAny() {
+    if (this.status !== "idle" || !sessionToken()) return;
+    const raw = await AsyncStorage.getItem(LIVE_KEY).catch(() => null);
+    if (!raw) return;
+    let at = 0;
+    try {
+      at = JSON.parse(raw).at || 0;
+    } catch {}
+    if (Date.now() - at > 3 * 60 * 60 * 1000) return remember(null);
+    try {
+      await this.connect();
+    } catch {
+      return;
+    }
+    // The server sends the table right after its welcome when the seat is still ours.
+    await new Promise((r) => setTimeout(r, 2500));
+    // Read again after the wait: the match message changes it.
+    const status = this.status as Status;
+    if (status === "playing") return;
+    remember(null);
+    if (status !== "connecting") return;
+    const ws = this.ws;
+    this.ws = null;
+    this.ready = null;
+    this.status = "idle";
+    ws?.close();
+    this.notify();
+  }
   /** Seat the local player at the table. This device is always player 0 on screen. */
   private startTable(m: any, resume: boolean) {
     const mirror = m.seat === 1;
+    remember(m.id);
     this.match = {
       id: m.id,
       seat: m.seat,
@@ -256,6 +301,15 @@ class Online {
     }, 100);
   }
   private receive(m: any) {
+    if (__DEV__ && m.t !== "aim" && m.t !== "pong")
+      console.info(
+        "CueMaster live",
+        (globalThis as any).__cmTag ?? "",
+        m.t,
+        m.seq ?? "",
+        m.reason ?? m.status ?? m.message ?? "",
+        this.status,
+      );
     switch (m.t) {
       case "welcome":
       case "pong":
@@ -317,6 +371,7 @@ class Online {
           m.status === "away" ? Date.now() + m.returnMs : 0;
         break;
       case "end":
+        remember(null);
         this.status = "ended";
         this.stopTimersOnly();
         this.result = {

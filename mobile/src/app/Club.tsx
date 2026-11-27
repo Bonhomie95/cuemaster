@@ -25,7 +25,7 @@ import CueShop from "./CueShop";
 import * as Crypto from "expo-crypto";
 import Constants from "expo-constants";
 import MatchVenues, { VenueMode } from "./MatchVenues";
-import { localWinner } from "../game/localMatch";
+import { localWinner, eightBallNote } from "../game/localMatch";
 import React, {
   useEffect,
   useRef,
@@ -408,6 +408,11 @@ function ClubBody() {
     launchRef.current = launch;
     submitted.current = false;
   }, [launch]);
+  // Back to a live online table after the app was closed mid-match.
+  const playerId = player?.id;
+  useEffect(() => {
+    if (playerId) void online.resumeIfAny();
+  }, [playerId]);
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(""), 6500);
@@ -754,7 +759,8 @@ function ClubBody() {
               ? "Crate slots are full. Open one to make room for the next."
               : winner === 0
                 ? ""
-                : "Shake it off. The next rack is yours.",
+                : eightBallNote(session.progress, rival) ||
+                  "Shake it off. The next rack is yours.",
       });
     });
   // A rack that ends is reported at once, so the result card shows the real pot and crate.

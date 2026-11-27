@@ -3,6 +3,7 @@ import { cueById } from "./cues";
 import { World, drill, P, Ball, ball, R, H, W } from "../physics/engine";
 import { Progress } from "./progress";
 import { localWinner } from "./localMatch";
+import { aimGuide } from "../render/aimGuide";
 export type Shot = { angle: number; power: number; side: number; top: number };
 /** A table at rest: everything needed to rebuild it on another device. */
 export type TableState = {
@@ -679,15 +680,24 @@ export class Session {
     if (this.drill === "break" && this.shots === 0) return;
     const cue = this.world.balls.find((b) => b.id === 0)!,
       rack = this.world.balls.map((b) => b.id);
-    let best: { d: number; a: number } | null = null;
+    // The nearest legal ball the cue ball reaches first; a straight line through an opponent's
+    // ball (the nearest legal one, blocked) is a foul waiting for anyone who shoots as aimed.
+    let best: { d: number; a: number } | null = null,
+      clear: { d: number; a: number } | null = null;
     for (const b of this.world.balls) {
       if (!b.id || b.pocketed || this.progress.targetWarning(b.id, false, rack))
         continue;
-      const d = Math.hypot(b.x - cue.x, b.z - cue.z);
-      if (!best || d < best.d)
-        best = { d, a: Math.atan2(b.z - cue.z, b.x - cue.x) };
+      const d = Math.hypot(b.x - cue.x, b.z - cue.z),
+        a = Math.atan2(b.z - cue.z, b.x - cue.x);
+      if (!best || d < best.d) best = { d, a };
+      if (
+        (!clear || d < clear.d) &&
+        aimGuide(this.world.balls, a).hit?.id === b.id
+      )
+        clear = { d, a };
     }
-    if (best) this.angle = best.a;
+    const pick = clear || best;
+    if (pick) this.angle = pick.a;
   }
   placeCue(x: number, z: number, commit = true) {
     if (this.progress.finished) return false;

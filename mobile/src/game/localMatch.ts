@@ -10,3 +10,12 @@ export function localWinner(p: Progress): number | null {
     ? p.turn
     : 1 - p.turn;
 }
+
+/** Why a rack ended on the 8, from player 0's side (the phone's own player). Empty otherwise. */
+export function eightBallNote(p: Progress, opponent: string): string {
+  if (!p.finished || !p.returned.includes(8)) return "";
+  const who = p.turn === 0 ? "You" : opponent;
+  if (!p.foul && !p.scratch && p.groupClearBeforeShot)
+    return `${who} sank the 8.`;
+  return `${who} ${p.scratch ? "scratched on the 8" : p.foul ? "fouled on the 8" : "potted the 8 too early"}.`;
+}

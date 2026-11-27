@@ -568,8 +568,10 @@ function Aim() {
       origin.z - dz * offset + dx * lateral,
     );
     const { distance: dist, hit } = aimGuide(session.world.balls, angle);
+    // Only on this player's own turn: during the opponent's aim it marked this player's own
+    // balls as forbidden (a stripes player saw the icon on stripes while solids aimed).
     const warning =
-      hit && session.drill !== "finish"
+      hit && session.drill !== "finish" && !session.cpuTurn
         ? session.progress.targetWarning(
             hit.id,
             session.drill === "break" && session.shots === 0,

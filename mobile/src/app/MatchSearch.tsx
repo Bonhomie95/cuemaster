@@ -15,6 +15,7 @@ import {
   Share,
 } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
+import { StatusBar } from "expo-status-bar";
 import { API, Player, Venue, coinsShort } from "./api";
 import { venueArt } from "./art";
 import { Avatar } from "./avatar";
@@ -83,8 +84,15 @@ export default function MatchSearch({
     online.status === "room" ||
     online.status === "connecting";
   const clock = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+  const joinRoom = () => {
+    if (code.length !== 5 || online.status === "connecting") return;
+    void online.join(code).catch((e) => {
+      online.error = e.message;
+    });
+  };
   return (
     <View style={s.root}>
+      <StatusBar hidden />
       {venue && (
         <Image
           source={venueArt[venue.id]}
@@ -125,17 +133,15 @@ export default function MatchSearch({
             autoCorrect={false}
             placeholder="ABCDE"
             placeholderTextColor="#4e6a7d"
+            returnKeyType="go"
+            onSubmitEditing={joinRoom}
             style={s.codeInput}
           />
           <Press
             accessibilityRole="button"
             accessibilityLabel="Join room"
             disabled={code.length !== 5 || online.status === "connecting"}
-            onPress={() =>
-              void online.join(code).catch((e) => {
-                online.error = e.message;
-              })
-            }
+            onPress={joinRoom}
             style={[s.primary, code.length !== 5 && { opacity: 0.45 }]}
           >
             <Feather name="log-in" size={16} color="#10233a" />

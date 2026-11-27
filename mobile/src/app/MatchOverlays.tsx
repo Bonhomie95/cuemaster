@@ -528,8 +528,8 @@ const s = StyleSheet.create({
     zIndex: 30,
   },
   resultCard: {
-    width: 440,
-    maxWidth: "88%",
+    width: 520,
+    maxWidth: "92%",
     padding: 20,
     gap: 8,
     alignItems: "center",
