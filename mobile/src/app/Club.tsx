@@ -81,6 +81,7 @@ import {
   useCustomAvatar,
 } from "./avatar";
 import ProviderButton from "./ProviderButton";
+import PhonePreview from "./PhonePreview";
 import Lobby, { IconButton } from "./Lobby";
 import TableGame, { MatchResult } from "../../TableGame";
 import { session, seededRandom } from "../game/session";
@@ -1149,6 +1150,12 @@ function ClubBody() {
   const cities = catalog?.venues.length || 14,
     first = catalog?.venues[0]?.name || "Lagos",
     last = catalog?.venues.at(-1)?.name || "Monaco";
+  // A phone playing a real rack fills the welcome screen's right side when it fits beside the text.
+  const phoneWidth = Math.min(
+    480,
+    width - insets.right - 24 - (insets.left + (small ? 28 : 56) + 420),
+  );
+  const showPhone = phoneWidth >= 220;
   if (!player)
     return (
       <View style={u.fill}>
@@ -1257,6 +1264,21 @@ function ClubBody() {
               </View>
             </ScrollView>
           </LinearGradient>
+          {showPhone && (
+            <View
+              pointerEvents="none"
+              style={[
+                u.welcomePhone,
+                {
+                  right: insets.right + 24,
+                  top: insets.top + (width >= 780 ? 64 : 20),
+                  bottom: insets.bottom + 20,
+                },
+              ]}
+            >
+              <PhonePreview width={phoneWidth} />
+            </View>
+          )}
           {width >= 780 && (
             <View
               style={[
@@ -2265,6 +2287,7 @@ const u = StyleSheet.create({
   },
   ctaText: { fontSize: 17, fontWeight: "900", color: "#10233a" },
   welcomeChips: { position: "absolute", flexDirection: "row", gap: 8 },
+  welcomePhone: { position: "absolute", justifyContent: "center" },
   welcomeChip: {
     flexDirection: "row",
     alignItems: "center",
