@@ -77,10 +77,10 @@ export default function CompatibilityTable() {
     [],
   );
   const hud = session.hud;
-  // Same fit as the 3D camera: the cabinet (1.47 x 0.84 m from centre) inside the HUD rectangle.
+  // Same fit as the 3D camera (TABLE_X, TABLE_Z in Scene.tsx) inside the HUD rectangle.
   const safeWidth = Math.max(1, size.width - hud.left - hud.right);
   const safeHeight = Math.max(1, size.height - hud.top - hud.bottom);
-  const scale = Math.min(safeWidth / (2 * 1.47), safeHeight / (2 * 0.84));
+  const scale = Math.min(safeWidth / (2 * 1.47), safeHeight / (2 * 0.764));
   scaleRef.current = scale;
   const width = 2 * H * scale,
     height = 2 * W * scale;

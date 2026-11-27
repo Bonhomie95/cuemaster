@@ -21,6 +21,7 @@ import { venueArt } from "./art";
 import { Avatar } from "./avatar";
 import { Press, Pulse, Enter } from "./motion";
 import { useAwake } from "./feedback";
+import { sfx } from "./sound";
 import { online } from "../game/online";
 
 export type SearchKind = "queue" | "host" | "join";
@@ -85,6 +86,10 @@ export default function MatchSearch({
     online.status === "queued" ||
     online.status === "room" ||
     online.status === "connecting";
+  // A soft sonar ping every two seconds while the search runs (silent when sound is off).
+  useEffect(() => {
+    if (waiting && seconds > 0 && seconds % 2 === 0) sfx("search", 0.45);
+  }, [seconds]);
   const clock = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
   const joinRoom = () => {
     if (code.length !== 5 || online.status === "connecting") return;

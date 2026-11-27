@@ -1,7 +1,7 @@
 import { cueElevation } from "./cuePose";
 import { aimGuide } from "./aimGuide";
 import CityInlay from "./CityInlay";
-import React, { useMemo, useRef, useEffect } from "react";
+import React, { useMemo, useRef, useEffect, useSyncExternalStore } from "react";
 import { Platform } from "react-native";
 import {
   useFrame,
@@ -206,7 +206,7 @@ function Table() {
                     body: "#151c1b",
                     brass: skin.metal,
                     leather: "#070b0a",
-                    ivory: "#f4f0e2",
+                    ivory: skin.inlay,
                   } as any
                 )[name]
               }
@@ -796,13 +796,14 @@ function Aim() {
     </>
   );
 }
-/** Outer table extents including rails and pocket jaws (from table-mesh.json). */
-// Fit to just outside the cushion line: the rail diamonds stay visible and the cabinet
-// overhang may run under the HUD edges, which buys the cloth a bigger share of the screen.
-// Vertically the pockets must stay clear of the player strips, so the short axis fits the rail.
-// Measured from table-mesh.json: the cabinet's outer edge, so the whole table sits clear of the HUD.
+/**
+ * Half-extents the camera fits inside the HUD rectangle. The long axis is the cabinet's outer edge
+ * (table-mesh.json). The short axis fits a little inside the cabinet (0.79 m), so the table is
+ * drawn about 10% bigger and fills the side margins (owner, 27 Nov): the apron's outer edge may
+ * tuck a few points under the bands while the pockets and rail sights stay clear.
+ */
 const TABLE_X = 1.47,
-  TABLE_Z = 0.84,
+  TABLE_Z = 0.764,
   // A long lens and a slight tilt: the reference reads almost orthographic, which is what keeps
   // it looking like a table seen from above rather than a 3D model on a stage.
   TILT = (7 * Math.PI) / 180;
@@ -933,6 +934,9 @@ export function Scene({
 }) {
   const ready = useRef(false);
   const invalidate = useThree((s) => s.invalidate);
+  // A table picked from the collection mid-game recolours at once (the host only re-renders on
+  // its own state).
+  const city = useSyncExternalStore(session.subscribe, () => session.skin);
   // Switching the frame loop from "never" back to "always" does not restart the scheduler by
   // itself; one requested frame does, after which the loop keeps running on its own.
   useEffect(() => {
@@ -1051,7 +1055,7 @@ export function Scene({
       </mesh>
       <Pockets />
       <Table />
-      <CityInlay city={session.skin} />
+      <CityInlay city={city} />
       <HeadString />
       <LuckyRings />
       <Balls />

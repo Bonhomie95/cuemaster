@@ -31,6 +31,18 @@ const spring = (value: Animated.Value, toValue: number) =>
   });
 
 /** A Pressable that dips under the finger instead of just dimming. */
+/** A Pressable that answers with the tap sound and haptic, for buttons that keep their own look. */
+export function Tap(props: PressableProps) {
+  return (
+    <Pressable
+      {...props}
+      onPressIn={(e) => {
+        if (!props.disabled) tap();
+        props.onPressIn?.(e);
+      }}
+    />
+  );
+}
 export function Press({
   children,
   style,

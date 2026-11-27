@@ -2,7 +2,6 @@ import React, { useMemo, useState } from "react";
 import {
   Image,
   Modal,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -12,7 +11,7 @@ import {
 import Feather from "@expo/vector-icons/Feather";
 import { api, flag, Player } from "./api";
 import { AVATAR_COUNT, Avatar } from "./avatar";
-import { Press, Enter } from "./motion";
+import { Press, Enter, Tap } from "./motion";
 import { celebrate } from "./feedback";
 import { redeemInvite } from "./Invite";
 
@@ -100,14 +99,14 @@ export default function Welcome({
                 <Text style={s.eyebrow}>WELCOME TO THE CLUB</Text>
                 <Text style={s.title}>Who's at the table?</Text>
               </View>
-              <Pressable
+              <Tap
                 accessibilityRole="button"
                 accessibilityLabel="Skip for now"
                 onPress={() => onDone(null)}
                 style={s.skip}
               >
                 <Text style={s.skipText}>Skip</Text>
-              </Pressable>
+              </Tap>
             </View>
             <View style={s.columns}>
               <View style={{ flex: 1, gap: 8 }}>
@@ -122,7 +121,7 @@ export default function Welcome({
                 />
                 <View style={s.chips}>
                   {ideas.map((idea) => (
-                    <Pressable
+                    <Tap
                       key={idea}
                       accessibilityRole="button"
                       accessibilityLabel={`Use the name ${idea}`}
@@ -132,13 +131,13 @@ export default function Welcome({
                       <Text style={[s.chipText, name === idea && s.chipTextOn]}>
                         {idea}
                       </Text>
-                    </Pressable>
+                    </Tap>
                   ))}
                 </View>
                 <Text style={s.label}>PLAY FOR YOUR FLAG</Text>
                 <View style={s.chips}>
                   {COUNTRIES.map((c) => (
-                    <Pressable
+                    <Tap
                       key={c}
                       accessibilityRole="button"
                       accessibilityLabel={`Country ${c}`}
@@ -147,7 +146,7 @@ export default function Welcome({
                       style={[s.flag, country === c && s.chipOn]}
                     >
                       <Text style={s.flagText}>{flag(c)}</Text>
-                    </Pressable>
+                    </Tap>
                   ))}
                   <TextInput
                     accessibilityLabel="Other country code"
@@ -198,7 +197,7 @@ export default function Welcome({
                   contentContainerStyle={{ gap: 10, paddingHorizontal: 4 }}
                 >
                   {Array.from({ length: AVATAR_COUNT }, (_, i) => (
-                    <Pressable
+                    <Tap
                       key={i}
                       accessibilityRole="button"
                       accessibilityLabel={`Avatar ${i + 1}`}
@@ -210,7 +209,7 @@ export default function Welcome({
                       ]}
                     >
                       <Avatar id={i} size={62} />
-                    </Pressable>
+                    </Tap>
                   ))}
                 </ScrollView>
               </View>

@@ -2,7 +2,6 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Image,
-  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -13,7 +12,7 @@ import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
 import { api, Player } from "./api";
 import { Avatar } from "./avatar";
-import { Press, Enter } from "./motion";
+import { Press, Enter, Tap } from "./motion";
 type Area = "wallet" | "leaderboard" | "blocked";
 type Icon = React.ComponentProps<typeof Feather>["name"];
 
@@ -211,7 +210,7 @@ export default function AccountCenter({
             Use a wallet you control on Base (chain 8453). TRON / TRC20 is not
             supported for USDC.
           </Text>
-          <Pressable
+          <Tap
             accessibilityRole="checkbox"
             accessibilityLabel="I confirm this is my Base address"
             accessibilityState={{ checked: confirmed }}
@@ -224,7 +223,7 @@ export default function AccountCenter({
               color={confirmed ? "#24dbb3" : "#8fa8bb"}
             />
             <Text style={s.copy}>I confirm this is my Base address.</Text>
-          </Pressable>
+          </Tap>
           <View style={s.actions}>
             <Button
               primary

@@ -1,16 +1,9 @@
 import React from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  Pressable,
-  StyleSheet,
-  Image,
-} from "react-native";
+import { View, Text, ScrollView, StyleSheet, Image } from "react-native";
 import { cueArt } from "./art";
 import { cues } from "../game/cues";
 import { Player } from "./api";
-import { Press, Enter } from "./motion";
+import { Press, Enter, Tap } from "./motion";
 export default function CueShop({
   player,
   busy,
@@ -28,14 +21,14 @@ export default function CueShop({
         <Text style={s.title}>
           Your cues · {player.coins.toLocaleString()} coins
         </Text>
-        <Pressable
+        <Tap
           accessibilityRole="button"
           accessibilityLabel="Close cue shop"
           onPress={onClose}
           style={{ padding: 10 }}
         >
           <Text style={s.title}>×</Text>
-        </Pressable>
+        </Tap>
       </View>
       <ScrollView
         horizontal

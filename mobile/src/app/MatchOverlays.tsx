@@ -1,20 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
-import {
-  Animated,
-  Easing,
-  Image,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-} from "react-native";
+import { Animated, Easing, Image, StyleSheet, Text, View } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
 import { LinearGradient } from "expo-linear-gradient";
 import { icons } from "./art";
 import { Avatar } from "./avatar";
 import { flag } from "./api";
-import { Press, Enter, CountUp, Pulse } from "./motion";
-import { celebrate } from "./feedback";
+import { Press, Enter, CountUp, Pulse, Tap } from "./motion";
+import { celebrate, defeat } from "./feedback";
 import { sfx } from "./sound";
 
 /**
@@ -46,7 +38,8 @@ export function VsIntro({
   const [visible, setVisible] = useState(Date.now() < until);
   const enter = useRef(new Animated.Value(0)).current;
   useEffect(() => {
-    if (visible) sfx("match", 0.8);
+    // Opponent found: the chime and a success buzz, so a player looking away feels it.
+    if (visible) celebrate("match");
   }, []);
   const leave = useRef(new Animated.Value(1)).current;
   useEffect(() => {
@@ -211,6 +204,8 @@ export function Confetti({ play }: { play: boolean }) {
   );
 }
 
+/** The drum roll's final hit (tools/build_sounds.py), when the result card lands. */
+const DRUM_ROLL_MS = 1220;
 export type ResultView = {
   won: boolean;
   draw?: boolean;
@@ -245,11 +240,22 @@ export function ResultCard({
   onSecondary: () => void;
   status?: string;
 }) {
+  // A decided rack gets a drum roll over the final table, then the card and its sting.
+  const suspense = !result.draw && !result.kicker;
+  const [shown, setShown] = useState(!suspense);
   useEffect(() => {
-    if (result.won) celebrate("win");
-    else if (!result.draw) sfx("lose", 0.7);
+    const land = () => {
+      setShown(true);
+      if (result.won) celebrate("win");
+      else if (!result.draw) defeat();
+    };
+    if (!suspense) return land();
+    sfx("drumroll", 0.85);
+    const timer = setTimeout(land, DRUM_ROLL_MS);
+    return () => clearTimeout(timer);
   }, [result.won]);
   const accent = result.won ? "#ffd05b" : result.draw ? "#9fc0d6" : "#7f96a8";
+  if (!shown) return null;
   return (
     <View style={s.resultRoot} accessibilityLiveRegion="polite">
       <Confetti play={result.won} />
@@ -377,7 +383,7 @@ export function EmoteBar({
       {open && (
         <Enter style={s.emoteMenu}>
           {emotes.map((e, i) => (
-            <Pressable
+            <Tap
               key={e}
               accessibilityRole="button"
               accessibilityLabel={`Say ${e}`}
@@ -388,18 +394,18 @@ export function EmoteBar({
               style={({ pressed }) => [s.emote, pressed && { opacity: 0.7 }]}
             >
               <Text style={s.emoteText}>{e}</Text>
-            </Pressable>
+            </Tap>
           ))}
         </Enter>
       )}
-      <Pressable
+      <Tap
         accessibilityRole="button"
         accessibilityLabel="Quick chat"
         onPress={() => setOpen((v) => !v)}
         style={({ pressed }) => [s.chatButton, pressed && { opacity: 0.75 }]}
       >
         <Feather name="message-circle" size={19} color="#f2eedf" />
-      </Pressable>
+      </Tap>
     </View>
   );
 }
@@ -695,7 +701,7 @@ export function Tutorial({ active }: { active: boolean }) {
       .catch(() => {});
   };
   return (
-    <Pressable
+    <Tap
       accessibilityRole="button"
       accessibilityLabel={`${current.text} Tap to continue.`}
       onPress={() => (step + 1 < STEPS.length ? setStep(step + 1) : finish())}
@@ -729,7 +735,7 @@ export function Tutorial({ active }: { active: boolean }) {
           {step + 1 < STEPS.length ? "TAP" : "GOT IT"}
         </Text>
       </Enter>
-    </Pressable>
+    </Tap>
   );
 }
 const t = StyleSheet.create({

@@ -4,6 +4,7 @@ import { localWinner, eightBallNote } from "./src/game/localMatch";
 import React, {
   useEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -14,7 +15,6 @@ import {
   Easing,
   Text,
   View,
-  Pressable,
   PanResponder,
   useWindowDimensions,
   Platform,
@@ -37,8 +37,8 @@ import { tableHost, useTableHost, stageHeight } from "./src/render/TableHost";
 import CompatibilityTable from "./src/render/CompatibilityTable";
 import { session, skins, encodeReplay } from "./src/game/session";
 import { coinsShort, flag, type Player } from "./src/app/api";
-import { Press, Enter } from "./src/app/motion";
-import { useAwake } from "./src/app/feedback";
+import { Press, Enter, Tap } from "./src/app/motion";
+import { useAwake, warn, yourTurn } from "./src/app/feedback";
 import { online } from "./src/game/online";
 import { setSound } from "./src/app/sound";
 import {
@@ -434,7 +434,7 @@ function Avatar({
   onPress?: () => void;
 }) {
   return (
-    <Pressable
+    <Tap
       accessibilityRole={onPress ? "button" : undefined}
       accessibilityLabel={opponent ? "Opponent stats" : "Your stats"}
       hitSlop={6}
@@ -455,7 +455,7 @@ function Avatar({
         }
         style={{ width: 43, height: 43 }}
       />
-    </Pressable>
+    </Tap>
   );
 }
 function BallBadge({
@@ -1008,6 +1008,25 @@ function Game({
     return () => tableHost.setActive(false);
   }, []);
   const turn = session.progress.turn;
+  // The table coming back from the opponent sounds and buzzes, so a player looking away notices.
+  const holder = session.cpu || session.remote ? turn : -1;
+  const lastHolder = useRef(holder);
+  useEffect(() => {
+    if (holder === 0 && lastHolder.current === 1 && !session.progress.finished)
+      yourTurn();
+    lastHolder.current = holder;
+  }, [holder]);
+  // The player's own foul gets the warning sound and buzz (the opponent's hands them the table).
+  const fouled =
+    !session.replaying &&
+    !session.running &&
+    holder !== 0 &&
+    (session.progress.scratch || (!!paidMatch && !!session.progress.foul));
+  const lastFoul = useRef(fouled);
+  useEffect(() => {
+    if (fouled && !lastFoul.current) warn();
+    lastFoul.current = fouled;
+  }, [fouled]);
   const compact = height < 560;
   const tableHeight = stageHeight(width, height);
   // The table is full bleed to the glass; only the HUD keeps clear of the notch and the home
@@ -1112,7 +1131,7 @@ function Game({
             <Button label="Table settings" onPress={() => setPanel("settings")}>
               <Feather name="menu" size={20} color={C.ink} />
             </Button>
-            <Pressable
+            <Tap
               accessibilityRole="button"
               accessibilityLabel="Your player card"
               onPress={() => setPanel("you")}
@@ -1132,7 +1151,7 @@ function Game({
                 </Text>
                 <PlayerBalls player={0} compact />
               </View>
-            </Pressable>
+            </Tap>
           </View>
           <View style={s.barCentre} pointerEvents="box-none">
             <View style={s.barStatus} pointerEvents="none">
@@ -1176,7 +1195,7 @@ function Game({
             </View>
           </View>
           <View style={[s.barSide, { justifyContent: "flex-end" }]}>
-            <Pressable
+            <Tap
               accessibilityRole="button"
               accessibilityLabel="Opponent player card"
               disabled={!session.cpu && !session.remote}
@@ -1210,7 +1229,7 @@ function Game({
                   }
                 />
               </ClockRing>
-            </Pressable>
+            </Tap>
             <Button
               label="Switch camera"
               disabled={compatibility}
@@ -1234,7 +1253,7 @@ function Game({
           </View>
         )}
         {host.compatibility && (
-          <Pressable
+          <Tap
             accessibilityRole="button"
             accessibilityLabel="Retry 3D table"
             onPress={() => tableHost.retry()}
@@ -1248,7 +1267,7 @@ function Game({
             <Text style={[s.description, { fontSize: 10 }]}>
               Compatibility view · Retry 3D
             </Text>
-          </Pressable>
+          </Tap>
         )}
         {renderError ? (
           <View
@@ -1271,7 +1290,7 @@ function Game({
           <Power compact />
         </View>
         <View style={[s.shotSpin, { right: 10 + insets.right }]}>
-          <Pressable
+          <Tap
             accessibilityRole="button"
             accessibilityLabel="Adjust spin"
             disabled={session.running || session.cpuTurn}
@@ -1283,7 +1302,7 @@ function Game({
             ]}
           >
             <Spin size={34} />
-          </Pressable>
+          </Tap>
           <Text style={s.controlCaption}>SPIN</Text>
           <View style={{ marginTop: 12, alignItems: "center", gap: 6 }}>
             <FineAim />
@@ -1329,7 +1348,7 @@ function Game({
                 }
               >
                 {!paidMatch && session.canReplay && (
-                  <Pressable
+                  <Tap
                     accessibilityRole="button"
                     accessibilityLabel="Watch replay of the last shot"
                     hitSlop={8}
@@ -1340,7 +1359,7 @@ function Game({
                     ]}
                   >
                     <Text style={s.replayPillText}>▶ REPLAY</Text>
-                  </Pressable>
+                  </Tap>
                 )}
                 {session.progress.returned.map((id) => (
                   <BallBadge
@@ -1530,7 +1549,7 @@ function Game({
         animationType="fade"
         onRequestClose={() => setPanel(null)}
       >
-        <Pressable
+        <Tap
           accessibilityRole="button"
           accessibilityLabel="Dismiss spin picker"
           onPress={() => setPanel(null)}
@@ -1541,7 +1560,7 @@ function Game({
             editable
             onRelease={() => setPanel(null)}
           />
-        </Pressable>
+        </Tap>
       </Modal>
       <Modal
         supportedOrientations={["landscape"]}
@@ -1575,7 +1594,7 @@ function Game({
             {panel === "skins" && (
               <>
                 <Text style={s.panelTitle}>A different atmosphere.</Text>
-                <Text style={s.description}>Six cities. Find your table.</Text>
+                <Text style={s.description}>Every city has its own table.</Text>
                 <FlatList
                   horizontal
                   data={skins}
@@ -1583,7 +1602,7 @@ function Game({
                   style={{ marginTop: 24 }}
                   showsHorizontalScrollIndicator={false}
                   renderItem={({ item, index: i }) => (
-                    <Pressable
+                    <Tap
                       accessibilityRole="button"
                       accessibilityLabel={`Select ${item.name}`}
                       key={item.id}
@@ -1635,7 +1654,7 @@ function Game({
                             ? "LEVEL LOCKED"
                             : "TRY THIS FINISH"}
                       </Text>
-                    </Pressable>
+                    </Tap>
                   )}
                 />
               </>
@@ -1676,7 +1695,7 @@ function Game({
                       detail: "A little room to experiment.",
                     },
                   ].map((d) => (
-                    <Pressable
+                    <Tap
                       key={d.id}
                       accessibilityRole="button"
                       accessibilityLabel={d.name}
@@ -1691,7 +1710,7 @@ function Game({
                         <Text style={s.description}>{d.detail}</Text>
                       </View>
                       <Text style={s.chevron}>↗</Text>
-                    </Pressable>
+                    </Tap>
                   ))}
                 </View>
                 {!paidMatch && (

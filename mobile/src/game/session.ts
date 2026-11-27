@@ -75,154 +75,195 @@ export type Skin = {
   subtitle: string;
   cloth: string;
   cushion: string;
+  /** The rails: wood, lacquer or stone. */
   wood: string;
+  /** Pocket caps and rail bindings. */
   metal: string;
+  /** The landmark on the cloth and the rail sights. */
+  inlay: string;
   swatch: string;
 };
+/**
+ * One table per city, coloured from the place itself (flag, landmark, street colours). Every
+ * cloth keeps all fifteen balls readable: its worst colour difference from any ball is at
+ * least 25 (CIE76).
+ */
+const skin = (
+  id: string,
+  name: string,
+  subtitle: string,
+  cloth: string,
+  cushion: string,
+  wood: string,
+  metal: string,
+  inlay: string,
+): Skin => ({
+  id,
+  name,
+  subtitle,
+  cloth,
+  cushion,
+  wood,
+  metal,
+  inlay,
+  swatch: cloth,
+});
 export const skins: Skin[] = [
-  {
-    id: "heritage",
-    name: "Lagos",
-    subtitle: "WALNUT · CHAMPIONSHIP GREEN",
-    cloth: "#07845b",
-    cushion: "#10523e",
-    wood: "#38241b",
-    metal: "#b99557",
-    swatch: "#24785d",
-  },
-  {
-    id: "riviera",
-    name: "London",
-    subtitle: "EBONY · TOURNAMENT BLUE",
-    cloth: "#087fab",
-    cushion: "#18516c",
-    wood: "#202730",
-    metal: "#a2b7c2",
-    swatch: "#337caa",
-  },
-  {
-    id: "oxblood",
-    name: "Paris",
-    subtitle: "SMOKED OAK · OXBLOOD",
-    cloth: "#a53154",
-    cushion: "#572231",
-    wood: "#292023",
-    metal: "#c19768",
-    swatch: "#963e57",
-  },
+  // Green-white-green, iroko rails, the Lekki bridge lit white.
+  skin(
+    "heritage",
+    "Lagos",
+    "IROKO · NAIJA GREEN · WHITE",
+    "#1a9a58",
+    "#0e5c36",
+    "#3a2418",
+    "#e3e7e9",
+    "#f2f4ef",
+  ),
+  // Black cab rails, bus-red caps, Big Ben gold.
+  skin(
+    "riviera",
+    "London",
+    "BLACK CAB · BUS RED · THAMES BLUE",
+    "#087fab",
+    "#0d4d68",
+    "#141619",
+    "#c8202d",
+    "#e7c46a",
+  ),
+  // La vie en rose: Eiffel iron, gilded bridges, Haussmann cream.
+  skin(
+    "oxblood",
+    "Paris",
+    "EIFFEL IRON · GILDED GOLD · ROSE",
+    "#b8456e",
+    "#6a2340",
+    "#3b3633",
+    "#d9b25a",
+    "#f3e6c9",
+  ),
+  // Cherry blossom cloth, urushi black lacquer, torii vermilion.
+  skin(
+    "midnight",
+    "Tokyo",
+    "BLACK LACQUER · TORII RED · SAKURA",
+    "#b86a8c",
+    "#6d3a52",
+    "#121215",
+    "#e0482e",
+    "#fbe3ea",
+  ),
+  // Desert dune, black marble, the gold souk, Burj glass.
+  skin(
+    "jade",
+    "Dubai",
+    "BLACK MARBLE · GOLD · DESERT DUNE",
+    "#b08548",
+    "#6b4f28",
+    "#17191c",
+    "#e9c76b",
+    "#e8eef4",
+  ),
+  // Manhattan steel, black rails, taxi yellow.
+  skin(
+    "champion",
+    "New York",
+    "TAXI YELLOW · MANHATTAN STEEL",
+    "#3f5a72",
+    "#24384a",
+    "#121314",
+    "#f2b705",
+    "#dde3e8",
+  ),
+  // Fynbos sage, Table Mountain sandstone, protea pink.
+  skin(
+    "capetown",
+    "Cape Town",
+    "TABLE MOUNTAIN · PROTEA · FYNBOS",
+    "#6f9580",
+    "#3f5a4b",
+    "#6f6252",
+    "#d8578f",
+    "#f6f1ec",
+  ),
+  // Brazil green, canarinho yellow, the flag's blue globe.
+  skin(
+    "rio",
+    "Rio de Janeiro",
+    "CANARINHO YELLOW · BRAZIL GREEN",
+    "#3a9a3e",
+    "#1f5e24",
+    "#d6a42a",
+    "#22408f",
+    "#f7f8f4",
+  ),
+  // Pyramid limestone, Tutankhamun's lapis and gold, faience turquoise.
+  skin(
+    "cairo",
+    "Cairo",
+    "LAPIS · PHARAOH GOLD · LIMESTONE",
+    "#9c8f78",
+    "#5e5444",
+    "#1f3a7a",
+    "#e3b84f",
+    "#4fc3c0",
+  ),
+  // Peacock teal, rosewood, saffron and marigold.
+  skin(
+    "mumbai",
+    "Mumbai",
+    "ROSEWOOD · SAFFRON · PEACOCK TEAL",
+    "#0e8a8f",
+    "#08494c",
+    "#3a1c1c",
+    "#f08a1f",
+    "#ffbe3b",
+  ),
+  // Colosseum travertine, terracotta roofs, olive groves.
+  skin(
+    "rome",
+    "Rome",
+    "TRAVERTINE · TERRACOTTA · OLIVE",
+    "#5f7a32",
+    "#34441b",
+    "#c2b394",
+    "#c4643a",
+    "#e8c983",
+  ),
+  // Harbour blue, sandstone, Opera House sails.
+  skin(
+    "sydney",
+    "Sydney",
+    "HARBOUR BLUE · SANDSTONE · SAIL WHITE",
+    "#2f86e0",
+    "#1a4f8a",
+    "#c9b38a",
+    "#f1f4f7",
+    "#f4f8fb",
+  ),
+  // Red and white flag, orchid lavender.
+  skin(
+    "singapore",
+    "Singapore",
+    "WHITE LACQUER · FLAG RED · ORCHID",
+    "#8f78d0",
+    "#4e3f80",
+    "#e6e3e8",
+    "#e1373f",
+    "#fff3f6",
+  ),
+  // Riva-boat mahogany, Monaco red, casino gold.
+  skin(
+    "monaco",
+    "Monaco",
+    "RIVA MAHOGANY · MONACO RED · PLATINUM",
+    "#6b7380",
+    "#3d434c",
+    "#5b2618",
+    "#d82b3a",
+    "#f0d27a",
+  ),
 ];
-skins.push(
-  {
-    id: "midnight",
-    name: "Tokyo",
-    subtitle: "OBSIDIAN · INDIGO",
-    cloth: "#4242a4",
-    cushion: "#191d43",
-    wood: "#111525",
-    metal: "#a6b8d2",
-    swatch: "#464e9e",
-  },
-  {
-    id: "jade",
-    name: "Dubai",
-    subtitle: "JADE · BRUSHED GOLD",
-    cloth: "#079c75",
-    cushion: "#074937",
-    wood: "#153e32",
-    metal: "#d2b276",
-    swatch: "#169b75",
-  },
-  {
-    id: "champion",
-    name: "New York",
-    subtitle: "GOLD · BLACK LACQUER",
-    cloth: "#8b6430",
-    cushion: "#60441f",
-    wood: "#16191b",
-    metal: "#d7b66c",
-    swatch: "#b18543",
-  },
-  {
-    id: "capetown",
-    name: "Cape Town",
-    subtitle: "DARK ASH · PROTEA PLUM",
-    cloth: "#84346f",
-    cushion: "#4d1d41",
-    wood: "#241a1f",
-    metal: "#c7a37a",
-    swatch: "#8a3d74",
-  },
-  {
-    id: "rio",
-    name: "Rio de Janeiro",
-    subtitle: "MAHOGANY · SUNSET ORANGE",
-    cloth: "#c0581f",
-    cushion: "#6f3214",
-    wood: "#2a1a12",
-    metal: "#dcae6c",
-    swatch: "#c4632b",
-  },
-  {
-    id: "cairo",
-    name: "Cairo",
-    subtitle: "SANDSTONE · LAPIS",
-    cloth: "#24509e",
-    cushion: "#142d5e",
-    wood: "#8a6a42",
-    metal: "#d9b45e",
-    swatch: "#2b57a2",
-  },
-  {
-    id: "mumbai",
-    name: "Mumbai",
-    subtitle: "ROSEWOOD · PEACOCK TEAL",
-    cloth: "#0e8a8f",
-    cushion: "#08494c",
-    wood: "#3a1c1c",
-    metal: "#d4a55a",
-    swatch: "#16878c",
-  },
-  {
-    id: "rome",
-    name: "Rome",
-    subtitle: "TRAVERTINE · OLIVE",
-    cloth: "#5f7a32",
-    cushion: "#34441b",
-    wood: "#b8a888",
-    metal: "#b9975b",
-    swatch: "#66803a",
-  },
-  {
-    id: "sydney",
-    name: "Sydney",
-    subtitle: "PALE ASH · HARBOUR BLUE",
-    cloth: "#1e6fd9",
-    cushion: "#13468a",
-    wood: "#a89a82",
-    metal: "#c8d3dc",
-    swatch: "#2a76d6",
-  },
-  {
-    id: "singapore",
-    name: "Singapore",
-    subtitle: "BLACK WALNUT · ORCHID",
-    cloth: "#7a3ea6",
-    cushion: "#43215e",
-    wood: "#1d1726",
-    metal: "#c9c4d6",
-    swatch: "#7d47a5",
-  },
-  {
-    id: "monaco",
-    name: "Monaco",
-    subtitle: "BLACK LACQUER · PLATINUM",
-    cloth: "#5d6570",
-    cushion: "#343a42",
-    wood: "#0f1012",
-    metal: "#e3c374",
-    swatch: "#6b7380",
-  },
-);
 export class Session {
   /** Injected so a headless replay on the server makes the same CPU decisions. */
   rng: () => number = Math.random;

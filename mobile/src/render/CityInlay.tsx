@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useEffect } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as T from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
+import { skins } from "../game/session";
 // Original city landmark linework, drawn with physical stroke width on the cloth.
 const landmarks: number[][][][] = [
   [
@@ -550,22 +551,6 @@ landmarks[13] = [
     [0.9, 0.62],
   ],
 ];
-const colors = [
-  "#d8ba7b",
-  "#b8c9d6",
-  "#e1b4aa",
-  "#acb7df",
-  "#b8d4b7",
-  "#dfc484",
-  "#e3b8d0",
-  "#ffd59a",
-  "#e8c98a",
-  "#f0c987",
-  "#efe2c4",
-  "#e6eef5",
-  "#d7c8f0",
-  "#f1d27a",
-];
 /**
  * One living light per city, in landmark coordinates: Lagos bridge lamps, Paris beacon,
  * Tokyo lantern, Dubai spire, New York windows, then the cable cars, capstones, domes and masts
@@ -652,7 +637,7 @@ export default function CityInlay({ city }: { city: number }) {
       (m.material as T.MeshBasicMaterial).opacity = 0.35 + glow * 0.6;
     });
   });
-  const color = colors[city] || colors[0];
+  const color = (skins[city] || skins[0]).inlay;
   return (
     <group position={[0.635, 0.0007, 0]}>
       {/* A shallow inlay centred across the rack half: readable, but the balls stay the subject. */}

@@ -27,6 +27,18 @@ export const celebrate = (sound: Sound = "reward") => {
     () => {},
   );
 };
+/** A lost rack: the defeat sting and one heavy tap. */
+export const defeat = () => {
+  sfx("lose", 0.75);
+  if (Platform.OS === "web") return;
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy).catch(() => {});
+};
+/** The table comes back to this player after the opponent's shot. */
+export const yourTurn = () => {
+  sfx("turn", 0.6);
+  if (Platform.OS === "web") return;
+  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+};
 export const warn = () => {
   sfx("error", 0.6);
   if (Platform.OS === "web") return;

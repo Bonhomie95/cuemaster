@@ -4,13 +4,12 @@ import {
   Text,
   Image,
   ScrollView,
-  Pressable,
   StyleSheet,
   useWindowDimensions,
 } from "react-native";
 import { Player, Venue, coinsShort, lockOf } from "./api";
 import { venueArt } from "./art";
-import { Press, Enter } from "./motion";
+import { Press, Enter, Tap } from "./motion";
 import { online } from "../game/online";
 export type VenueMode = "online" | "friend" | "cpu" | "local";
 const MODES: { id: VenueMode; label: string; a11y: string }[] = [
@@ -70,7 +69,7 @@ export default function MatchVenues({
         </View>
         <View style={s.headTools}>
           {MODES.map((m) => (
-            <Pressable
+            <Tap
               key={m.id}
               accessibilityRole="button"
               accessibilityLabel={m.a11y}
@@ -87,10 +86,10 @@ export default function MatchVenues({
               >
                 {m.label}
               </Text>
-            </Pressable>
+            </Tap>
           ))}
           {mode === "friend" && (
-            <Pressable
+            <Tap
               accessibilityRole="button"
               accessibilityLabel="Join a friend's table with a code"
               onPress={onJoin}
@@ -103,17 +102,17 @@ export default function MatchVenues({
               <Text style={[s.buttonText, { color: "#10233a" }]}>
                 Join with code
               </Text>
-            </Pressable>
+            </Tap>
           )}
         </View>
-        <Pressable
+        <Tap
           accessibilityRole="button"
           accessibilityLabel="Close venues"
           onPress={onClose}
           style={s.close}
         >
           <Text style={s.title}>×</Text>
-        </Pressable>
+        </Tap>
       </View>
       <ScrollView
         horizontal

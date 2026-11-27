@@ -1,6 +1,7 @@
 import React from "react";
-import { Pressable, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
 import Feather from "@expo/vector-icons/Feather";
+import { Tap } from "./motion";
 type Icon = React.ComponentProps<typeof Feather>["name"];
 export default function IconButton({
   icon,
@@ -16,7 +17,7 @@ export default function IconButton({
   disabled?: boolean;
 }) {
   return (
-    <Pressable
+    <Tap
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected, disabled }}
@@ -29,7 +30,7 @@ export default function IconButton({
       ]}
     >
       <Feather name={icon} size={21} color={selected ? "#e9c88f" : "#b5c4d0"} />
-    </Pressable>
+    </Tap>
   );
 }
 

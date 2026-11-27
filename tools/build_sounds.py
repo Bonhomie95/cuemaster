@@ -107,21 +107,55 @@ write("reward", place(0.9, [
     (0.09, 0.85 * bell(1975.5, 0.8, 0.3)),
     (0.05, 0.12 * noise(0.5, 120) * np.sin(2 * np.pi * 31 * t(0.5)) ** 2),
 ]), 0.75)
-# Victory: a rising C-major arpeggio of bells over a soft low swell.
-write("win", place(1.5, [
-    (0.0, 0.5 * modes([65.4, 130.8], [500, 300], [1, 0.4], 1.0)),
-    (0.0, bell(523.3, 0.9, 0.4)),
-    (0.11, bell(659.3, 0.9, 0.4)),
-    (0.22, bell(784.0, 0.9, 0.42)),
-    (0.34, 1.2 * bell(1046.5, 1.15, 0.55)),
-    (0.34, 0.12 * noise(0.8, 220) * np.sin(2 * np.pi * 23 * t(0.8)) ** 2),
-]), 0.8)
-# Defeat: gentle and short, so a loss never feels like a punishment.
-write("lose", place(0.8, [
-    (0.0, bell(392.0, 0.6, 0.3, ((1, 1), (2.0, 0.25)))),
-    (0.18, bell(329.6, 0.6, 0.3, ((1, 1), (2.0, 0.25)))),
-    (0.36, bell(261.6, 0.5, 0.35, ((1, 1), (2.0, 0.2)))),
-]), 0.55)
+# Brass-like voice for the fanfares: falling harmonics, a quick swell, a little vibrato.
+def brass(freq, seconds, attack=0.025, release=0.3, harmonics=9):
+    x = t(seconds)
+    phase = 2 * np.pi * freq * (x + 0.0012 * np.sin(2 * np.pi * 5.5 * x))
+    out = sum((1 / n ** 1.15) * np.sin(n * phase) for n in range(1, harmonics + 1))
+    env = np.minimum(1, x / attack) * np.clip((seconds - x) / release, 0, 1)
+    return out * env * (0.75 + 0.25 * np.exp(-x / 0.12))
+
+
+def crash(seconds, decay=0.7):
+    n = noise(seconds, decay * 1000)
+    return np.diff(n, prepend=0)  # high-passed: the shimmer, not the rumble
+
+
+def kick(seconds=0.35):
+    x = t(seconds)
+    sweep = np.sin(2 * np.pi * np.cumsum(55 + 75 * np.exp(-x / 0.03)) / RATE)
+    return sweep * np.exp(-x / 0.12)
+
+
+def snare(seconds=0.12, decay_ms=38):
+    return 0.8 * noise(seconds, decay_ms) + 0.5 * modes([190, 330], [30, 18], [1, 0.5], seconds)
+
+
+# Victory: a brass fanfare (G-C, then a held C-major chord) over a crash and the old bells.
+write("win", place(1.9, [
+    (0.0, 0.7 * brass(392.0, 0.16, release=0.05)),
+    (0.17, 0.75 * brass(523.3, 0.16, release=0.05)),
+    (0.34, sum(brass(f, 1.35, release=0.6) for f in (523.3, 659.3, 784.0))),
+    (0.34, 0.55 * crash(1.4)),
+    (0.34, 0.9 * kick()),
+    (0.36, 0.5 * bell(1046.5, 1.2, 0.5)),
+    (0.48, 0.35 * bell(1568.0, 1.0, 0.45)),
+]), 0.85)
+# Defeat: three falling brass notes and a soft drum, clear without rubbing it in.
+write("lose", place(1.35, [
+    (0.0, 0.8 * brass(392.0, 0.24, release=0.08)),
+    (0.26, 0.8 * brass(311.1, 0.24, release=0.08)),
+    (0.52, brass(261.6, 0.8, release=0.5)),
+    (0.52, 0.6 * kick(0.4)),
+]), 0.7)
+# The drum roll before a result: a snare roll that tightens and swells, then one hit.
+roll = []
+at, gap = 0.0, 0.075
+while at < 1.2:
+    roll.append((at, (0.3 + 0.7 * at / 1.2) * snare(0.1, 30)))
+    at += gap
+    gap = max(0.032, gap * 0.96)
+write("drumroll", place(1.55, roll + [(1.22, kick(0.33)), (1.22, 0.9 * snare(0.3, 90))]), 0.8)
 # A crate bursting open: an upward whoosh into a sparkle.
 x = t(0.45)
 sweep = np.sin(2 * np.pi * np.cumsum(300 + 2800 * (x / 0.45) ** 2) / RATE)
@@ -132,6 +166,10 @@ write("whoosh", place(0.9, [
 ]), 0.7)
 # An opponent found: a rising two-note chime.
 write("match", place(0.7, [(0.0, bell(880.0, 0.5, 0.3)), (0.12, bell(1318.5, 0.55, 0.35))]), 0.7)
+# Searching for an opponent: a soft sonar ping, repeated by the search screen.
+write("search", place(0.9, [(0.0, bell(1046.5, 0.9, 0.42, ((1, 1), (2.0, 0.18)))), (0.0, 0.25 * bell(523.3, 0.6, 0.3, ((1, 1),)))]), 0.4)
+# Your turn: a quick rising pair, brighter than a tap.
+write("turn", place(0.45, [(0.0, bell(784.0, 0.3, 0.18)), (0.08, 1.1 * bell(1174.7, 0.36, 0.22))]), 0.6)
 # Level up: a quick ascending run to a held bell.
 write("levelup", place(1.2, [
     (i * 0.07, (0.7 + i * 0.1) * bell(f, 0.7, 0.3))

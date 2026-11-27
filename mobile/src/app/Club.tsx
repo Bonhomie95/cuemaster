@@ -16,7 +16,7 @@ import { DailyHub, DailyTab, LuckyCard } from "./DailyRewards";
 import { PlayerBadge, CurrencyPill } from "./TopBar";
 import { restorePending } from "./billing";
 import { comeBack } from "./notify";
-import { Press, Enter, CountUp, PageFade, Pulse } from "./motion";
+import { Press, Enter, CountUp, PageFade, Pulse, Tap } from "./motion";
 import { celebrate } from "./feedback";
 import MatchSearch, { SearchKind } from "./MatchSearch";
 import { online } from "../game/online";
@@ -36,7 +36,6 @@ import {
   View,
   Text,
   StyleSheet,
-  Pressable,
   ScrollView,
   Image,
   ImageBackground,
@@ -894,14 +893,14 @@ function ClubBody() {
       <Text style={u.toastText} pointerEvents="none">
         {toast}
       </Text>
-      <Pressable
+      <Tap
         accessibilityRole="button"
         accessibilityLabel="Dismiss message"
         onPress={() => setToast("")}
         style={{ padding: 10 }}
       >
         <Text style={{ color: "#fff" }}>×</Text>
-      </Pressable>
+      </Tap>
     </View>
   ) : null;
   const verificationModal = (
@@ -1197,7 +1196,7 @@ function ClubBody() {
               <Text style={u.welcomeKicker}>
                 {cities} CITIES · A BILLION-COIN FINAL TABLE
               </Text>
-              <Pressable
+              <Tap
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: adult }}
                 accessibilityLabel="I am 18 or older"
@@ -1210,8 +1209,8 @@ function ClubBody() {
                   color={adult ? "#24dbb3" : "#ffd05b"}
                 />
                 <Text style={u.checkText}>I am 18 or older</Text>
-              </Pressable>
-              <Pressable
+              </Tap>
+              <Tap
                 accessibilityRole="button"
                 accessibilityLabel="Enter as guest"
                 accessibilityState={{ disabled: busy }}
@@ -1234,7 +1233,7 @@ function ClubBody() {
                   </Text>
                   <Feather name="arrow-right" size={20} color="#10233a" />
                 </LinearGradient>
-              </Pressable>
+              </Tap>
               <Text style={u.fine}>
                 {anySignIn
                   ? "Progress saves on this device. Link an account any time to keep it everywhere."
@@ -1656,7 +1655,7 @@ function ClubBody() {
                         contentContainerStyle={{ gap: 14, paddingVertical: 2 }}
                       >
                         {Array.from({ length: AVATAR_COUNT }, (_, i) => (
-                          <Pressable
+                          <Tap
                             accessibilityRole="button"
                             accessibilityLabel={`Choose avatar ${i + 1}`}
                             accessibilityState={{ selected: avatar === i }}
@@ -1668,7 +1667,7 @@ function ClubBody() {
                             ]}
                           >
                             <Avatar id={i} size={56} />
-                          </Pressable>
+                          </Tap>
                         ))}
                       </ScrollView>
                       <View
@@ -2004,14 +2003,14 @@ function ClubBody() {
                     ? "OPEN · PRESEASON"
                     : "ANNOUNCED · ENTRIES CLOSED"}
                 </Tag>
-                <Pressable
+                <Tap
                   accessibilityRole="button"
                   accessibilityLabel="Close event"
                   onPress={() => setEvent(null)}
                   style={u.close}
                 >
                   <Text style={{ color: "#fff", fontSize: 24 }}>×</Text>
-                </Pressable>
+                </Tap>
               </View>
               <Text style={u.modalTitle}>{event?.name}</Text>
               <Text style={u.rewardText}>{event?.prize}</Text>
@@ -2024,7 +2023,7 @@ function ClubBody() {
               ))}
               {event?.status === "open" ? (
                 <>
-                  <Pressable
+                  <Tap
                     accessibilityRole="checkbox"
                     accessibilityState={{ checked: rules }}
                     accessibilityLabel="Accept event rules"
@@ -2035,7 +2034,7 @@ function ClubBody() {
                     <Text style={u.body}>
                       I’ve read and accept these event rules.
                     </Text>
-                  </Pressable>
+                  </Tap>
                   <Action
                     label="Enter free challenge"
                     disabled={busy || !rules}
